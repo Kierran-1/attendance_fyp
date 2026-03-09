@@ -22,11 +22,13 @@ export default function Home() {
               <p className="text-gray-600">Quick and easy attendance check-in</p>
             </div>
 
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-4xl mb-4">👨‍🏫</div>
-              <h3 className="text-xl font-semibold mb-2">For Lecturers</h3>
-              <p className="text-gray-600">Real-time monitoring and reports</p>
-            </div>
+            <Link href="/lecturer/dashboard" className="block">
+              <div className="bg-white rounded-lg shadow-md p-6 hover:scale-105 hover:shadow-xl transition">
+                <div className="text-4xl mb-4">👨‍🏫</div>
+                <h3 className="text-xl font-semibold mb-2">For Lecturers</h3>
+                <p className="text-gray-600">Real-time monitoring and reports</p>
+              </div>
+            </Link>
 
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="text-4xl mb-4">⚙️</div>
