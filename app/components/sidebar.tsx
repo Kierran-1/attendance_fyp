@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { lecturerMenu } from "../config/lecturerMenu"
 
+import { useSession, signOut } from "next-auth/react"
 
 type MenuItem = {
   name: string
@@ -28,6 +29,7 @@ export default function Sidebar({ panelTitle, menu }: SidebarProps) {
   const isActive = (href: string) => {
     return pathname.startsWith(href)
   }
+  const { data: session } = useSession()
 
   useEffect(() => {
     import("preline").then(() => {
@@ -126,9 +128,40 @@ export default function Sidebar({ panelTitle, menu }: SidebarProps) {
               </svg>
             </button>
 
-            <div className="hs-dropdown-menu hidden w-48 bg-white border border-gray-200 rounded shadow mt-1 ">
-              <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">My account</a>
-              <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">Sign out</a>
+          {/* Footer Dropdown */}
+          <footer className="p-2 border-t border-gray-200">
+            <div className="hs-dropdown relative w-full">
+              <button
+                className="flex items-center w-full gap-x-2 py-2 px-2.5 text-gray-700 rounded hover:bg-gray-100"
+                aria-haspopup="menu"
+                aria-expanded="false"
+              >
+                {session?.user?.image ? (
+                  <img
+                    src={session.user.image}
+                    alt="Avatar"
+                    className="w-6 h-6 rounded-full"
+                  />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-[#E4002B] flex items-center justify-center text-white text-xs font-bold">
+                    {session?.user?.name?.[0] ?? '?'}
+                  </div>
+                )}
+                <span className="truncate text-sm">{session?.user?.name ?? 'Loading...'}</span>
+                <svg className="ms-auto w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              <div className="hs-dropdown-menu hidden w-48 bg-white border border-gray-200 rounded shadow mt-1">
+                <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">My account</a>
+                <button
+                  onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                  className="w-full text-left block px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           </div>
         </footer>
