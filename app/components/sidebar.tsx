@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import Link from "next/link"
+import { useSession, signOut } from "next-auth/react"
 
 type MenuItem = {
   name: string
@@ -14,6 +15,8 @@ type SidebarProps = {
 }
 
 export default function Sidebar({ panelTitle, menu }: SidebarProps) {
+  const { data: session } = useSession()
+
   useEffect(() => {
     import("preline").then(() => {
       (window as any).HSStaticMethods?.autoInit()
@@ -42,8 +45,8 @@ export default function Sidebar({ panelTitle, menu }: SidebarProps) {
             {/* AttendSync (row 1, column 2) */}
             <span className="font-semibold text-xl text-gray-700">AttendSync</span>
 
-            {/* Lecture Panel (row 2, column 2) */}
-            <span className="text-sm text-gray-500">Lecturer Panel</span>
+            {/* Panel title (row 2, column 2) */}
+            <span className="text-sm text-gray-500">{panelTitle}</span>
 
             {/* Close button on mobile */}
             <button
@@ -81,22 +84,31 @@ export default function Sidebar({ panelTitle, menu }: SidebarProps) {
                 aria-haspopup="menu"
                 aria-expanded="false"
               >
-                <img
-                  src="https://images.unsplash.com/photo-1734122415415-88cb1d7d5dc0?q=80&w=320&h=320&auto=format&fit=facearea&facepad=3"
-                  alt="Avatar"
-                  className="w-6 h-6 rounded-full"
-                />
-                Mia Hudson
-                <svg className="ms-auto w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {session?.user?.image ? (
+                  <img
+                    src={session.user.image}
+                    alt="Avatar"
+                    className="w-6 h-6 rounded-full"
+                  />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-[#E4002B] flex items-center justify-center text-white text-xs font-bold">
+                    {session?.user?.name?.[0] ?? '?'}
+                  </div>
+                )}
+                <span className="truncate text-sm">{session?.user?.name ?? 'Loading...'}</span>
+                <svg className="ms-auto w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
               <div className="hs-dropdown-menu hidden w-48 bg-white border border-gray-200 rounded shadow mt-1">
                 <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">My account</a>
-                <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">Settings</a>
-                <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">Billing</a>
-                <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">Sign out</a>
+                <button
+                  onClick={() => signOut({ callbackUrl: '/auth/login' })}
+                  className="w-full text-left block px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+                >
+                  Sign out
+                </button>
               </div>
             </div>
           </footer>

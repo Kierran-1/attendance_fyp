@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import Providers from '@/app/components/providers';
 
 export const metadata: Metadata = {
   title: 'Attendance System - Swinburne Sarawak',
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-50">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

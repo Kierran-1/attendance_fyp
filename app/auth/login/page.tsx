@@ -1,16 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
-  const handleMicrosoftLogin = () => {
+  const handleMicrosoftLogin = async () => {
     setLoading(true);
-    // TODO: Backend person replaces this with real Microsoft Azure AD sign-in
-    // e.g. signIn('azure-ad') if using NextAuth, or MSAL.js
-    setTimeout(() => setLoading(false), 1500);
+    await signIn('azure-ad', { callbackUrl: '/auth/redirect' });
+    // loading stays true — the page will navigate away on success
   };
 
   return (
