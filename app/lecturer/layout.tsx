@@ -4,8 +4,14 @@ import { lecturerMenu } from "../config/lecturerMenu"
 export default function LecturerLayout({ children }) {
   return (
     <div className="flex">
-      <Sidebar menu={lecturerMenu} />
-      <main className="flex-1 p-6">{children}</main>
+      <Sidebar
+        panelTitle={lecturerMenu.panelTitle}
+        menu={lecturerMenu.sections}
+      />
+
+      <main className="flex-1 p-6">
+        {children}
+      </main>
     </div>
   )
 }
