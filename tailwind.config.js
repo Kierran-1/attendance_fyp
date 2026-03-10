@@ -12,6 +12,15 @@ module.exports = {
         success: '#10b981',
         danger: '#ef4444',
         warning: '#f59e0b',
+        brand: {
+          red: '#E4002B',
+          dark: '#B8001F',
+          soft: '#FFF0F2',
+        },
+      },
+      fontFamily: {
+        sans: ['DM Sans', 'sans-serif'],
+        mono: ['DM Mono', 'monospace'],
       },
     },
   },
