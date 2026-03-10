@@ -1,34 +1,16 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { ShieldCheck, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleMicrosoftLogin = () => {
     setLoading(true);
-    setError('');
-
-    // TODO: Replace with real Supabase auth
-    setTimeout(() => {
-      const emailValid = email.endsWith('@students.swinburne.edu.my') || email.endsWith('@swinburne.edu.my');
-      if (!emailValid) { setError('Please use your Swinburne university email.'); setLoading(false); return; }
-      if (email.includes('admin')) {
-        router.push('/admin/dashboard');
-      } else if (email.includes('lecturer') || email.includes('dr')) {
-        router.push('/lecturer/dashboard');
-      } else {
-        router.push('/student/checkin');
-      }
-      setLoading(false);
-    }, 1000);
+    // TODO: Backend person replaces this with real Microsoft Azure AD sign-in
+    // e.g. signIn('azure-ad') if using NextAuth, or MSAL.js
+    setTimeout(() => setLoading(false), 1500);
   };
 
   return (
@@ -37,10 +19,7 @@ export default function LoginPage() {
       {/* ── LEFT PANEL ── */}
       <div className="hidden lg:flex flex-1 bg-[#0f0f0f] flex-col justify-between p-12 relative overflow-hidden">
 
-        {/* Animated grid */}
         <div className="absolute inset-0 auth-grid" />
-
-        {/* Glow blobs */}
         <div className="absolute -top-20 -left-20 w-[500px] h-[500px] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(228,0,43,0.18) 0%, transparent 65%)' }} />
         <div className="absolute -bottom-16 -right-16 w-[400px] h-[400px] rounded-full"
@@ -48,8 +27,7 @@ export default function LoginPage() {
 
         {/* Brand */}
         <div className="relative z-10 fade-up">
-          <div
-            className="w-12 h-12 bg-[#E4002B] rounded-xl flex items-center justify-center text-white font-black text-lg mb-4"
+          <div className="w-12 h-12 bg-[#E4002B] rounded-xl flex items-center justify-center text-white font-black text-lg mb-4"
             style={{ boxShadow: '0 0 40px rgba(228,0,43,0.4)' }}>
             AS
           </div>
@@ -116,111 +94,61 @@ export default function LoginPage() {
       {/* ── RIGHT PANEL ── */}
       <div className="w-full lg:w-[480px] flex-shrink-0 bg-white flex flex-col items-center justify-center px-8 sm:px-14 py-16 relative">
 
-        {/* Left border glow */}
         <div className="hidden lg:block absolute top-0 left-0 bottom-0 w-px"
           style={{ background: 'linear-gradient(to bottom, transparent, rgba(228,0,43,0.3), transparent)' }} />
 
         <div className="w-full max-w-sm fade-up">
 
           {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-8 lg:hidden">
+          <div className="flex items-center gap-3 mb-10 lg:hidden">
             <div className="w-9 h-9 bg-[#E4002B] rounded-lg flex items-center justify-center text-white font-black text-sm">AS</div>
             <div className="font-black text-lg tracking-tight">Attend<span className="text-[#E4002B]">Sync</span></div>
           </div>
 
-          <h1 className="text-3xl font-black tracking-tight text-gray-900 mb-1">Welcome back</h1>
-          <p className="text-gray-400 text-sm mb-8">Sign in with your Swinburne credentials</p>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            {/* Email */}
-            <div>
-              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">
-                University Email
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm select-none">✉️</span>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="yourname@swinburne.edu.my"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border-[1.5px] border-gray-100 rounded-xl text-sm text-gray-900 placeholder-gray-300 outline-none transition-all focus:border-[#E4002B] focus:bg-white focus:shadow-[0_0_0_4px_rgba(228,0,43,0.07)]"
-                />
-              </div>
-            </div>
-
-            {/* Password */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest">
-                  Password
-                </label>
-                <a href="#" className="text-[11px] text-[#E4002B] font-semibold hover:underline">
-                  Forgot password?
-                </a>
-              </div>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm select-none">🔒</span>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border-[1.5px] border-gray-100 rounded-xl text-sm text-gray-900 placeholder-gray-300 outline-none transition-all focus:border-[#E4002B] focus:bg-white focus:shadow-[0_0_0_4px_rgba(228,0,43,0.07)]"
-                />
-              </div>
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 bg-[#E4002B] hover:bg-[#B8001F] text-white font-bold rounded-xl text-sm transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(228,0,43,0.35)] active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
-            >
-              <span className="relative z-10">{loading ? 'Signing in...' : 'Sign In →'}</span>
-              <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent pointer-events-none" />
-            </button>
-          </form>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-6">
-            <div className="flex-1 h-px bg-gray-100" />
-            <span className="text-xs text-gray-300 font-medium">or continue as</span>
-            <div className="flex-1 h-px bg-gray-100" />
-          </div>
-
-          {/* Role quick access */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { icon: '🎓', label: 'Student', href: '/student/checkin' },
-              { icon: '📊', label: 'Lecturer', href: '/lecturer/dashboard' },
-              { icon: '⚙️', label: 'Admin', href: '/admin/dashboard' },
-            ].map((role) => (
-              <Link key={role.label} href={role.href}
-                className="flex flex-col items-center gap-1.5 py-3 px-2 border-[1.5px] border-gray-100 rounded-xl bg-gray-50 text-gray-400 text-xs font-bold hover:border-[#E4002B] hover:text-[#E4002B] hover:bg-[#FFF0F2] transition-all hover:-translate-y-0.5">
-                <span className="text-xl">{role.icon}</span>
-                {role.label}
-              </Link>
-            ))}
-          </div>
-
-          {/* Register link */}
-          <p className="text-center text-xs text-gray-400 mt-8">
-            Don&apos;t have an account?{' '}
-            <Link href="/auth/register" className="text-[#E4002B] font-bold hover:underline">
-              Register here
-            </Link>
+          <h1 className="text-3xl font-black tracking-tight text-gray-900 mb-2">Welcome back</h1>
+          <p className="text-gray-400 text-sm mb-10 leading-relaxed">
+            Sign in with your Swinburne Microsoft account to continue.
           </p>
-          <p className="text-center text-[11px] text-gray-300 mt-3">
-            Need help?{' '}
+
+          {/* Microsoft Sign In Button */}
+          <button
+            onClick={handleMicrosoftLogin}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 py-3.5 bg-[#2F2F2F] hover:bg-[#1a1a1a] text-white font-semibold rounded-xl text-sm transition-all hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Redirecting to Microsoft...
+              </>
+            ) : (
+              <>
+                {/* Official Microsoft logo squares */}
+                <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                  <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                  <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                  <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                </svg>
+                Sign in with Microsoft
+              </>
+            )}
+          </button>
+
+          {/* Info box */}
+          <div className="mt-5 bg-gray-50 border border-gray-100 rounded-xl p-4 flex gap-3">
+            <ShieldCheck size={18} className="text-[#E4002B] flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-400 leading-relaxed">
+              <span className="text-gray-600 font-bold block mb-0.5">Secure Sign-In</span>
+              You will be redirected to Microsoft&apos;s authentication page.
+              Sign in with your university account — the same one you use for Teams and Outlook.
+            </p>
+          </div>
+
+
+
+          <p className="text-center text-[11px] text-gray-300 mt-8">
+            Having trouble?{' '}
             <a href="mailto:it@swinburne.edu.my" className="text-[#E4002B] font-semibold hover:underline">
               Contact IT Support
             </a>

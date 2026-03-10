@@ -1,55 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-
-const ROLES = [
-  { value: 'student', label: 'Student', icon: '🎓', desc: 'Mark attendance via QR or facial recognition' },
-  { value: 'lecturer', label: 'Lecturer', icon: '📊', desc: 'Monitor attendance and generate reports' },
-];
+import { ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    role: '',
-    fullName: '',
-    studentId: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [error, setError] = useState('');
-
-  const update = (field: string, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
-
-  const handleNext = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (step === 1 && !form.role) { setError('Please select your role.'); return; }
-    if (step === 2) {
-      if (!form.fullName || !form.studentId || !form.email) { setError('Please fill in all fields.'); return; }
-      if (!form.email.endsWith('@students.swinburne.edu.my') && !form.email.endsWith('@swinburne.edu.my')) {
-        setError('Please use your Swinburne university email (@students.swinburne.edu.my or @swinburne.edu.my).'); return;
-      }
-    }
-    if (step === 3) {
-      if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return; }
-      if (form.password !== form.confirmPassword) { setError('Passwords do not match.'); return; }
-      setLoading(true);
-      // TODO: Replace with real Supabase registration
-      setTimeout(() => {
-        router.push('/auth/login');
-        setLoading(false);
-      }, 1200);
-      return;
-    }
-    setStep((s) => s + 1);
-  };
-
   return (
     <div className="flex min-h-screen">
 
@@ -61,7 +15,6 @@ export default function RegisterPage() {
         <div className="absolute -bottom-16 -right-16 w-[400px] h-[400px] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(228,0,43,0.10) 0%, transparent 65%)' }} />
 
-        {/* Brand */}
         <div className="relative z-10 fade-up">
           <div className="w-12 h-12 bg-[#E4002B] rounded-xl flex items-center justify-center text-white font-black text-lg mb-4"
             style={{ boxShadow: '0 0 40px rgba(228,0,43,0.4)' }}>
@@ -73,54 +26,40 @@ export default function RegisterPage() {
           <div className="text-white/40 text-sm mt-1">Swinburne University of Technology Sarawak</div>
         </div>
 
-        {/* Steps guide */}
-        <div className="relative z-10 fade-up-1 space-y-4">
-          <p className="text-white/40 text-xs uppercase tracking-widest font-bold mb-6">Registration Steps</p>
+        <div className="relative z-10 fade-up-1">
+          <h2 className="text-5xl font-black text-white leading-tight tracking-tighter mb-4">
+            No sign-up<br />
+            <span className="text-[#E4002B]">required.</span>
+          </h2>
+          <p className="text-white/40 text-base leading-relaxed max-w-sm">
+            Your account is automatically set up using your Swinburne Microsoft credentials.
+            Just sign in and you&apos;re ready to go.
+          </p>
+        </div>
+
+        <div className="relative z-10 fade-up-2 flex gap-3">
           {[
-            { n: 1, title: 'Choose Your Role', desc: 'Student or Lecturer' },
-            { n: 2, title: 'Your Details', desc: 'Name, ID and email' },
-            { n: 3, title: 'Set Password', desc: 'Secure your account' },
+            { val: '1,284', label: 'Students' },
+            { val: '84%', label: 'Avg Attendance', red: true },
+            { val: '36', label: 'Active Courses' },
           ].map((s) => (
-            <div key={s.n} className="flex items-center gap-4">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-all ${
-                step > s.n
-                  ? 'bg-[#E4002B] text-white'
-                  : step === s.n
-                    ? 'bg-[#E4002B] text-white shadow-[0_0_20px_rgba(228,0,43,0.5)]'
-                    : 'bg-white/10 text-white/30'
-              }`}>
-                {step > s.n ? '✓' : s.n}
+            <div key={s.label}
+              className="bg-white/[0.06] border border-white/10 rounded-2xl px-5 py-4 backdrop-blur-sm cursor-default">
+              <div className="text-white text-2xl font-black tracking-tight">
+                {s.red ? <><span className="text-[#E4002B]">{s.val.replace('%', '')}</span>%</> : s.val}
               </div>
-              <div>
-                <div className={`text-sm font-bold transition-colors ${step >= s.n ? 'text-white' : 'text-white/30'}`}>
-                  {s.title}
-                </div>
-                <div className="text-white/30 text-xs">{s.desc}</div>
-              </div>
+              <div className="text-white/40 text-[11px] uppercase tracking-widest mt-1 font-medium">{s.label}</div>
             </div>
           ))}
         </div>
 
-        {/* Bottom quote */}
-        <div className="relative z-10 fade-up-2">
-          <p className="text-white/20 text-sm italic leading-relaxed max-w-xs">
-            &ldquo;Attendance tracking made effortless — so lecturers can focus on teaching, not admin.&rdquo;
-          </p>
-        </div>
-
-        {/* Ticker */}
         <div className="absolute bottom-0 left-0 right-0 border-t border-white/[0.07] py-3 z-10">
           <div className="ticker-wrap">
             <div className="ticker-inner text-[11px] text-white/25 font-medium">
-              {[
-                'COS40005 — Session Active',
-                'COS20019 — 42 students checked in',
-                'COS30049 — Attendance window open',
-                'COS10009 — Starting in 15 min',
-                'COS40005 — Session Active',
-                'COS20019 — 42 students checked in',
-                'COS30049 — Attendance window open',
-                'COS10009 — Starting in 15 min',
+              {['COS40005 — Session Active', 'COS20019 — 42 students checked in',
+                'COS30049 — Attendance window open', 'COS10009 — Starting in 15 min',
+                'COS40005 — Session Active', 'COS20019 — 42 students checked in',
+                'COS30049 — Attendance window open', 'COS10009 — Starting in 15 min',
               ].map((item, i) => (
                 <span key={i} className="mx-6">
                   <span className="text-[#E4002B]/70 mr-2">●</span>{item}
@@ -132,202 +71,70 @@ export default function RegisterPage() {
       </div>
 
       {/* ── RIGHT PANEL ── */}
-      <div className="w-full lg:w-[500px] flex-shrink-0 bg-white flex flex-col items-center justify-center px-8 sm:px-14 py-16 relative">
+      <div className="w-full lg:w-[480px] flex-shrink-0 bg-white flex flex-col items-center justify-center px-8 sm:px-14 py-16 relative">
         <div className="hidden lg:block absolute top-0 left-0 bottom-0 w-px"
           style={{ background: 'linear-gradient(to bottom, transparent, rgba(228,0,43,0.3), transparent)' }} />
 
         <div className="w-full max-w-sm fade-up">
 
           {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-8 lg:hidden">
+          <div className="flex items-center gap-3 mb-10 lg:hidden">
             <div className="w-9 h-9 bg-[#E4002B] rounded-lg flex items-center justify-center text-white font-black text-sm">AS</div>
             <div className="font-black text-lg tracking-tight">Attend<span className="text-[#E4002B]">Sync</span></div>
           </div>
 
-          {/* Step indicator (mobile) */}
-          <div className="flex items-center gap-2 mb-6 lg:hidden">
-            {[1, 2, 3].map((s) => (
-              <div key={s} className={`h-1 flex-1 rounded-full transition-all ${step >= s ? 'bg-[#E4002B]' : 'bg-gray-100'}`} />
+          <div className="w-14 h-14 bg-[#FFF0F2] rounded-2xl flex items-center justify-center mb-6">
+            <ShieldCheck size={26} className="text-[#E4002B]" />
+          </div>
+
+          <h1 className="text-3xl font-black tracking-tight text-gray-900 mb-2">No account needed</h1>
+          <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+            AttendSync uses your existing Swinburne Microsoft account —
+            the same one you use for Teams, Outlook, and student portals.
+            There&apos;s nothing to register.
+          </p>
+
+          {/* Steps */}
+          <div className="space-y-3 mb-8">
+            {[
+              { n: 1, title: 'Go to Sign In', desc: 'Click the button below to go to the login page' },
+              { n: 2, title: 'Sign in with Microsoft', desc: 'Use your @students.swinburne.edu.my or @swinburne.edu.my account' },
+              { n: 3, title: "You're in", desc: 'Your profile and courses load automatically from Active Directory' },
+            ].map((s) => (
+              <div key={s.n} className="flex items-start gap-4 p-4 bg-gray-50 border border-gray-100 rounded-xl">
+                <div className="w-7 h-7 bg-[#E4002B] text-white rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5">
+                  {s.n}
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                    {s.title}
+                    {s.n === 3 && <CheckCircle2 size={14} className="text-green-500" />}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-0.5">{s.desc}</div>
+                </div>
+              </div>
             ))}
           </div>
 
-          <h1 className="text-3xl font-black tracking-tight text-gray-900 mb-1">Create account</h1>
-          <p className="text-gray-400 text-sm mb-8">
-            Step {step} of 3 —{' '}
-            {step === 1 ? 'Choose your role' : step === 2 ? 'Your details' : 'Set your password'}
-          </p>
+          <Link
+            href="/auth/login"
+            className="w-full flex items-center justify-center gap-3 py-3.5 bg-[#2F2F2F] hover:bg-[#1a1a1a] text-white font-semibold rounded-xl text-sm transition-all hover:-translate-y-0.5 hover:shadow-xl"
+          >
+            <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+              <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+              <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+              <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+            </svg>
+            Sign in with Microsoft
+            <ArrowRight size={16} />
+          </Link>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleNext} className="space-y-4">
-
-            {/* STEP 1: Role selection */}
-            {step === 1 && (
-              <div className="space-y-3">
-                {ROLES.map((role) => (
-                  <button
-                    key={role.value}
-                    type="button"
-                    onClick={() => update('role', role.value)}
-                    className={`w-full flex items-center gap-4 p-4 border-[1.5px] rounded-xl text-left transition-all ${
-                      form.role === role.value
-                        ? 'border-[#E4002B] bg-[#FFF0F2]'
-                        : 'border-gray-100 bg-gray-50 hover:border-gray-200'
-                    }`}
-                  >
-                    <span className="text-3xl">{role.icon}</span>
-                    <div>
-                      <div className={`font-bold text-sm ${form.role === role.value ? 'text-[#E4002B]' : 'text-gray-800'}`}>
-                        {role.label}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5">{role.desc}</div>
-                    </div>
-                    <div className={`ml-auto w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                      form.role === role.value ? 'border-[#E4002B] bg-[#E4002B]' : 'border-gray-200'
-                    }`}>
-                      {form.role === role.value && <div className="w-2 h-2 bg-white rounded-full" />}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* STEP 2: Details */}
-            {step === 2 && (
-              <>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Full Name</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm select-none">👤</span>
-                    <input
-                      type="text" required value={form.fullName}
-                      onChange={(e) => update('fullName', e.target.value)}
-                      placeholder="e.g. Ahmad bin Zulkifli"
-                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border-[1.5px] border-gray-100 rounded-xl text-sm text-gray-900 placeholder-gray-300 outline-none transition-all focus:border-[#E4002B] focus:bg-white focus:shadow-[0_0_0_4px_rgba(228,0,43,0.07)]"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">
-                    {form.role === 'student' ? 'Student ID' : 'Staff ID'}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm select-none">🪪</span>
-                    <input
-                      type="text" required value={form.studentId}
-                      onChange={(e) => update('studentId', e.target.value)}
-                      placeholder={form.role === 'student' ? 'e.g. 103214789' : 'e.g. STF00123'}
-                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border-[1.5px] border-gray-100 rounded-xl text-sm text-gray-900 placeholder-gray-300 outline-none transition-all focus:border-[#E4002B] focus:bg-white focus:shadow-[0_0_0_4px_rgba(228,0,43,0.07)]"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">University Email</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm select-none">✉️</span>
-                    <input
-                      type="email" required value={form.email}
-                      onChange={(e) => update('email', e.target.value)}
-                      placeholder="yourname@swinburne.edu.my"
-                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border-[1.5px] border-gray-100 rounded-xl text-sm text-gray-900 placeholder-gray-300 outline-none transition-all focus:border-[#E4002B] focus:bg-white focus:shadow-[0_0_0_4px_rgba(228,0,43,0.07)]"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* STEP 3: Password */}
-            {step === 3 && (
-              <>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Password</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm select-none">🔒</span>
-                    <input
-                      type="password" required value={form.password}
-                      onChange={(e) => update('password', e.target.value)}
-                      placeholder="Minimum 8 characters"
-                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border-[1.5px] border-gray-100 rounded-xl text-sm text-gray-900 placeholder-gray-300 outline-none transition-all focus:border-[#E4002B] focus:bg-white focus:shadow-[0_0_0_4px_rgba(228,0,43,0.07)]"
-                    />
-                  </div>
-                  {/* Password strength */}
-                  {form.password && (
-                    <div className="flex gap-1 mt-2">
-                      {[1,2,3,4].map((i) => (
-                        <div key={i} className={`h-1 flex-1 rounded-full transition-all ${
-                          form.password.length >= i * 3
-                            ? form.password.length >= 10 ? 'bg-green-400' : 'bg-[#E4002B]'
-                            : 'bg-gray-100'
-                        }`} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Confirm Password</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 text-sm select-none">🔒</span>
-                    <input
-                      type="password" required value={form.confirmPassword}
-                      onChange={(e) => update('confirmPassword', e.target.value)}
-                      placeholder="Re-enter your password"
-                      className={`w-full pl-10 pr-4 py-3 bg-gray-50 border-[1.5px] rounded-xl text-sm text-gray-900 placeholder-gray-300 outline-none transition-all focus:bg-white focus:shadow-[0_0_0_4px_rgba(228,0,43,0.07)] ${
-                        form.confirmPassword && form.confirmPassword !== form.password
-                          ? 'border-red-300 focus:border-red-400'
-                          : form.confirmPassword && form.confirmPassword === form.password
-                            ? 'border-green-300 focus:border-green-400'
-                            : 'border-gray-100 focus:border-[#E4002B]'
-                      }`}
-                    />
-                    {form.confirmPassword && (
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm">
-                        {form.confirmPassword === form.password ? '✅' : '❌'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-xs text-gray-500 space-y-1">
-                  <div><span className="font-bold text-gray-700">Name:</span> {form.fullName}</div>
-                  <div><span className="font-bold text-gray-700">ID:</span> {form.studentId}</div>
-                  <div><span className="font-bold text-gray-700">Email:</span> {form.email}</div>
-                  <div><span className="font-bold text-gray-700">Role:</span> {form.role.charAt(0).toUpperCase() + form.role.slice(1)}</div>
-                </div>
-              </>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-3 pt-1">
-              {step > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setStep((s) => s - 1)}
-                  className="px-5 py-3 border-[1.5px] border-gray-100 rounded-xl text-sm font-bold text-gray-400 hover:border-gray-200 hover:text-gray-600 transition-all">
-                  ← Back
-                </button>
-              )}
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-3.5 bg-[#E4002B] hover:bg-[#B8001F] text-white font-bold rounded-xl text-sm transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(228,0,43,0.35)] active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden">
-                <span className="relative z-10">
-                  {loading ? 'Creating account...' : step === 3 ? 'Create Account →' : 'Continue →'}
-                </span>
-                <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent pointer-events-none" />
-              </button>
-            </div>
-          </form>
-
-          <p className="text-center text-xs text-gray-400 mt-8">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="text-[#E4002B] font-bold hover:underline">
-              Sign in
-            </Link>
+          <p className="text-center text-[11px] text-gray-300 mt-6">
+            Having trouble?{' '}
+            <a href="mailto:it@swinburne.edu.my" className="text-[#E4002B] font-semibold hover:underline">
+              Contact IT Support
+            </a>
           </p>
         </div>
       </div>

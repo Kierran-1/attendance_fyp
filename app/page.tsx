@@ -44,13 +44,7 @@ export default function Home() {
                 href="/auth/login"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
               >
-                Login
-              </Link>
-              <Link
-                href="/auth/register"
-                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-lg transition duration-200"
-              >
-                Register
+                Sign in with Microsoft
               </Link>
             </div>
           </div>
