@@ -10,6 +10,7 @@ import { useSession, signOut } from "next-auth/react"
 type MenuItem = {
   name: string
   href: string
+  icon: string
 }
 
 type MenuSection = {
@@ -24,7 +25,7 @@ type SidebarProps = {
 
 export default function Sidebar({ panelTitle, menu }: SidebarProps) {
 
-   const pathname = usePathname()
+  const pathname = usePathname()
 
   const isActive = (href: string) => {
     return pathname.startsWith(href)
@@ -81,7 +82,7 @@ export default function Sidebar({ panelTitle, menu }: SidebarProps) {
                 <span className="pr-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   {section.heading}
                 </span>
-                 {/* Section Items */}
+                {/* Section Items */}
                 <ul className="mt-2 space-y-1">
                   {section.items.map((item) => {
                     const active = isActive(item.href)
@@ -89,15 +90,14 @@ export default function Sidebar({ panelTitle, menu }: SidebarProps) {
                       <li key={item.href}>
                         <Link
                           href={item.href}
-                          className={`flex items-center gap-x-3 py-2 px-3 text-base rounded-lg transition-colors ${
-                            active
+                          className={`flex items-center gap-x-3 py-2 px-3 text-base rounded-lg transition-colors ${active
                               ? "bg-[#E4002B]/10 text-[#E4002B] font-medium"
                               : "text-gray-700 hover:bg-gray-100"
-                          }`}
+                            }`}
                         >
-                          <span 
+                          <span
                             className={active ? "text-[#E4002B]" : "text-gray-500"}
-                            dangerouslySetInnerHTML={{ __html: item.icon}}
+                            dangerouslySetInnerHTML={{ __html: item.icon }}
                           />
                           {item.name}
                         </Link>
@@ -117,51 +117,43 @@ export default function Sidebar({ panelTitle, menu }: SidebarProps) {
               aria-haspopup="menu"
               aria-expanded="false"
             >
-              <img
-                src="https://images.unsplash.com/photo-1734122415415-88cb1d7d5dc0?q=80&w=320&h=320&auto=format&fit=facearea&facepad=3"
-                alt="Avatar"
-                className="w-6 h-6 rounded-full"
-              />
-              Mia Hudson
-              <svg className="ms-auto w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {session?.user?.image ? (
+                <img
+                  src={session.user.image}
+                  alt="Avatar"
+                  className="w-6 h-6 rounded-full"
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-[#E4002B] flex items-center justify-center text-white text-xs font-bold">
+                  {session?.user?.name?.[0] ?? "?"}
+                </div>
+              )}
+
+              <span className="truncate text-sm">
+                {session?.user?.name ?? "Loading..."}
+              </span>
+
+              <svg
+                className="ms-auto w-4 h-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
-          {/* Footer Dropdown */}
-          <footer className="p-2 border-t border-gray-200">
-            <div className="hs-dropdown relative w-full">
-              <button
-                className="flex items-center w-full gap-x-2 py-2 px-2.5 text-gray-700 rounded hover:bg-gray-100"
-                aria-haspopup="menu"
-                aria-expanded="false"
-              >
-                {session?.user?.image ? (
-                  <img
-                    src={session.user.image}
-                    alt="Avatar"
-                    className="w-6 h-6 rounded-full"
-                  />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-[#E4002B] flex items-center justify-center text-white text-xs font-bold">
-                    {session?.user?.name?.[0] ?? '?'}
-                  </div>
-                )}
-                <span className="truncate text-sm">{session?.user?.name ?? 'Loading...'}</span>
-                <svg className="ms-auto w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+            <div className="hs-dropdown-menu hidden w-48 bg-white border border-gray-200 rounded shadow mt-1">
+              <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                My account
+              </a>
 
-              <div className="hs-dropdown-menu hidden w-48 bg-white border border-gray-200 rounded shadow mt-1">
-                <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">My account</a>
-                <button
-                  onClick={() => signOut({ callbackUrl: '/auth/login' })}
-                  className="w-full text-left block px-3 py-2 text-red-600 hover:bg-red-50 rounded"
-                >
-                  Sign out
-                </button>
-              </div>
+              <button
+                onClick={() => signOut({ callbackUrl: "/auth/login" })}
+                className="w-full text-left px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+              >
+                Sign out
+              </button>
             </div>
           </div>
         </footer>
