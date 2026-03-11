@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation"
 import { lecturerMenu } from "../config/lecturerMenu"
+import Link from "next/link"
+
 
 export default function TopNavbar() {
 
@@ -28,7 +30,7 @@ export default function TopNavbar() {
   })
 
   return (
-    <header className="sticky top-0 z-40 bg-[#F8F8F8] border-b border-gray-200 h-16 flex items-center justify-between px-8 lg:ml-64">
+    <header className="sticky top-0 z-40 bg-[#fff] border-b border-gray-200 h-16 flex items-center justify-between px-8 lg:ml-64">
 
       {/* LEFT — PAGE TITLE */}
       <h1 className="text-lg font-semibold text-gray-800">
@@ -44,29 +46,30 @@ export default function TopNavbar() {
         </span>
 
         {/* Notification Bell */}
-        <button className="relative p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50">
+        <Link href="/lecturer/alerts">
+            <button className="relative p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50">
 
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke="#6b7280"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0"
-            />
-          </svg>
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                fill="none"
+                viewBox="0 0 24 24"
+            >
+                <path
+                stroke="#6b7280"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0"
+                />
+            </svg>
 
-          {/* Notification Dot */}
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            {/* Notification Dot */}
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
 
-        </button>
-
+            </button>
+        </Link>
       </div>
 
     </header>
