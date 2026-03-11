@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 
-export default function StudentDashboard() {
+export default function LecturerDashboard() {
   const { data: session } = useSession();
 
   return (

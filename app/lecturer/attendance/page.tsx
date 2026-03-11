@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 
-export default function StudentDashboard() {
+export default function LecturerDashboard() {
   const { data: session } = useSession();
 
   return (
@@ -14,10 +14,13 @@ export default function StudentDashboard() {
         <p className="text-gray-500 text-sm mt-1">{session?.user?.email}</p>
       </div>
 
+      
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
           <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Overall Attendance</p>
           <p className="text-3xl font-black text-gray-800">—</p>
+          
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
           <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Enrolled Courses</p>
