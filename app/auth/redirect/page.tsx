@@ -6,7 +6,6 @@ import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
 const ROLE_ROUTES: Record<string, string> = {
-  ADMIN: '/admin/dashboard',
   LECTURER: '/lecturer/dashboard',
   STUDENT: '/student/dashboard',
 };
