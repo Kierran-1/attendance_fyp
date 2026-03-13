@@ -49,7 +49,7 @@ export default function LecturerDashboard() {
   ]
 
   return (
-    <div className="lg:ml-64 grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-6">
 
       {/* TOP STATS */}
       <div className="col-span-12 grid grid-cols-4 gap-6">
