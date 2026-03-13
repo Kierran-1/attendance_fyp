@@ -45,7 +45,6 @@ export const authOptions: AuthOptions = {
         include: {
           studentProfile: true,
           lecturerProfile: true,
-          adminProfile: true,
         },
       });
 
@@ -54,8 +53,7 @@ export const authOptions: AuthOptions = {
 
       const hasProfile =
         dbUser.studentProfile ||
-        dbUser.lecturerProfile ||
-        dbUser.adminProfile;
+        dbUser.lecturerProfile;
 
       if (!hasProfile) {
         const role = getRoleFromEmail(user.email);
