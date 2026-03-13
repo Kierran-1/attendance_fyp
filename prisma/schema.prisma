@@ -11,10 +11,11 @@ datasource db {
 // User Models
 model User {
   id        String     @id @default(cuid())
-  email     String     @unique
-  name      String?
-  image     String?
-  role      UserRole   @default(STUDENT)
+  email         String     @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  role          UserRole   @default(STUDENT)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -38,6 +39,7 @@ model Account {
   refresh_token      String?
   access_token       String?
   expires_at         Int?
+  ext_expires_in     Int?
   token_type         String?
   scope              String?
   id_token           String?
