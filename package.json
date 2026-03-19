@@ -20,6 +20,8 @@
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "autoprefixer": "^10.4.0",
     "axios": "^1.6.0",
     "lucide-react": "^0.577.0",
