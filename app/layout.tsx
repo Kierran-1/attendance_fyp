@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import Providers from '@/app/components/providers';
+import SplashScreen from '@/app/components/splash';
 
 export const metadata: Metadata = {
   title: 'Attendance System - Swinburne Sarawak',
@@ -15,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-50">
-        <Providers>{children}</Providers>
+        <Providers>
+          <SplashScreen />
+          {children}
+        </Providers>
       </body>
     </html>
   );
