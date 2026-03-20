@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useCallback, useMemo } from "react";
@@ -16,16 +15,18 @@ import {
   Calendar,
   MapPin,
   Clock,
+  MoreVertical,
   Trash2,
   CheckCircle2,
   AlertCircle,
   FileSpreadsheet,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronUp,
   TrendingDown,
   TrendingUp,
-  BarChart3,
-  GraduationCap
+  BarChart3
 } from "lucide-react";
 
 // Types
@@ -36,7 +37,7 @@ interface Student {
   email: string;
   program?: string;
   nationality?: string;
-  schoolStatus?: string;
+  status?: string;
 }
 
 interface Session {
@@ -57,17 +58,14 @@ interface ClassData {
   day: string;
   time: string;
   location: string;
-  lecturer?: string;
-  classType?: string;
-  group?: string;
-  term?: string;
   students: Student[];
   sessions: Session[];
   createdAt: string;
 }
 
-type ViewMode = "list" | "create" | "upload" | "detail";
+type ViewMode = "list" | "create" | "upload" | "detail" | "mapping";
 
+// Mock Data
 const INITIAL_CLASSES: ClassData[] = [
   {
     id: "1",
@@ -101,12 +99,14 @@ const INITIAL_CLASSES: ClassData[] = [
 ];
 
 export default function ClassesPage() {
+  // State
   const [classes, setClasses] = useState<ClassData[]>(INITIAL_CLASSES);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
   const [activeTab, setActiveTab] = useState<"students" | "sessions" | "summary">("students");
   const [searchQuery, setSearchQuery] = useState("");
   
+  // Create Class Form State
   const [createForm, setCreateForm] = useState({
     classCode: "",
     className: "",
@@ -115,30 +115,19 @@ export default function ClassesPage() {
     location: ""
   });
 
+  // Upload State
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<any[]>([]);
   const [uploadColumns, setUploadColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState({
     studentId: "",
     name: "",
-    email: "",
-    program: ""
+    email: ""
   });
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
-  
-  const [parsedMetadata, setParsedMetadata] = useState<{
-    term?: string;
-    unitCode?: string;
-    unitName?: string;
-    classType?: string;
-    group?: string;
-    day?: string;
-    time?: string;
-    room?: string;
-    lecturer?: string;
-  }>({});
 
+  // Filtered Classes
   const filteredClasses = useMemo(() => {
     return classes.filter(c => 
       c.classCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -146,6 +135,7 @@ export default function ClassesPage() {
     );
   }, [classes, searchQuery]);
 
+  // Stats
   const stats = useMemo(() => {
     const totalStudents = classes.reduce((acc, c) => acc + c.students.length, 0);
     const totalSessions = classes.reduce((acc, c) => acc + c.sessions.length, 0);
@@ -159,6 +149,7 @@ export default function ClassesPage() {
     return { totalStudents, totalSessions, atRiskStudents, classCount: classes.length };
   }, [classes]);
 
+  // Handlers
   const handleCreateClass = () => {
     if (!createForm.classCode || !createForm.className) return;
     
@@ -192,76 +183,31 @@ export default function ClassesPage() {
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[];
         
-        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
-        
-        if (allData.length < 8) {
-          alert('File does not contain enough rows. Expected Swinburne attendance format.');
-          return;
+        if (jsonData.length > 0) {
+          const headers = jsonData[0] as string[];
+          const rows = jsonData.slice(1, 6); // Preview first 5 rows
+          
+          setUploadColumns(headers);
+          setUploadPreview(rows);
+          setUploadFile(file);
+          setUploadStep(2);
+          
+          // Auto-suggest mappings based on common patterns
+          const findColumn = (patterns: string[]) => {
+            return headers.find(h => patterns.some(p => h?.toLowerCase().includes(p))) || "";
+          };
+          
+          setColumnMapping({
+            studentId: findColumn(["studentnumber", "student number", "id", "student_id", "studentid"]),
+            name: findColumn(["studentname", "student name", "name", "fullname", "full name"]),
+            email: findColumn(["email", "e-mail", "mail"]) || ""
+          });
         }
-
-        const row4 = allData[3] || [];
-        const row4Text = row4.join(' ');
-        
-        const termMatch = row4Text.match(/Term\\s*:\\s*([^,]+)/i);
-        const term = termMatch ? termMatch[1].trim() : '';
-        
-        const unitMatch = row4Text.match(/Unit\\s*:\\s*([^-]+)-\\s*(.+)/i);
-        const unitCode = unitMatch ? unitMatch[1].trim() : '';
-        const unitName = unitMatch ? unitMatch[2].trim() : '';
-        
-        const row5 = allData[4] || [];
-        const row5Text = row5.join(', ');
-        
-        const classDetails = row5Text.split(',').map((s: string) => s.trim());
-        const classType = classDetails[0] || '';
-        const group = classDetails[1] || '';
-        const day = classDetails[2] || '';
-        const time = classDetails[3] || '';
-        const room = classDetails[4] || '';
-        const lecturer = classDetails[5] || '';
-
-        const headerRow = allData[5] || [];
-        const headers = headerRow.map((h: any, idx: number) => {
-          if (h && h.toString().trim()) return h.toString().trim();
-          if (idx === 1) return 'Student Number';
-          if (idx === 3) return 'Student Name';
-          return `Column${idx + 1}`;
-        });
-
-        const studentData = allData.slice(7, 12);
-
-        setParsedMetadata({
-          term,
-          unitCode,
-          unitName,
-          classType,
-          group,
-          day,
-          time,
-          room,
-          lecturer
-        });
-        
-        setUploadColumns(headers);
-        setUploadPreview(studentData);
-        setUploadFile(file);
-        setUploadStep(2);
-        
-        const findColumn = (patterns: string[]) => {
-          return headers.find(h => patterns.some(p => h?.toLowerCase().includes(p.toLowerCase()))) || "";
-        };
-        
-        setColumnMapping({
-          studentId: findColumn(["student number", "studentnumber", "student_id", "studentid", "id"]),
-          name: findColumn(["student name", "studentname", "name", "fullname"]),
-          email: findColumn(["email", "e-mail", "mail"]) || "",
-          program: findColumn(["program", "course", "degree"]) || ""
-        });
-        
       } catch (error) {
         console.error('Error parsing Excel:', error);
-        alert('Error parsing Excel file. Please ensure it is a valid Swinburne attendance form.');
+        alert('Error parsing Excel file');
       }
     };
     reader.readAsBinaryString(file);
@@ -283,77 +229,30 @@ export default function ClassesPage() {
   }, []);
 
   const confirmImport = () => {
-    if (!columnMapping.studentId || !columnMapping.name) {
-      alert('Please map at least Student ID and Name columns');
-      return;
-    }
+    if (!selectedClass || !columnMapping.studentId || !columnMapping.name) return;
     
-    if (!uploadFile) return;
+    const newStudents: Student[] = uploadPreview.map((row, idx) => ({
+      id: Date.now().toString() + idx,
+      studentNumber: row[uploadColumns.indexOf(columnMapping.studentId)]?.toString() || "",
+      name: row[uploadColumns.indexOf(columnMapping.name)]?.toString() || "",
+      email: columnMapping.email ? row[uploadColumns.indexOf(columnMapping.email)]?.toString() || "" : "",
+      program: row[uploadColumns.findIndex(c => c?.toLowerCase().includes("program"))] || ""
+    })).filter(s => s.studentNumber && s.name);
+
+    setClasses(prev => prev.map(c => 
+      c.id === selectedClass.id 
+        ? { ...c, students: [...c.students, ...newStudents] }
+        : c
+    ));
     
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
-        
-        const studentData = allData.slice(7);
-        const headers = uploadColumns;
-        
-        const newStudents: Student[] = studentData
-          .filter((row: any) => row && row.length > 0)
-          .map((row: any, idx: number) => {
-            const studentNumber = row[headers.indexOf(columnMapping.studentId)]?.toString() || "";
-            const name = row[headers.indexOf(columnMapping.name)]?.toString() || "";
-            
-            if (!studentNumber || !name) return null;
-            
-            return {
-              id: Date.now().toString() + idx,
-              studentNumber,
-              name,
-              email: columnMapping.email ? row[headers.indexOf(columnMapping.email)]?.toString() || "" : "",
-              program: columnMapping.program ? row[headers.indexOf(columnMapping.program)]?.toString() || "" : "",
-              nationality: row[headers.findIndex((h: string) => h.toLowerCase().includes('nationality'))]?.toString() || "",
-              schoolStatus: row[headers.findIndex((h: string) => h.toLowerCase().includes('school status'))]?.toString() || ""
-            };
-          })
-          .filter((s: Student | null): s is Student => s !== null);
-        
-        const newClass: ClassData = {
-          id: Date.now().toString(),
-          classCode: parsedMetadata.unitCode || "IMPORTED",
-          className: parsedMetadata.unitName || "Imported Class",
-          day: parsedMetadata.day || "TBA",
-          time: parsedMetadata.time || "TBA",
-          location: parsedMetadata.room || "TBA",
-          lecturer: parsedMetadata.lecturer,
-          classType: parsedMetadata.classType,
-          group: parsedMetadata.group,
-          term: parsedMetadata.term,
-          students: newStudents,
-          sessions: [],
-          createdAt: new Date().toISOString().split('T')[0]
-        };
-        
-        setClasses(prev => [...prev, newClass]);
-        
-        setUploadFile(null);
-        setUploadPreview([]);
-        setUploadColumns([]);
-        setColumnMapping({ studentId: "", name: "", email: "", program: "" });
-        setParsedMetadata({});
-        setUploadStep(1);
-        setViewMode("list");
-        
-      } catch (error) {
-        console.error('Error importing:', error);
-        alert('Error importing students');
-      }
-    };
-    reader.readAsBinaryString(uploadFile);
+    // Reset and close
+    setUploadFile(null);
+    setUploadPreview([]);
+    setUploadColumns([]);
+    setColumnMapping({ studentId: "", name: "", email: "" });
+    setUploadStep(1);
+    setViewMode("detail");
+    setSelectedClass(prev => prev ? { ...prev, students: [...prev.students, ...newStudents] } : null);
   };
 
   const removeStudent = (studentId: string) => {
@@ -397,8 +296,10 @@ export default function ClassesPage() {
     }
   };
 
+  // Render Functions
   const renderListView = () => (
     <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border shadow-sm">
           <div className="flex items-center justify-between mb-2">
@@ -430,6 +331,7 @@ export default function ClassesPage() {
         </div>
       </div>
 
+      {/* Action Bar */}
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border shadow-sm">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -459,6 +361,7 @@ export default function ClassesPage() {
         </div>
       </div>
 
+      {/* Classes Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredClasses.map((cls) => {
           const avgAttendance = cls.sessions.length > 0
@@ -474,14 +377,7 @@ export default function ClassesPage() {
               <div className="p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">{cls.classCode}</p>
-                      {cls.classType && (
-                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                          {cls.classType}
-                        </span>
-                      )}
-                    </div>
+                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">{cls.classCode}</p>
                     <h3 className="font-bold text-gray-900 line-clamp-1">{cls.className}</h3>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -507,12 +403,6 @@ export default function ClassesPage() {
                     <Users className="w-4 h-4 text-gray-400" />
                     <span>{cls.students.length} Students</span>
                   </div>
-                  {cls.lecturer && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <GraduationCap className="w-4 h-4 text-gray-400" />
-                      <span>{cls.lecturer}</span>
-                    </div>
-                  )}
                 </div>
 
                 {cls.sessions.length > 0 && (
@@ -652,7 +542,7 @@ export default function ClassesPage() {
   );
 
   const renderUploadView = () => (
-    <div className="max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
+    <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
       <div className="bg-white rounded-xl border shadow-sm">
         <div className="p-6 border-b">
           <button 
@@ -661,7 +551,6 @@ export default function ClassesPage() {
               setUploadStep(1);
               setUploadFile(null);
               setUploadPreview([]);
-              setParsedMetadata({});
             }}
             className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
           >
@@ -695,12 +584,10 @@ export default function ClassesPage() {
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FileSpreadsheet className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Swinburne Attendance Form</h3>
-              <p className="text-sm text-gray-500 mb-2 max-w-md mx-auto">
-                Upload the official Swinburne attendance Excel file.
-              </p>
-              <p className="text-xs text-gray-400 mb-6 max-w-md mx-auto">
-                The system will automatically extract class information from rows 4-5 and student data from row 8 onwards.
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Student List</h3>
+              <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+                Drag and drop your Excel file here, or click to browse. 
+                The file should contain student information with headers.
               </p>
               <input
                 type="file"
@@ -721,71 +608,12 @@ export default function ClassesPage() {
           </div>
         ) : (
           <div className="p-6">
-            {Object.keys(parsedMetadata).length > 0 && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Detected Class Information
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  {parsedMetadata.unitCode && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Unit Code</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.unitCode}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.unitName && (
-                    <div className="col-span-2">
-                      <span className="text-blue-600 text-xs uppercase">Unit Name</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.unitName}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.classType && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Type</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.classType}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.group && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Group</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.group}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.day && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Day</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.day}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.time && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Time</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.time}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.room && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Room</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.room}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.lecturer && (
-                    <div className="col-span-2">
-                      <span className="text-blue-600 text-xs uppercase">Lecturer</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.lecturer}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Excel Columns</h3>
-              <p className="text-sm text-gray-500">Verify the column mappings for student data. The system has auto-detected based on the Swinburne format.</p>
+              <p className="text-sm text-gray-500">Match your Excel columns to the required fields for student data.</p>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-3 gap-4 mb-8">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
                   Student ID <span className="text-red-500">*</span>
@@ -803,7 +631,7 @@ export default function ClassesPage() {
                 {columnMapping.studentId && (
                   <div className="flex items-center gap-1 text-xs text-green-600">
                     <Check className="w-3 h-3" />
-                    <span>Mapped</span>
+                    <span>Mapped to {columnMapping.studentId}</span>
                   </div>
                 )}
               </div>
@@ -825,23 +653,9 @@ export default function ClassesPage() {
                 {columnMapping.name && (
                   <div className="flex items-center gap-1 text-xs text-green-600">
                     <Check className="w-3 h-3" />
-                    <span>Mapped</span>
+                    <span>Mapped to {columnMapping.name}</span>
                   </div>
                 )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Program (Optional)</label>
-                <select
-                  value={columnMapping.program}
-                  onChange={(e) => setColumnMapping(prev => ({ ...prev, program: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
-                >
-                  <option value="">Select column...</option>
-                  {uploadColumns.map((col, idx) => (
-                    <option key={idx} value={col}>{col}</option>
-                  ))}
-                </select>
               </div>
 
               <div className="space-y-2">
@@ -860,12 +674,12 @@ export default function ClassesPage() {
             </div>
 
             <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Student Data Preview (First 5 rows)</h4>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Data Preview (First 5 rows)</h4>
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      {uploadColumns.slice(0, 8).map((col, idx) => (
+                      {uploadColumns.map((col, idx) => (
                         <th key={idx} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                           {col}
                         </th>
@@ -875,7 +689,7 @@ export default function ClassesPage() {
                   <tbody className="divide-y divide-gray-100">
                     {uploadPreview.map((row, idx) => (
                       <tr key={idx} className="hover:bg-gray-50">
-                        {uploadColumns.slice(0, 8).map((_, colIdx) => (
+                        {uploadColumns.map((_, colIdx) => (
                           <td key={colIdx} className="px-4 py-2 text-gray-600 whitespace-nowrap">
                             {row[colIdx]?.toString() || "-"}
                           </td>
@@ -895,7 +709,35 @@ export default function ClassesPage() {
                 Back
               </button>
               <button
-                onClick={confirmImport}
+                onClick={() => {
+                  // For demo, we'll just create a new class with the students
+                  if (columnMapping.studentId && columnMapping.name) {
+                    const newStudents: Student[] = uploadPreview.map((row, idx) => ({
+                      id: Date.now().toString() + idx,
+                      studentNumber: row[uploadColumns.indexOf(columnMapping.studentId)]?.toString() || "",
+                      name: row[uploadColumns.indexOf(columnMapping.name)]?.toString() || "",
+                      email: columnMapping.email ? row[uploadColumns.indexOf(columnMapping.email)]?.toString() || "" : ""
+                    })).filter(s => s.studentNumber && s.name);
+                    
+                    const newClass: ClassData = {
+                      id: Date.now().toString(),
+                      classCode: "IMPORTED",
+                      className: "Imported Class",
+                      day: "TBA",
+                      time: "TBA",
+                      location: "TBA",
+                      students: newStudents,
+                      sessions: [],
+                      createdAt: new Date().toISOString().split('T')[0]
+                    };
+                    
+                    setClasses(prev => [...prev, newClass]);
+                    setUploadStep(1);
+                    setUploadFile(null);
+                    setUploadPreview([]);
+                    setViewMode("list");
+                  }
+                }}
                 disabled={!columnMapping.studentId || !columnMapping.name}
                 className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-2"
               >
@@ -923,6 +765,7 @@ export default function ClassesPage() {
 
     return (
       <div className="animate-in slide-in-from-right-4 duration-300">
+        {/* Header */}
         <div className="bg-white rounded-xl border shadow-sm mb-6 overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
           <div className="p-6">
@@ -940,15 +783,10 @@ export default function ClassesPage() {
                   <span className="px-2.5 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
                     {selectedClass.classCode}
                   </span>
-                  {selectedClass.classType && (
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
-                      {selectedClass.classType} • Group {selectedClass.group}
-                    </span>
-                  )}
                   <span className="text-sm text-gray-500">{selectedClass.createdAt}</span>
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900">{selectedClass.className}</h1>
-                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 flex-wrap">
+                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                   <span className="flex items-center gap-1.5">
                     <Clock className="w-4 h-4" />
                     {selectedClass.day}, {selectedClass.time}
@@ -961,12 +799,6 @@ export default function ClassesPage() {
                     <Users className="w-4 h-4" />
                     {selectedClass.students.length} Students
                   </span>
-                  {selectedClass.lecturer && (
-                    <span className="flex items-center gap-1.5">
-                      <GraduationCap className="w-4 h-4" />
-                      {selectedClass.lecturer}
-                    </span>
-                  )}
                 </div>
               </div>
               
@@ -989,6 +821,7 @@ export default function ClassesPage() {
             </div>
           </div>
           
+          {/* Tabs */}
           <div className="flex border-t">
             {[
               { id: "students", label: "Students", icon: Users, count: selectedClass.students.length },
@@ -1015,6 +848,7 @@ export default function ClassesPage() {
           </div>
         </div>
 
+        {/* Tab Content */}
         <div className="bg-white rounded-xl border shadow-sm min-h-[400px]">
           {activeTab === "students" && (
             <div className="p-6">
@@ -1035,7 +869,6 @@ export default function ClassesPage() {
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Email</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Program</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Nationality</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
                       </tr>
                     </thead>
@@ -1046,7 +879,6 @@ export default function ClassesPage() {
                           <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
                           <td className="px-4 py-3 text-gray-600">{student.email || "-"}</td>
                           <td className="px-4 py-3 text-gray-600 text-sm">{student.program || "-"}</td>
-                          <td className="px-4 py-3 text-gray-600 text-sm">{student.nationality || "-"}</td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded">
@@ -1071,7 +903,7 @@ export default function ClassesPage() {
                     <Users className="w-8 h-8 text-gray-400" />
                   </div>
                   <h4 className="text-gray-900 font-medium mb-1">No students yet</h4>
-                  <p className="text-sm text-gray-500 mb-4">Upload a Swinburne attendance form to import students</p>
+                  <p className="text-sm text-gray-500 mb-4">Upload a student list to get started</p>
                   <button
                     onClick={() => setViewMode("upload")}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"

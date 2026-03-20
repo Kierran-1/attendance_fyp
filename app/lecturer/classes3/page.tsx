@@ -2,31 +2,29 @@
 
 import { useState, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
-import { 
-  Plus, 
-  Upload, 
-  Search, 
-  Eye, 
-  Play, 
-  Edit2, 
-  X, 
+import {
+  Plus,
+  Upload,
+  Search,
+  Eye,
+  Play,
+  Edit2,
+  X,
   ChevronLeft,
   Users,
   Calendar,
   MapPin,
   Clock,
-  MoreVertical,
   Trash2,
   CheckCircle2,
   AlertCircle,
   FileSpreadsheet,
   ArrowRight,
   Check,
-  ChevronDown,
-  ChevronUp,
   TrendingDown,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  GraduationCap
 } from "lucide-react";
 
 // Types
@@ -37,7 +35,7 @@ interface Student {
   email: string;
   program?: string;
   nationality?: string;
-  status?: string;
+  schoolStatus?: string;
 }
 
 interface Session {
@@ -58,14 +56,17 @@ interface ClassData {
   day: string;
   time: string;
   location: string;
+  lecturer?: string;
+  classType?: string;
+  group?: string;
+  term?: string;
   students: Student[];
   sessions: Session[];
   createdAt: string;
 }
 
-type ViewMode = "list" | "create" | "upload" | "detail" | "mapping";
+type ViewMode = "list" | "create" | "upload" | "detail";
 
-// Mock Data
 const INITIAL_CLASSES: ClassData[] = [
   {
     id: "1",
@@ -99,14 +100,12 @@ const INITIAL_CLASSES: ClassData[] = [
 ];
 
 export default function ClassesPage() {
-  // State
   const [classes, setClasses] = useState<ClassData[]>(INITIAL_CLASSES);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
   const [activeTab, setActiveTab] = useState<"students" | "sessions" | "summary">("students");
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Create Class Form State
+
   const [createForm, setCreateForm] = useState({
     classCode: "",
     className: "",
@@ -115,27 +114,37 @@ export default function ClassesPage() {
     location: ""
   });
 
-  // Upload State
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<any[]>([]);
   const [uploadColumns, setUploadColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState({
     studentId: "",
     name: "",
-    email: ""
+    email: "",
+    program: ""
   });
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
 
-  // Filtered Classes
+  const [parsedMetadata, setParsedMetadata] = useState<{
+    term?: string;
+    unitCode?: string;
+    unitName?: string;
+    classType?: string;
+    group?: string;
+    day?: string;
+    time?: string;
+    room?: string;
+    lecturer?: string;
+  }>({});
+
   const filteredClasses = useMemo(() => {
-    return classes.filter(c => 
+    return classes.filter(c =>
       c.classCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.className.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [classes, searchQuery]);
 
-  // Stats
   const stats = useMemo(() => {
     const totalStudents = classes.reduce((acc, c) => acc + c.students.length, 0);
     const totalSessions = classes.reduce((acc, c) => acc + c.sessions.length, 0);
@@ -145,14 +154,13 @@ export default function ClassesPage() {
         : 100;
       return acc + (avgAttendance < 80 ? c.students.length : 0);
     }, 0);
-    
+
     return { totalStudents, totalSessions, atRiskStudents, classCount: classes.length };
   }, [classes]);
 
-  // Handlers
   const handleCreateClass = () => {
     if (!createForm.classCode || !createForm.className) return;
-    
+
     const newClass: ClassData = {
       id: Date.now().toString(),
       classCode: createForm.classCode,
@@ -164,54 +172,137 @@ export default function ClassesPage() {
       sessions: [],
       createdAt: new Date().toISOString().split('T')[0]
     };
-    
+
     setClasses(prev => [...prev, newClass]);
     setCreateForm({ classCode: "", className: "", day: "Monday", time: "", location: "" });
     setViewMode("list");
   };
 
   const handleFileUpload = (file: File) => {
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      alert('Please upload an Excel file (.xlsx or .xls)');
-      return;
-    }
+  if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+    alert('Please upload an Excel file (.xlsx or .xls)');
+    return;
+  }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[];
-        
-        if (jsonData.length > 0) {
-          const headers = jsonData[0] as string[];
-          const rows = jsonData.slice(1, 6); // Preview first 5 rows
-          
-          setUploadColumns(headers);
-          setUploadPreview(rows);
-          setUploadFile(file);
-          setUploadStep(2);
-          
-          // Auto-suggest mappings based on common patterns
-          const findColumn = (patterns: string[]) => {
-            return headers.find(h => patterns.some(p => h?.toLowerCase().includes(p))) || "";
-          };
-          
-          setColumnMapping({
-            studentId: findColumn(["studentnumber", "student number", "id", "student_id", "studentid"]),
-            name: findColumn(["studentname", "student name", "name", "fullname", "full name"]),
-            email: findColumn(["email", "e-mail", "mail"]) || ""
-          });
-        }
-      } catch (error) {
-        console.error('Error parsing Excel:', error);
-        alert('Error parsing Excel file');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = e.target?.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+
+      const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
+
+      if (allData.length < 8) {
+        alert('File does not contain enough rows. Expected Swinburne attendance format.');
+        return;
       }
-    };
-    reader.readAsBinaryString(file);
+
+      // Parse Row 4 (index 3): Term and Unit info
+      const row4 = allData[3] || [];
+      const row4Text = row4.join(' ');
+
+      // Extract term (e.g., "2026_MAR_S1") - captures until first space or comma after the code
+      const termMatch = row4Text.match(/Term\s*:\s*([^,\s]+)/i);
+      const term = termMatch ? termMatch[1].trim() : '';
+
+      // Extract unit code and name (e.g., "COS20031 - Database Design Project")
+      const unitMatch = row4Text.match(/Unit\s*:\s*([^-]+)-\s*(.+)/i);
+      const unitCode = unitMatch ? unitMatch[1].trim() : '';
+      const unitName = unitMatch ? unitMatch[2].trim() : '';
+
+      // Parse Row 5 (index 4): Class details
+      // Format: "LE1 , 01 , Mon , 10:00 - 12:00, B006, Jason Thomas Chew"
+      const row5 = allData[4] || [];
+      const row5Text = row5.join(',');
+      const classDetails = row5Text.split(',').map((s: string) => s.trim());
+
+      const classType = classDetails[0] || '';
+      const group = classDetails[1] || '';
+      const day = classDetails[2] || '';
+      const time = classDetails[3] || '';
+      const room = classDetails[4] || '';
+      const lecturer = classDetails[5] || '';
+
+      // Handle merged headers in rows 6-7 (indices 5-6)
+      const row6 = allData[5] || [];
+      const row7 = allData[6] || [];
+
+      const headers: string[] = [];
+      const maxCols = Math.max(row6.length, row7.length);
+      
+      for (let i = 0; i < maxCols; i++) {
+        const row6Val = row6[i]?.toString().trim();
+        const row7Val = row7[i]?.toString().trim();
+        
+        if (i < 8) {
+          if (i === 0) headers.push(row6Val || 'Sl.No');
+          else if (i === 1) headers.push(row6Val || 'Student Number');
+          else if (i === 2) headers.push('Empty');
+          else if (i === 3) headers.push(row6Val || 'Student Name');
+          else if (i === 4) headers.push(row6Val || 'Program');
+          else if (i === 5) headers.push(row6Val || 'Registered Course');
+          else if (i === 6) headers.push(row6Val || 'Nationality');
+          else if (i === 7) headers.push(row6Val || 'School Status');
+        } else {
+          if (row6Val && row6Val.includes('/')) {
+            headers.push(`Week_${row6Val.replace(/\//g, '_')}`);
+          } else if (row6Val) {
+            headers.push(row6Val);
+          } else if (row7Val && /^\d+$/.test(row7Val)) {
+            headers.push(`Week_${row7Val}`);
+          } else {
+            headers.push(`Column_${i + 1}`);
+          }
+        }
+      }
+
+      const coreHeaders = headers.slice(0, 8);
+      const studentData = allData.slice(7).map((row: any) => {
+        const paddedRow = [...row];
+        while (paddedRow.length < headers.length) {
+          paddedRow.push('');
+        }
+        return paddedRow.slice(0, 8);
+      });
+
+      setParsedMetadata({
+        term,           // "2026_MAR_S1"
+        unitCode,       // "COS20031"
+        unitName,       // "Database Design Project"
+        classType,      // "LE1"
+        group,          // "01"
+        day,            // "Mon"
+        time,           // "10:00 - 12:00"
+        room,           // "B006"
+        lecturer        // "Jason Thomas Chew"
+      });
+
+      setUploadColumns(coreHeaders);
+      setUploadPreview(studentData);
+      setUploadFile(file);
+      setUploadStep(2);
+
+      // Auto-suggest mappings
+      const findColumn = (patterns: string[]) => {
+        return coreHeaders.find(h => patterns.some(p => h?.toLowerCase().includes(p.toLowerCase()))) || "";
+      };
+
+      setColumnMapping({
+        studentId: findColumn(["student number"]),
+        name: findColumn(["student name"]),
+        email: findColumn(["email", "e-mail", "mail"]) || "",
+        program: findColumn(["program"]) || ""
+      });
+
+    } catch (error) {
+      console.error('Error parsing Excel:', error);
+      alert('Error parsing Excel file. Please ensure it is a valid Swinburne attendance form.');
+    }
   };
+  reader.readAsBinaryString(file);
+};
 
   const handleDrag = useCallback((e: React.DragEvent, active: boolean) => {
     e.preventDefault();
@@ -229,36 +320,139 @@ export default function ClassesPage() {
   }, []);
 
   const confirmImport = () => {
-    if (!selectedClass || !columnMapping.studentId || !columnMapping.name) return;
-    
-    const newStudents: Student[] = uploadPreview.map((row, idx) => ({
-      id: Date.now().toString() + idx,
-      studentNumber: row[uploadColumns.indexOf(columnMapping.studentId)]?.toString() || "",
-      name: row[uploadColumns.indexOf(columnMapping.name)]?.toString() || "",
-      email: columnMapping.email ? row[uploadColumns.indexOf(columnMapping.email)]?.toString() || "" : "",
-      program: row[uploadColumns.findIndex(c => c?.toLowerCase().includes("program"))] || ""
-    })).filter(s => s.studentNumber && s.name);
+  if (!columnMapping.studentId || !columnMapping.name) {
+    alert('Please map at least Student ID and Name columns');
+    return;
+  }
 
-    setClasses(prev => prev.map(c => 
-      c.id === selectedClass.id 
-        ? { ...c, students: [...c.students, ...newStudents] }
-        : c
-    ));
-    
-    // Reset and close
-    setUploadFile(null);
-    setUploadPreview([]);
-    setUploadColumns([]);
-    setColumnMapping({ studentId: "", name: "", email: "" });
-    setUploadStep(1);
-    setViewMode("detail");
-    setSelectedClass(prev => prev ? { ...prev, students: [...prev.students, ...newStudents] } : null);
+  if (!uploadFile) return;
+
+  // Debug: Check what metadata we have
+  console.log('ConfirmImport - parsedMetadata:', parsedMetadata);
+  console.log('ConfirmImport - unitCode:', parsedMetadata.unitCode);
+  console.log('ConfirmImport - unitName:', parsedMetadata.unitName);
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = e.target?.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
+
+      // Re-parse the metadata here to ensure we have it
+      const row4 = allData[3] || [];
+      const row4Text = row4.join(' ');
+      const termMatch = row4Text.match(/Term\s*:\s*([^,\s]+)/i);
+      const term = termMatch ? termMatch[1].trim() : '';
+      const unitMatch = row4Text.match(/Unit\s*:\s*([^-]+)-\s*(.+)/i);
+      const unitCode = unitMatch ? unitMatch[1].trim() : '';
+      const unitName = unitMatch ? unitMatch[2].trim() : '';
+
+      const row5 = allData[4] || [];
+      const row5Text = row5.join(',');
+      const classDetails = row5Text.split(',').map((s: string) => s.trim());
+      const classType = classDetails[0] || '';
+      const group = classDetails[1] || '';
+      const day = classDetails[2] || '';
+      const time = classDetails[3] || '';
+      const room = classDetails[4] || '';
+      const lecturer = classDetails[5] || '';
+
+      // Use the re-parsed metadata or fall back to state
+      const finalMetadata = {
+        term: term || parsedMetadata.term,
+        unitCode: unitCode || parsedMetadata.unitCode,
+        unitName: unitName || parsedMetadata.unitName,
+        classType: classType || parsedMetadata.classType,
+        group: group || parsedMetadata.group,
+        day: day || parsedMetadata.day,
+        time: time || parsedMetadata.time,
+        room: room || parsedMetadata.room,
+        lecturer: lecturer || parsedMetadata.lecturer,
+      };
+
+      console.log('Final metadata for import:', finalMetadata);
+
+      // Rest of the student parsing logic...
+      const studentData = allData.slice(7);
+      const headers = uploadColumns;
+
+      const newStudents: Student[] = studentData
+        .filter((row: any) => row && row.length > 0 && row[0])
+        .map((row: any, idx: number) => {
+          const studentNumberCol = headers.indexOf(columnMapping.studentId);
+          const nameCol = headers.indexOf(columnMapping.name);
+          const programCol = columnMapping.program ? headers.indexOf(columnMapping.program) : -1;
+          const emailCol = columnMapping.email ? headers.indexOf(columnMapping.email) : -1;
+          const nationalityCol = headers.findIndex((h: string) => h.toLowerCase().includes('nationality'));
+          const schoolStatusCol = headers.findIndex((h: string) => h.toLowerCase().includes('school status'));
+
+          const studentNumber = row[studentNumberCol]?.toString().trim() || "";
+          const name = row[nameCol]?.toString().trim() || "";
+
+          if (!studentNumber || !name) return null;
+
+          return {
+            id: Date.now().toString() + idx,
+            studentNumber,
+            name,
+            email: emailCol >= 0 ? row[emailCol]?.toString().trim() || "" : "",
+            program: programCol >= 0 ? row[programCol]?.toString().trim() || "" : "",
+            nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || "" : "",
+            schoolStatus: schoolStatusCol >= 0 ? row[schoolStatusCol]?.toString().trim() || "" : ""
+          };
+        })
+        .filter((s: Student | null): s is Student => s !== null);
+
+      if (newStudents.length === 0) {
+        alert('No valid students found. Please check your column mappings.');
+        return;
+      }
+
+      // Create the class with the parsed metadata
+      const newClass: ClassData = {
+        id: Date.now().toString(),
+        classCode: finalMetadata.unitCode || "IMPORTED",
+        className: finalMetadata.unitName || "Imported Class",
+        day: finalMetadata.day || "TBA",
+        time: finalMetadata.time || "TBA",
+        location: finalMetadata.room || "TBA",
+        lecturer: finalMetadata.lecturer,
+        classType: finalMetadata.classType,
+        group: finalMetadata.group,
+        term: finalMetadata.term,
+        students: newStudents,
+        sessions: [],
+        createdAt: new Date().toISOString().split('T')[0]
+      };
+
+      console.log('Creating new class:', newClass);
+
+      setClasses(prev => [...prev, newClass]);
+
+      // Reset state
+      setUploadFile(null);
+      setUploadPreview([]);
+      setUploadColumns([]);
+      setColumnMapping({ studentId: "", name: "", email: "", program: "" });
+      setParsedMetadata({});
+      setUploadStep(1);
+      setViewMode("list");
+
+    } catch (error) {
+      console.error('Error importing:', error);
+      alert('Error importing students: ' + (error as Error).message);
+    }
   };
+  reader.readAsBinaryString(uploadFile);
+};
 
   const removeStudent = (studentId: string) => {
     if (!selectedClass) return;
-    setClasses(prev => prev.map(c => 
-      c.id === selectedClass.id 
+    setClasses(prev => prev.map(c =>
+      c.id === selectedClass.id
         ? { ...c, students: c.students.filter(s => s.id !== studentId) }
         : c
     ));
@@ -277,9 +471,9 @@ export default function ClassesPage() {
       lateCount: 0,
       sickCount: 0
     };
-    
-    setClasses(prev => prev.map(c => 
-      c.id === selectedClass.id 
+
+    setClasses(prev => prev.map(c =>
+      c.id === selectedClass.id
         ? { ...c, sessions: [...c.sessions, newSession] }
         : c
     ));
@@ -296,10 +490,8 @@ export default function ClassesPage() {
     }
   };
 
-  // Render Functions
   const renderListView = () => (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border shadow-sm">
           <div className="flex items-center justify-between mb-2">
@@ -331,7 +523,6 @@ export default function ClassesPage() {
         </div>
       </div>
 
-      {/* Action Bar */}
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border shadow-sm">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -361,27 +552,33 @@ export default function ClassesPage() {
         </div>
       </div>
 
-      {/* Classes Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredClasses.map((cls) => {
           const avgAttendance = cls.sessions.length > 0
             ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
             : 0;
-          
+
           return (
-            <div 
-              key={cls.id} 
+            <div
+              key={cls.id}
               className="group bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
             >
               <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
               <div className="p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">{cls.classCode}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">{cls.classCode}</p>
+                      {cls.classType && (
+                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                          {cls.classType}
+                        </span>
+                      )}
+                    </div>
                     <h3 className="font-bold text-gray-900 line-clamp-1">{cls.className}</h3>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
+                    <button
                       onClick={() => deleteClass(cls.id)}
                       className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     >
@@ -389,7 +586,7 @@ export default function ClassesPage() {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Clock className="w-4 h-4 text-gray-400" />
@@ -403,6 +600,12 @@ export default function ClassesPage() {
                     <Users className="w-4 h-4 text-gray-400" />
                     <span>{cls.students.length} Students</span>
                   </div>
+                  {cls.lecturer && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <GraduationCap className="w-4 h-4 text-gray-400" />
+                      <span>{cls.lecturer}</span>
+                    </div>
+                  )}
                 </div>
 
                 {cls.sessions.length > 0 && (
@@ -414,7 +617,7 @@ export default function ClassesPage() {
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                      <div 
+                      <div
                         className={`h-full rounded-full transition-all duration-500 ${avgAttendance >= 80 ? 'bg-green-500' : avgAttendance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
                         style={{ width: `${avgAttendance}%` }}
                       />
@@ -431,7 +634,7 @@ export default function ClassesPage() {
                     View
                   </button>
                   <button
-                    onClick={() => {/* Navigate to attendance page */}}
+                    onClick={() => {/* Navigate to attendance page */ }}
                     className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
                   >
                     <Play className="w-4 h-4" />
@@ -450,7 +653,7 @@ export default function ClassesPage() {
     <div className="max-w-2xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
       <div className="bg-white rounded-xl border shadow-sm">
         <div className="p-6 border-b">
-          <button 
+          <button
             onClick={() => setViewMode("list")}
             className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
           >
@@ -460,7 +663,7 @@ export default function ClassesPage() {
           <h2 className="text-xl font-bold text-gray-900">Create New Class</h2>
           <p className="text-sm text-gray-500 mt-1">Set up a new class for attendance tracking</p>
         </div>
-        
+
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -484,7 +687,7 @@ export default function ClassesPage() {
               />
             </div>
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Day</label>
@@ -509,7 +712,7 @@ export default function ClassesPage() {
               />
             </div>
           </div>
-          
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">Location (Optional)</label>
             <input
@@ -521,7 +724,7 @@ export default function ClassesPage() {
             />
           </div>
         </div>
-        
+
         <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
           <button
             onClick={() => setViewMode("list")}
@@ -542,15 +745,16 @@ export default function ClassesPage() {
   );
 
   const renderUploadView = () => (
-    <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
+    <div className="max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
       <div className="bg-white rounded-xl border shadow-sm">
         <div className="p-6 border-b">
-          <button 
+          <button
             onClick={() => {
               setViewMode("list");
               setUploadStep(1);
               setUploadFile(null);
               setUploadPreview([]);
+              setParsedMetadata({});
             }}
             className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
           >
@@ -574,7 +778,7 @@ export default function ClassesPage() {
 
         {uploadStep === 1 ? (
           <div className="p-8">
-            <div 
+            <div
               className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${isDragging ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
               onDragEnter={(e) => handleDrag(e, true)}
               onDragLeave={(e) => handleDrag(e, false)}
@@ -584,10 +788,12 @@ export default function ClassesPage() {
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FileSpreadsheet className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Student List</h3>
-              <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                Drag and drop your Excel file here, or click to browse. 
-                The file should contain student information with headers.
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Swinburne Attendance Form</h3>
+              <p className="text-sm text-gray-500 mb-2 max-w-md mx-auto">
+                Upload the official Swinburne attendance Excel file.
+              </p>
+              <p className="text-xs text-gray-400 mb-6 max-w-md mx-auto">
+                The system will automatically extract class information from rows 4-5 and student data from row 8 onwards.
               </p>
               <input
                 type="file"
@@ -596,7 +802,7 @@ export default function ClassesPage() {
                 className="hidden"
                 id="file-upload"
               />
-              <label 
+              <label
                 htmlFor="file-upload"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors cursor-pointer shadow-sm"
               >
@@ -608,12 +814,71 @@ export default function ClassesPage() {
           </div>
         ) : (
           <div className="p-6">
+            {Object.keys(parsedMetadata).length > 0 && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Detected Class Information
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  {parsedMetadata.unitCode && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Unit Code</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.unitCode}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.unitName && (
+                    <div className="col-span-2">
+                      <span className="text-blue-600 text-xs uppercase">Unit Name</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.unitName}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.classType && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Type</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.classType}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.group && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Group</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.group}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.day && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Day</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.day}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.time && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Time</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.time}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.room && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Room</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.room}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.lecturer && (
+                    <div className="col-span-2">
+                      <span className="text-blue-600 text-xs uppercase">Lecturer</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.lecturer}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Excel Columns</h3>
-              <p className="text-sm text-gray-500">Match your Excel columns to the required fields for student data.</p>
+              <p className="text-sm text-gray-500">Verify the column mappings for student data. The system has auto-detected based on the Swinburne format.</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
                   Student ID <span className="text-red-500">*</span>
@@ -631,7 +896,7 @@ export default function ClassesPage() {
                 {columnMapping.studentId && (
                   <div className="flex items-center gap-1 text-xs text-green-600">
                     <Check className="w-3 h-3" />
-                    <span>Mapped to {columnMapping.studentId}</span>
+                    <span>Mapped to "{columnMapping.studentId}"</span>
                   </div>
                 )}
               </div>
@@ -653,9 +918,23 @@ export default function ClassesPage() {
                 {columnMapping.name && (
                   <div className="flex items-center gap-1 text-xs text-green-600">
                     <Check className="w-3 h-3" />
-                    <span>Mapped to {columnMapping.name}</span>
+                    <span>Mapped to "{columnMapping.name}"</span>
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Program (Optional)</label>
+                <select
+                  value={columnMapping.program}
+                  onChange={(e) => setColumnMapping(prev => ({ ...prev, program: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                >
+                  <option value="">Select column...</option>
+                  {uploadColumns.map((col, idx) => (
+                    <option key={idx} value={col}>{col}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -674,12 +953,12 @@ export default function ClassesPage() {
             </div>
 
             <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Data Preview (First 5 rows)</h4>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Student Data Preview (First 5 rows)</h4>
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      {uploadColumns.map((col, idx) => (
+                      {uploadColumns.slice(0, 8).map((col, idx) => (
                         <th key={idx} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                           {col}
                         </th>
@@ -689,7 +968,7 @@ export default function ClassesPage() {
                   <tbody className="divide-y divide-gray-100">
                     {uploadPreview.map((row, idx) => (
                       <tr key={idx} className="hover:bg-gray-50">
-                        {uploadColumns.map((_, colIdx) => (
+                        {uploadColumns.slice(0, 8).map((_, colIdx) => (
                           <td key={colIdx} className="px-4 py-2 text-gray-600 whitespace-nowrap">
                             {row[colIdx]?.toString() || "-"}
                           </td>
@@ -709,35 +988,7 @@ export default function ClassesPage() {
                 Back
               </button>
               <button
-                onClick={() => {
-                  // For demo, we'll just create a new class with the students
-                  if (columnMapping.studentId && columnMapping.name) {
-                    const newStudents: Student[] = uploadPreview.map((row, idx) => ({
-                      id: Date.now().toString() + idx,
-                      studentNumber: row[uploadColumns.indexOf(columnMapping.studentId)]?.toString() || "",
-                      name: row[uploadColumns.indexOf(columnMapping.name)]?.toString() || "",
-                      email: columnMapping.email ? row[uploadColumns.indexOf(columnMapping.email)]?.toString() || "" : ""
-                    })).filter(s => s.studentNumber && s.name);
-                    
-                    const newClass: ClassData = {
-                      id: Date.now().toString(),
-                      classCode: "IMPORTED",
-                      className: "Imported Class",
-                      day: "TBA",
-                      time: "TBA",
-                      location: "TBA",
-                      students: newStudents,
-                      sessions: [],
-                      createdAt: new Date().toISOString().split('T')[0]
-                    };
-                    
-                    setClasses(prev => [...prev, newClass]);
-                    setUploadStep(1);
-                    setUploadFile(null);
-                    setUploadPreview([]);
-                    setViewMode("list");
-                  }
-                }}
+                onClick={confirmImport}
                 disabled={!columnMapping.studentId || !columnMapping.name}
                 className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-2"
               >
@@ -753,11 +1004,11 @@ export default function ClassesPage() {
 
   const renderDetailView = () => {
     if (!selectedClass) return null;
-    
+
     const avgAttendance = selectedClass.sessions.length > 0
       ? Math.round(selectedClass.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / selectedClass.sessions.length)
       : 0;
-    
+
     const atRiskCount = selectedClass.students.filter(s => {
       const studentAvg = selectedClass.sessions.length > 0 ? avgAttendance : 100;
       return studentAvg < 80;
@@ -765,28 +1016,32 @@ export default function ClassesPage() {
 
     return (
       <div className="animate-in slide-in-from-right-4 duration-300">
-        {/* Header */}
         <div className="bg-white rounded-xl border shadow-sm mb-6 overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
           <div className="p-6">
-            <button 
+            <button
               onClick={() => setViewMode("list")}
               className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
             >
               <ChevronLeft className="w-4 h-4" />
               Back to Classes
             </button>
-            
+
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <span className="px-2.5 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
                     {selectedClass.classCode}
                   </span>
+                  {selectedClass.classType && (
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
+                      {selectedClass.classType} • Group {selectedClass.group}
+                    </span>
+                  )}
                   <span className="text-sm text-gray-500">{selectedClass.createdAt}</span>
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900">{selectedClass.className}</h1>
-                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 flex-wrap">
                   <span className="flex items-center gap-1.5">
                     <Clock className="w-4 h-4" />
                     {selectedClass.day}, {selectedClass.time}
@@ -799,9 +1054,15 @@ export default function ClassesPage() {
                     <Users className="w-4 h-4" />
                     {selectedClass.students.length} Students
                   </span>
+                  {selectedClass.lecturer && (
+                    <span className="flex items-center gap-1.5">
+                      <GraduationCap className="w-4 h-4" />
+                      {selectedClass.lecturer}
+                    </span>
+                  )}
                 </div>
               </div>
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setViewMode("upload")}
@@ -811,7 +1072,7 @@ export default function ClassesPage() {
                   Upload Students
                 </button>
                 <button
-                  onClick={() => {/* Navigate to attendance */}}
+                  onClick={() => {/* Navigate to attendance */ }}
                   className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm"
                 >
                   <Play className="w-4 h-4" />
@@ -820,8 +1081,7 @@ export default function ClassesPage() {
               </div>
             </div>
           </div>
-          
-          {/* Tabs */}
+
           <div className="flex border-t">
             {[
               { id: "students", label: "Students", icon: Users, count: selectedClass.students.length },
@@ -848,7 +1108,6 @@ export default function ClassesPage() {
           </div>
         </div>
 
-        {/* Tab Content */}
         <div className="bg-white rounded-xl border shadow-sm min-h-[400px]">
           {activeTab === "students" && (
             <div className="p-6">
@@ -859,7 +1118,7 @@ export default function ClassesPage() {
                   Add Student
                 </button>
               </div>
-              
+
               {selectedClass.students.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -869,6 +1128,7 @@ export default function ClassesPage() {
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Email</th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">Program</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Nationality</th>
                         <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
                       </tr>
                     </thead>
@@ -879,12 +1139,13 @@ export default function ClassesPage() {
                           <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
                           <td className="px-4 py-3 text-gray-600">{student.email || "-"}</td>
                           <td className="px-4 py-3 text-gray-600 text-sm">{student.program || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600 text-sm">{student.nationality || "-"}</td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded">
                                 <Edit2 className="w-4 h-4" />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => removeStudent(student.id)}
                                 className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                               >
@@ -903,7 +1164,7 @@ export default function ClassesPage() {
                     <Users className="w-8 h-8 text-gray-400" />
                   </div>
                   <h4 className="text-gray-900 font-medium mb-1">No students yet</h4>
-                  <p className="text-sm text-gray-500 mb-4">Upload a student list to get started</p>
+                  <p className="text-sm text-gray-500 mb-4">Upload a Swinburne attendance form to import students</p>
                   <button
                     onClick={() => setViewMode("upload")}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
@@ -920,7 +1181,7 @@ export default function ClassesPage() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-900">Attendance Sessions</h3>
-                <button 
+                <button
                   onClick={createSession}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
@@ -928,7 +1189,7 @@ export default function ClassesPage() {
                   Create Session
                 </button>
               </div>
-              
+
               {selectedClass.sessions.length > 0 ? (
                 <div className="space-y-3">
                   {selectedClass.sessions.map((session) => (
@@ -951,7 +1212,7 @@ export default function ClassesPage() {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <div className="flex items-center gap-2 mb-1">
@@ -960,11 +1221,10 @@ export default function ClassesPage() {
                             </span>
                             <span className="text-xs text-gray-500">attendance</span>
                           </div>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            session.status === 'Completed' ? 'bg-green-100 text-green-700' : 
-                            session.status === 'Ongoing' ? 'bg-amber-100 text-amber-700' : 
-                            'bg-gray-100 text-gray-700'
-                          }`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${session.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                            session.status === 'Ongoing' ? 'bg-amber-100 text-amber-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
                             {session.status}
                           </span>
                         </div>
@@ -1005,7 +1265,7 @@ export default function ClassesPage() {
                   <p className="text-3xl font-bold text-blue-900">{avgAttendance}%</p>
                   <p className="text-xs text-blue-700 mt-1">Across all sessions</p>
                 </div>
-                
+
                 <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl border border-red-200">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-red-900">At Risk Students</span>
@@ -1014,7 +1274,7 @@ export default function ClassesPage() {
                   <p className="text-3xl font-bold text-red-900">{atRiskCount}</p>
                   <p className="text-xs text-red-700 mt-1">Below 80% attendance</p>
                 </div>
-                
+
                 <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-green-900">Total Sessions</span>
@@ -1031,7 +1291,7 @@ export default function ClassesPage() {
                   <div className="h-64 flex items-end justify-between gap-2">
                     {selectedClass.sessions.map((session, idx) => (
                       <div key={session.id} className="flex-1 flex flex-col items-center gap-2">
-                        <div 
+                        <div
                           className={`w-full rounded-t-lg transition-all duration-500 ${session.attendancePercentage >= 80 ? 'bg-green-500' : session.attendancePercentage >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
                           style={{ height: `${session.attendancePercentage * 2}px` }}
                         />
