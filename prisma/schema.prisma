@@ -196,11 +196,12 @@ model CourseEnrollment {
 
 // Active Attendance Sessions (QR Code based)
 model AttendanceSession {
-  id              String    @id @default(cuid())
+  id              String      @id @default(cuid())
   courseId        String
-  classSessionId  String?   // Link to specific class session
+  classSessionId  String?     // Link to specific class session
   lecturerId      String
-  qrCode          String    @unique
+  sessionType     SessionType
+  qrCode          String      @unique
   startTime       DateTime
   endTime         DateTime
   isActive        Boolean   @default(true)

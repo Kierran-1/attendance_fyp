@@ -88,6 +88,7 @@ export async function POST() {
     data: {
       courseId,
       lecturerId,
+      sessionType: 'LECTURE',
       qrCode: `DEV-${crypto.randomUUID()}`,
       startTime: now,
       endTime,
