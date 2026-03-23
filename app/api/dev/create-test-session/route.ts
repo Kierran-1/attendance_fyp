@@ -57,7 +57,8 @@ export async function POST() {
       create: {
         code: 'DEV0001',
         name: 'Dev Test Course',
-        lecturerId: devLecturerProfile.id,
+        lecturer: { connect: { id: devLecturerProfile.id } },
+        classType: 'LECTURE',
         semester: 'Dev',
         year: new Date().getFullYear(),
         capacity: 999,

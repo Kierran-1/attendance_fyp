@@ -79,6 +79,7 @@ model StudentProfile {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   courseEnrollments CourseEnrollment[]
+  attendanceMarks   AttendanceMark[]
 
   @@index([studentId])
 }
@@ -93,7 +94,7 @@ model LecturerProfile {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   courses Course[]
-  sessions AttendanceSession[]
+  attendanceSessions AttendanceSession[]
 }
 
 // Course Management
@@ -106,17 +107,80 @@ model Course {
   semester     String
   year         Int
   capacity     Int
+  classGroup   String?   // For different class groups (LA1, LA2, etc.)
+  classType    ClassType // LECTURE, TUTORIAL, LAB, PRACTICAL
+  scheduleDay  String?   // Mon, Tue, Wed, etc.
+  scheduleTime String?   // 13:00-15:00
+  venue        String?   // G603, B006, etc.
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   lecturer         LecturerProfile @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
   enrollments      CourseEnrollment[]
   attendanceSessions AttendanceSession[]
+  classSessions    ClassSession[]
 
   @@index([lecturerId])
   @@index([code])
 }
 
+// Class Sessions - Weekly classes (like LA1, LA2, etc.)
+model ClassSession {
+  id          String    @id @default(cuid())
+  courseId    String
+  sessionType SessionType // LECTURE, TUTORIAL, LAB, PRACTICAL
+  groupNumber String?    // 01, 02, etc.
+  dayOfWeek   String     // Mon, Tue, Wed, Thu, Fri
+  startTime   String     // 10:00
+  endTime     String     // 12:00
+  venue       String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  course           Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  weeklyAttendance WeeklyAttendance[]
+  attendanceSessions AttendanceSession[]
+
+  @@unique([courseId, sessionType, groupNumber])
+  @@index([courseId])
+}
+
+// Weekly Attendance Records - For tracking attendance per date
+model WeeklyAttendance {
+  id               String   @id @default(cuid())
+  classSessionId   String
+  attendanceDate   DateTime // The actual date of the class (e.g., 2026-03-03)
+  weekNumber       Int      // Week number in semester
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  classSession     ClassSession      @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  attendanceMarks  AttendanceMark[]
+
+  @@unique([classSessionId, attendanceDate])
+  @@index([classSessionId])
+  @@index([attendanceDate])
+}
+
+// Individual Student Attendance Marks
+model AttendanceMark {
+  id               String   @id @default(cuid())
+  studentId        String
+  weeklyAttendanceId String
+  status           AttendanceStatus @default(ABSENT) // PRESENT, ABSENT, LATE, EXCUSED
+  remarks          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  student          StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  weeklyAttendance WeeklyAttendance  @relation(fields: [weeklyAttendanceId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, weeklyAttendanceId])
+  @@index([weeklyAttendanceId])
+  @@index([studentId])
+}
+
+// Course Enrollment
 model CourseEnrollment {
   id        String    @id @default(cuid())
   studentId String
@@ -130,13 +194,14 @@ model CourseEnrollment {
   @@index([courseId])
 }
 
-// Attendance Sessions
+// Active Attendance Sessions (QR Code based)
 model AttendanceSession {
-  id              String    @id @default(cuid())
+  id              String      @id @default(cuid())
   courseId        String
+  classSessionId  String?     // Link to specific class session
   lecturerId      String
   sessionType     SessionType
-  qrCode          String    @unique
+  qrCode          String      @unique
   startTime       DateTime
   endTime         DateTime
   isActive        Boolean   @default(true)
@@ -144,6 +209,7 @@ model AttendanceSession {
   updatedAt       DateTime  @updatedAt
 
   course          Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  classSession    ClassSession?   @relation(fields: [classSessionId], references: [id])
   lecturer        LecturerProfile @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
   attendanceRecords AttendanceRecord[]
 
@@ -151,7 +217,7 @@ model AttendanceSession {
   @@index([lecturerId])
 }
 
-// Attendance Records
+// Real-time Attendance Records (for QR/Facial recognition)
 model AttendanceRecord {
   id           String    @id @default(cuid())
   userId       String
@@ -176,6 +242,13 @@ model AttendanceRecord {
 enum UserRole {
   STUDENT
   LECTURER
+}
+
+enum ClassType {
+  LECTURE
+  TUTORIAL
+  LAB
+  PRACTICAL
 }
 
 enum SessionType {
