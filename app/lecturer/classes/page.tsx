@@ -1,514 +1,1326 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
-import { useState, useCallback } from "react"
-import * as XLSX from "xlsx"
+import { useState, useCallback, useMemo } from "react";
+import * as XLSX from "xlsx";
+import {
+  Plus,
+  Upload,
+  Search,
+  Eye,
+  Play,
+  Edit2,
+  X,
+  ChevronLeft,
+  Users,
+  Calendar,
+  MapPin,
+  Clock,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet,
+  ArrowRight,
+  Check,
+  TrendingDown,
+  TrendingUp,
+  BarChart3,
+  GraduationCap
+} from "lucide-react";
 
-
-
+// Types
 interface Student {
-  id: string
-  name: string
-  attendance: number
-  status: "Present" | "Absent" | "Late" | "Sick Leave"
+  id: string;
+  studentNumber: string;
+  name: string;
+
+  program?: string;
+  nationality?: string;
+  schoolStatus?: string;
+}
+
+interface Session {
+  id: string;
+  date: string;
+  attendancePercentage: number;
+  status: "Completed" | "Ongoing" | "Scheduled";
+  presentCount: number;
+  absentCount: number;
+  lateCount: number;
+  sickCount: number;
 }
 
 interface ClassData {
-  id: string
-  unitCode: string
-  unitName: string
-  semester: string
-  term: string
-  day: string
-  time: string
-  room: string
-  students: Student[]
-  totalClasses: number
+  id: string;
+  unitCode: string;
+  unitName: string;
+  day: string;
+  time: string;
+  location: string;
+  lecturer?: string;
+  classType?: string;
+  group?: string;
+  term?: string;
+  students: Student[];
+  sessions: Session[];
+  createdAt: string;
 }
 
-export default function LecturerClasses() {
-  const [classes, setClasses] = useState<ClassData[]>([
-    {
-      id: "1",
-      unitCode: "COS40005",
-      unitName: "Final Year Project",
-      semester: "2025-2026",
-      term: "Semester 2",
-      day: "Monday",
-      time: "9:00 AM - 11:00 AM",
-      room: "B201",
-      totalClasses: 12,
-      students: [
-        { id: "102345", name: "Ahmad Hakim", attendance: 92, status: "Present" },
-        { id: "102346", name: "Priya Nair", attendance: 55, status: "Absent" },
-        { id: "102347", name: "Lee Wei Jian", attendance: 88, status: "Present" },
-        { id: "102348", name: "Siti Rahmah", attendance: 70, status: "Late" },
-      ]
-    },
-    {
-      id: "2",
-      unitCode: "COS20019",
-      unitName: "Web Technology",
-      semester: "2025-2026",
-      term: "Semester 2",
-      day: "Tuesday",
-      time: "11:00 AM - 1:00 PM",
-      room: "A104",
-      totalClasses: 12,
-      students: [
-        { id: "102349", name: "John Doe", attendance: 85, status: "Present" },
-        { id: "102350", name: "Jane Smith", attendance: 48, status: "Absent" },
-      ]
-    }
-  ])
+type ViewMode = "list" | "create" | "upload" | "detail";
 
-  const [selectedClass, setSelectedClass] = useState<ClassData | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [dragActive, setDragActive] = useState(false)
-
-  // Calculate stats
-  const totalStudents = classes.reduce((acc, c) => acc + c.students.length, 0)
-  const classesToday = classes.filter(c => c.day === "Monday").length // Assuming today is Monday
-  const atRiskStudents = classes.reduce((acc, c) =>
-    acc + c.students.filter(s => s.attendance < 80).length, 0
-  )
-  const overallAttendance = classes.length > 0
-    ? Math.round(classes.reduce((acc, c) =>
-      acc + c.students.reduce((sAcc, s) => sAcc + s.attendance, 0) / c.students.length, 0
-    ) / classes.length)
-    : 0
-
-  const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true)
-    } else if (e.type === "dragleave") {
-      setDragActive(false)
-    }
-  }, [])
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragActive(false)
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0])
-    }
-  }, [])
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      handleFile(e.target.files[0])
-    }
+const INITIAL_CLASSES: ClassData[] = [
+  {
+    id: "1",
+    unitCode: "COS40005",
+    unitName: "Final Year Project",
+    day: "Monday",
+    time: "09:00 - 11:00",
+    location: "B201",
+    createdAt: "2026-03-01",
+    students: [
+      { id: "1", studentNumber: "102345678", name: "Ahmad Hakim", program: "Bachelor of Computer Science" },
+      { id: "2", studentNumber: "102345679", name: "Priya Nair", program: "Bachelor of Computer Science" },
+      { id: "3", studentNumber: "102345680", name: "Lee Wei Jian", program: "Bachelor of Data Science" },
+    ],
+    sessions: [
+      { id: "s1", date: "2026-03-10", attendancePercentage: 85, status: "Completed", presentCount: 3, absentCount: 0, lateCount: 0, sickCount: 0 },
+      { id: "s2", date: "2026-03-17", attendancePercentage: 67, status: "Completed", presentCount: 2, absentCount: 1, lateCount: 0, sickCount: 0 },
+    ]
+  },
+  {
+    id: "2",
+    unitCode: "COS20031",
+    unitName: "Database Design Project",
+    day: "Tuesday",
+    time: "13:00 - 15:00",
+    location: "G603",
+    createdAt: "2026-03-01",
+    students: [],
+    sessions: []
   }
+];
 
-  const handleFile = (file: File) => {
+export default function ClassesPage() {
+  const [classes, setClasses] = useState<ClassData[]>(INITIAL_CLASSES);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
+  const [activeTab, setActiveTab] = useState<"students" | "sessions" | "summary">("students");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [createForm, setCreateForm] = useState({
+    unitCode: "",
+    unitName: "",
+    day: "Monday",
+    time: "",
+    location: ""
+  });
+
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<any[]>([]);
+  const [uploadColumns, setUploadColumns] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState({
+    studentId: "",
+    name: "",
+    program: ""
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadStep, setUploadStep] = useState<1 | 2>(1);
+
+  const [parsedMetadata, setParsedMetadata] = useState<{
+    term?: string;
+    unitCode?: string;
+    unitName?: string;
+    classType?: string;
+    group?: string;
+    day?: string;
+    time?: string;
+    room?: string;
+    lecturer?: string;
+  }>({});
+
+  const filteredClasses = useMemo(() => {
+    return classes.filter(c =>
+      c.unitCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.unitName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [classes, searchQuery]);
+
+  const stats = useMemo(() => {
+    const totalStudents = classes.reduce((acc, c) => acc + c.students.length, 0);
+    const totalSessions = classes.reduce((acc, c) => acc + c.sessions.length, 0);
+    const atRiskStudents = classes.reduce((acc, c) => {
+      const avgAttendance = c.sessions.length > 0
+        ? c.sessions.reduce((s, sess) => s + sess.attendancePercentage, 0) / c.sessions.length
+        : 100;
+      return acc + (avgAttendance < 80 ? c.students.length : 0);
+    }, 0);
+
+    return { totalStudents, totalSessions, atRiskStudents, classCount: classes.length };
+  }, [classes]);
+
+  const handleCreateClass = () => {
+    if (!createForm.unitCode || !createForm.unitName) return;
+
+    const newClass: ClassData = {
+      id: Date.now().toString(),
+      unitCode: createForm.unitCode,
+      unitName: createForm.unitName,
+      day: createForm.day,
+      time: createForm.time || "TBA",
+      location: createForm.location || "TBA",
+      students: [],
+      sessions: [],
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+
+    setClasses(prev => [...prev, newClass]);
+    setCreateForm({ unitCode: "", unitName: "", day: "Monday", time: "", location: "" });
+    setViewMode("list");
+  };
+
+  const handleFileUpload = (file: File) => {
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      alert('Please upload an Excel file only (.xlsx or .xls)')
-      return
+      alert('Please upload an Excel file (.xlsx or .xls)');
+      return;
     }
 
-    setIsUploading(true)
-
-    const reader = new FileReader()
+    const reader = new FileReader();
     reader.onload = (e) => {
       try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
 
-        const data = e.target?.result
-        const workbook = XLSX.read(data, { type: 'binary' })
-        const sheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[sheetName]
+        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
 
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[]
-
-        const studentMap: Record<string, {
-          name: string
-          present: number
-          total: number
-        }> = {}
-
-        jsonData.forEach((row: any) => {
-          const id = row["StudentNumber"]
-          const name = row["StudentName"]
-          const status = String(row["Status"] || "").toUpperCase()
-
-          if (!id || !name) return
-
-          if (!studentMap[id]) {
-            studentMap[id] = {
-              name,
-              present: 0,
-              total: 0
-            }
-          }
-
-          studentMap[id].total++
-
-          if (status === "PRESENT" || status === "P") {
-            studentMap[id].present++
-          }
-        })
-
-        const students: Student[] = Object.entries(studentMap).map(([id, data]) => {
-          const attendance = data.total > 0
-            ? Math.round((data.present / data.total) * 100)
-            : 0
-
-          let status: Student["status"] = "Absent"
-          if (attendance >= 80) status = "Present"
-          else if (attendance >= 60) status = "Late"
-
-          return {
-            id,
-            name: data.name,
-            attendance,
-            status
-          }
-        })
-
-        const firstRow = jsonData[0]
-
-        const newClass: ClassData = {
-          id: Date.now().toString(),
-          unitCode: firstRow["CourseCode"] || "UNKNOWN",
-          unitName: firstRow["ProgramName"] || "Imported Class",
-          semester: firstRow["TermCode"] || "",
-          term: firstRow["TermCode"] || "",
-          day: "TBA",
-          time: "TBA",
-          room: "TBA",
-          totalClasses: jsonData.length,
-          students
+        if (allData.length < 8) {
+          alert('File does not contain enough rows. Expected Swinburne attendance format.');
+          return;
         }
 
-        setClasses(prev => [...prev, newClass])
-        setIsUploading(false)
+        // Extract term from Row 4 (index 3)
+
+        const row4 = allData[2] || [];
+        const row4Text = row4.join(' ');
+
+        // Extract term
+        const termMatch = row4Text.match(/Term\s*:\s*([^,]+)/i);
+        const term = termMatch ? termMatch[1].trim() : "";
+
+        let unitCode = "";
+        let unitName = "";
+
+        if (row4Text.includes("Unit")) {
+          const unitPart = row4Text.split("Unit")[1]; // get everything after "Unit"
+
+          if (unitPart) {
+            const cleaned = unitPart.replace(":", "").trim(); // remove colon
+            const parts = cleaned.split("-");
+
+            unitCode = parts[0]?.trim() || "";
+            unitName = parts.slice(1).join("-").trim() || "";
+          }
+        }
+        // Row 5
+        const row5 = allData[3] || [];
+        const row5Text = row5.join(',');
+
+        const classDetails = row5Text
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0);
+
+        const classType = classDetails[0] || "";
+        const group = classDetails[1] || "";
+        const day = classDetails[2] || "";
+        const time = classDetails[3] || "";
+        const room = classDetails[4] || "";
+        const lecturer = classDetails[5] || "";
+
+        // Handle merged headers in rows 6-7 (indices 5-6)
+        const row6 = allData[4] || [];
+        const row7 = allData[5] || [];
+
+        const headers: string[] = [];
+        const maxCols = Math.max(row6.length, row7.length);
+
+        for (let i = 0; i < maxCols; i++) {
+          const row6Val = row6[i]?.toString().trim();
+          const row7Val = row7[i]?.toString().trim();
+
+          if (i < 8) {
+            if (i === 0) headers.push(row6Val || 'Sl.No');
+            else if (i === 1) headers.push(row6Val || 'Student Number');
+            else if (i === 2) headers.push('Empty');
+            else if (i === 3) headers.push(row6Val || 'Student Name');
+            else if (i === 4) headers.push(row6Val || 'Program');
+            else if (i === 5) headers.push(row6Val || 'Registered Course');
+            else if (i === 6) headers.push(row6Val || 'Nationality');
+            else if (i === 7) headers.push(row6Val || 'School Status');
+          } else {
+            if (row6Val && row6Val.includes('/')) {
+              headers.push(`Week_${row6Val.replace(/\//g, '_')}`);
+            } else if (row6Val) {
+              headers.push(row6Val);
+            } else if (row7Val && /^\d+$/.test(row7Val)) {
+              headers.push(`Week_${row7Val}`);
+            } else {
+              headers.push(`Column_${i + 1}`);
+            }
+          }
+        }
+
+        const coreHeaders = headers.slice(0, 8);
+        const studentData = allData.slice(6).map((row: any) => {
+          const paddedRow = [...row];
+          while (paddedRow.length < headers.length) {
+            paddedRow.push('');
+          }
+          return paddedRow.slice(0, 8);
+        });
+
+        setParsedMetadata({
+          term,           // "2026_MAR_S1"
+          unitCode,       // "COS20031"
+          unitName,       // "Database Design Project"
+          classType,      // "LE1"
+          group,          // "01"
+          day,            // "Mon"
+          time,           // "10:00 - 12:00"
+          room,           // "B006"
+          lecturer        // "Jason Thomas Chew"
+        });
+
+        setUploadColumns(coreHeaders);
+        setUploadPreview(studentData);
+        setUploadFile(file);
+        setUploadStep(2);
+
+        // Auto-suggest mappings
+        const findColumn = (patterns: string[]) => {
+          return coreHeaders.find(h => patterns.some(p => h?.toLowerCase().includes(p.toLowerCase()))) || "";
+        };
+
+        setColumnMapping({
+          studentId: findColumn(["student number"]),
+          name: findColumn(["student name"]),
+          program: findColumn(["program"]) || ""
+        });
 
       } catch (error) {
-        console.error('Error parsing Excel:', error)
-        alert('Error parsing Excel file. Please check the format.')
-        setIsUploading(false)
+        console.error('Error parsing Excel:', error);
+        alert('Error parsing Excel file. Please ensure it is a valid Swinburne attendance form.');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleDrag = useCallback((e: React.DragEvent, active: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(active);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files?.[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  }, []);
+
+  const confirmImport = () => {
+    if (!columnMapping.studentId || !columnMapping.name) {
+      alert('Please map at least Student ID and Name columns');
+      return;
+    }
+
+    if (!uploadFile) return;
+
+    // Debug: Check what metadata we have
+    console.log('ConfirmImport - parsedMetadata:', parsedMetadata);
+    console.log('ConfirmImport - unitCode:', parsedMetadata.unitCode);
+    console.log('ConfirmImport - unitName:', parsedMetadata.unitName);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
+
+        // Re-parse the metadata here to ensure we have it
+        // FIXED HERE SOMEHOW
+        const row4 = allData[2]; // ✅ Term + Unit
+        const row4Text = row4.join(' ');
+        const termMatch = row4Text.match(/Term\s*:\s*([^,\s]+)/i);
+        const term = termMatch ? termMatch[1].trim() : '';
+        const unitMatch = row4Text.match(/Unit\s*:\s*([^-]+)-\s*(.+)/i);
+        const unitCode = unitMatch ? unitMatch[1].trim() : '';
+        const unitName = unitMatch ? unitMatch[2].trim() : '';
+
+        const row5 = allData[3] || [];
+        const row5Text = row5.join(',');
+        const classDetails = row5Text.split(',').map((s: string) => s.trim());
+        const classType = classDetails[0] || '';
+        const group = classDetails[1] || '';
+        const day = classDetails[2] || '';
+        const time = classDetails[3] || '';
+        const room = classDetails[4] || '';
+        const lecturer = classDetails[5] || '';
+
+        // Use the re-parsed metadata or fall back to state
+        const finalMetadata = {
+          term: term || parsedMetadata.term,
+          unitCode: unitCode || parsedMetadata.unitCode,
+          unitName: unitName || parsedMetadata.unitName,
+          classType: classType || parsedMetadata.classType,
+          group: group || parsedMetadata.group,
+          day: day || parsedMetadata.day,
+          time: time || parsedMetadata.time,
+          room: room || parsedMetadata.room,
+          lecturer: lecturer || parsedMetadata.lecturer,
+        };
+
+        console.log('Final metadata for import:', finalMetadata);
+
+        // Rest of the student parsing logic...
+        const studentData = allData.slice(6);
+        const headers = uploadColumns;
+
+        const newStudents: Student[] = studentData
+          .filter((row: any) => row && row.length > 0 && row[0])
+          .map((row: any, idx: number) => {
+            const studentNumberCol = headers.indexOf(columnMapping.studentId);
+            const nameCol = headers.indexOf(columnMapping.name);
+            const programCol = columnMapping.program ? headers.indexOf(columnMapping.program) : -1;
+            const nationalityCol = headers.findIndex((h: string) => h.toLowerCase().includes('nationality'));
+            const schoolStatusCol = headers.findIndex((h: string) => h.toLowerCase().includes('school status'));
+
+            const studentNumber = row[studentNumberCol]?.toString().trim() || "";
+            const name = row[nameCol]?.toString().trim() || "";
+
+            if (!studentNumber || !name) return null;
+
+            return {
+              id: Date.now().toString() + idx,
+              studentNumber,
+              name,
+              program: programCol >= 0 ? row[programCol]?.toString().trim() || "" : "",
+              nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || "" : "",
+              schoolStatus: schoolStatusCol >= 0 ? row[schoolStatusCol]?.toString().trim() || "" : ""
+            };
+          })
+          .filter((s: Student | null): s is Student => s !== null);
+
+        if (newStudents.length === 0) {
+          alert('No valid students found. Please check your column mappings.');
+          return;
+        }
+
+        console.log("ROW 4 TEXT:", row4Text);
+        console.log("ROW 5 TEXT:", row5Text);
+        console.log("UNIT MATCH:", unitMatch);
+        console.log("FINAL METADATA:", finalMetadata);
+
+        // Create the class with the parsed metadata
+        const newClass: ClassData = {
+          id: Date.now().toString(),
+          unitCode: finalMetadata.unitCode || "IMPORTED",
+          unitName: finalMetadata.unitName || "Imported Class",
+          day: finalMetadata.day || "TBA",
+          time: finalMetadata.time || "TBA",
+          location: finalMetadata.room || "TBA",
+          lecturer: finalMetadata.lecturer,
+          classType: finalMetadata.classType,
+          group: finalMetadata.group,
+          term: finalMetadata.term,
+          students: newStudents,
+          sessions: [],
+          createdAt: new Date().toISOString().split('T')[0]
+        };
+
+        console.log('Creating new class:', newClass);
+
+        setClasses(prev => [...prev, newClass]);
+
+        // Reset state
+        setUploadFile(null);
+        setUploadPreview([]);
+        setUploadColumns([]);
+        setColumnMapping({ studentId: "", name: "", program: "" });
+        setParsedMetadata({});
+        setUploadStep(1);
+        setViewMode("list");
+
+      } catch (error) {
+        console.error('Error importing:', error);
+        alert('Error importing students: ' + (error as Error).message);
+      }
+    };
+    reader.readAsBinaryString(uploadFile);
+  };
+
+  const removeStudent = (studentId: string) => {
+    if (!selectedClass) return;
+    setClasses(prev => prev.map(c =>
+      c.id === selectedClass.id
+        ? { ...c, students: c.students.filter(s => s.id !== studentId) }
+        : c
+    ));
+    setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
+  };
+
+  const createSession = () => {
+    if (!selectedClass) return;
+    const newSession: Session = {
+      id: Date.now().toString(),
+      date: new Date().toISOString().split('T')[0],
+      attendancePercentage: 0,
+      status: "Scheduled",
+      presentCount: 0,
+      absentCount: selectedClass.students.length,
+      lateCount: 0,
+      sickCount: 0
+    };
+
+    setClasses(prev => prev.map(c =>
+      c.id === selectedClass.id
+        ? { ...c, sessions: [...c.sessions, newSession] }
+        : c
+    ));
+    setSelectedClass(prev => prev ? { ...prev, sessions: [...prev.sessions, newSession] } : null);
+  };
+
+  const deleteClass = (classId: string) => {
+    if (confirm("Are you sure you want to delete this class?")) {
+      setClasses(prev => prev.filter(c => c.id !== classId));
+      if (selectedClass?.id === classId) {
+        setSelectedClass(null);
+        setViewMode("list");
       }
     }
-    reader.readAsBinaryString(file)
-  }
+  };
 
-  const { data: session } = useSession();
+  const renderListView = () => (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500 uppercase tracking-wide">Total Classes</span>
+            <span className="p-2 bg-blue-50 rounded-lg"><BarChart3 className="w-4 h-4 text-blue-600" /></span>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{stats.classCount}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500 uppercase tracking-wide">Total Students</span>
+            <span className="p-2 bg-green-50 rounded-lg"><Users className="w-4 h-4 text-green-600" /></span>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{stats.totalStudents}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500 uppercase tracking-wide">Sessions Held</span>
+            <span className="p-2 bg-purple-50 rounded-lg"><Calendar className="w-4 h-4 text-purple-600" /></span>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{stats.totalSessions}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500 uppercase tracking-wide">At Risk</span>
+            <span className="p-2 bg-red-50 rounded-lg"><AlertCircle className="w-4 h-4 text-red-600" /></span>
+          </div>
+          <p className="text-2xl font-bold text-red-600">{stats.atRiskStudents}</p>
+        </div>
+      </div>
 
-  const [currentPage, setCurrentPage] = useState(1)
-  const studentsPerPage = 10
+      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border shadow-sm">
+        <div className="relative w-full sm:w-96">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search classes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
+          />
+        </div>
+        <div className="flex gap-3 w-full sm:w-auto">
+          <button
+            onClick={() => setViewMode("upload")}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+          >
+            <Upload className="w-4 h-4" />
+            Upload Excel
+          </button>
+          <button
+            onClick={() => setViewMode("create")}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Create Class
+          </button>
+        </div>
+      </div>
 
-  const paginatedStudents = selectedClass
-    ? selectedClass.students.slice(
-      (currentPage - 1) * studentsPerPage,
-      currentPage * studentsPerPage
-    )
-    : []
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredClasses.map((cls) => {
+          const avgAttendance = cls.sessions.length > 0
+            ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
+            : 0;
 
-  const totalPages = selectedClass
-    ? Math.ceil(selectedClass.students.length / studentsPerPage)
-    : 1
+          return (
+            <div
+              key={cls.id}
+              className="group bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+            >
+              <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
+              <div className="p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">{cls.unitCode}</p>
+                      {cls.classType && (
+                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+                          {cls.classType}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-bold text-gray-900 line-clamp-1">{cls.unitName}</h3>
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => deleteClass(cls.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="flex-1 min-w-0">
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Clock className="w-4 h-4 text-gray-400" />
+                    <span>{cls.day}, {cls.time}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <MapPin className="w-4 h-4 text-gray-400" />
+                    <span>{cls.location}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Users className="w-4 h-4 text-gray-400" />
+                    <span>{cls.students.length} Students</span>
+                  </div>
+                  {cls.lecturer && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <GraduationCap className="w-4 h-4 text-gray-400" />
+                      <span>{cls.lecturer}</span>
+                    </div>
+                  )}
+                </div>
 
-        <div className="p-4 sm:p-6">
-          {/* Stats Grid - Right side on desktop, stacked on mobile */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-            {/* Overall Attendance - Large card */}
-            <div className="col-span-2 lg:col-span-1 bg-white p-4 sm:p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">Overall Attendance</p>
-                <span className="text-gray-400">↗</span>
+                {cls.sessions.length > 0 && (
+                  <div className="mb-4 pt-3 border-t">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Avg Attendance</span>
+                      <span className={`font-semibold ${avgAttendance >= 80 ? 'text-green-600' : avgAttendance >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                        {avgAttendance}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${avgAttendance >= 80 ? 'bg-green-500' : avgAttendance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                        style={{ width: `${avgAttendance}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => { setSelectedClass(cls); setViewMode("detail"); }}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View
+                  </button>
+                  <button
+                    onClick={() => {/* Navigate to attendance page */ }}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start
+                  </button>
+                </div>
               </div>
-              <p className="text-3xl sm:text-4xl font-bold text-amber-500">{overallAttendance}%</p>
-              <div className="w-full h-2 bg-gray-200 rounded-full mt-3">
-                <div className="h-2 bg-amber-500 rounded-full" style={{ width: `${overallAttendance}%` }}></div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">⚠ Below 80% threshold</p>
             </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
-            <div className="bg-white p-4 sm:p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">Enrolled Courses</p>
-                <span className="text-gray-400 text-lg">📖</span>
-              </div>
-              <p className="text-3xl sm:text-4xl font-bold">{classes.length}</p>
-              <p className="text-xs text-gray-400 mt-1">This semester</p>
+  const renderCreateView = () => (
+    <div className="max-w-2xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
+      <div className="bg-white rounded-xl border shadow-sm">
+        <div className="p-6 border-b">
+          <button
+            onClick={() => setViewMode("list")}
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to Classes
+          </button>
+          <h2 className="text-xl font-bold text-gray-900">Create New Class</h2>
+          <p className="text-sm text-gray-500 mt-1">Set up a new class for attendance tracking</p>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Unit Code <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                placeholder="e.g., COS40005"
+                value={createForm.unitCode}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, unitCode: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm uppercase"
+              />
             </div>
-
-            <div className="bg-white p-4 sm:p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">Classes This Week</p>
-                <span className="text-gray-400 text-lg">📅</span>
-              </div>
-              <p className="text-3xl sm:text-4xl font-bold">{classes.length}</p>
-              <p className="text-xs text-gray-400 mt-1">Mon - Fri</p>
-            </div>
-
-            <div className="bg-white p-4 sm:p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">At-Risk Students</p>
-                <span className="text-gray-400 text-lg">⚠️</span>
-              </div>
-              <p className="text-3xl sm:text-4xl font-bold text-red-600">{atRiskStudents}</p>
-              <p className="text-xs text-gray-400 mt-1">Below 80% attendance</p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Unit Name <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                placeholder="e.g., Final Year Project"
+                value={createForm.unitName}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, unitName: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
+              />
             </div>
           </div>
 
-          {/* Two Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {/* Left Column - Classes List */}
-            <div className="lg:col-span-2 space-y-4">
-
-              {/* Upload Section */}
-              <div
-                className={`bg-white rounded-xl border-2 border-dashed p-6 sm:p-8 text-center transition-colors ${dragActive ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                  }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Day</label>
+              <select
+                value={createForm.day}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, day: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm bg-white"
               >
-                <div className="text-4xl mb-3">📊</div>
-                <h3 className="font-semibold text-gray-900 mb-1">Upload Class Data</h3>
-                <p className="text-sm text-gray-500 mb-4">Drag and drop your Excel file here, or click to browse</p>
+                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(day => (
+                  <option key={day} value={day}>{day}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Time</label>
+              <input
+                type="text"
+                placeholder="e.g., 09:00 - 11:00"
+                value={createForm.time}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, time: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
+              />
+            </div>
+          </div>
 
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="excel-upload"
-                />
-                <label
-                  htmlFor="excel-upload"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-red-700 transition-colors"
-                >
-                  {isUploading ? 'Uploading...' : 'Choose Excel File'}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Location (Optional)</label>
+            <input
+              type="text"
+              placeholder="e.g., B201, G603"
+              value={createForm.location}
+              onChange={(e) => setCreateForm(prev => ({ ...prev, location: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
+          <button
+            onClick={() => setViewMode("list")}
+            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreateClass}
+            disabled={!createForm.unitCode || !createForm.unitName}
+            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            Create Class
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderUploadView = () => (
+    <div className="max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
+      <div className="bg-white rounded-xl border shadow-sm">
+        <div className="p-6 border-b">
+          <button
+            onClick={() => {
+              setViewMode("list");
+              setUploadStep(1);
+              setUploadFile(null);
+              setUploadPreview([]);
+              setParsedMetadata({});
+            }}
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to Classes
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${uploadStep >= 1 ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-600'}`}>1</span>
+              <span className={`text-sm font-medium ${uploadStep >= 1 ? 'text-gray-900' : 'text-gray-500'}`}>Upload</span>
+            </div>
+            <div className="w-12 h-0.5 bg-gray-200">
+              <div className={`h-full bg-red-600 transition-all duration-300 ${uploadStep >= 2 ? 'w-full' : 'w-0'}`} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${uploadStep >= 2 ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-600'}`}>2</span>
+              <span className={`text-sm font-medium ${uploadStep >= 2 ? 'text-gray-900' : 'text-gray-500'}`}>Map Columns</span>
+            </div>
+          </div>
+        </div>
+
+        {uploadStep === 1 ? (
+          <div className="p-8">
+            <div
+              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${isDragging ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+              onDragEnter={(e) => handleDrag(e, true)}
+              onDragLeave={(e) => handleDrag(e, false)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileSpreadsheet className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Swinburne Attendance Form</h3>
+              <p className="text-sm text-gray-500 mb-2 max-w-md mx-auto">
+                Upload the official Swinburne attendance Excel file.
+              </p>
+              <p className="text-xs text-gray-400 mb-6 max-w-md mx-auto">
+                The system will automatically extract class information from rows 4-5 and student data from row 8 onwards.
+              </p>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors cursor-pointer shadow-sm"
+              >
+                <Upload className="w-4 h-4" />
+                Choose File
+              </label>
+              <p className="text-xs text-gray-400 mt-4">Supports .xlsx, .xls • Max 10MB</p>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6">
+            {Object.keys(parsedMetadata).length > 0 && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Detected Class Information
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  {parsedMetadata.unitCode && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Unit Code</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.unitCode}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.unitName && (
+                    <div className="col-span-2">
+                      <span className="text-blue-600 text-xs uppercase">Unit Name</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.unitName}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.classType && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Type</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.classType}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.group && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Group</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.group}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.day && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Day</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.day}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.time && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Time</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.time}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.room && (
+                    <div>
+                      <span className="text-blue-600 text-xs uppercase">Room</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.room}</p>
+                    </div>
+                  )}
+                  {parsedMetadata.lecturer && (
+                    <div className="col-span-2">
+                      <span className="text-blue-600 text-xs uppercase">Lecturer</span>
+                      <p className="font-semibold text-blue-900">{parsedMetadata.lecturer}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Excel Columns</h3>
+              <p className="text-sm text-gray-500">Verify the column mappings for student data. The system has auto-detected based on the Swinburne format.</p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Student ID <span className="text-red-500">*</span>
                 </label>
-
-                <p className="text-xs text-gray-400 mt-3">
-                  Supports: .xlsx, .xls • Max 10MB
-                </p>
+                <select
+                  value={columnMapping.studentId}
+                  onChange={(e) => setColumnMapping(prev => ({ ...prev, studentId: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                >
+                  <option value="">Select column...</option>
+                  {uploadColumns.map((col, idx) => (
+                    <option key={idx} value={col}>{col}</option>
+                  ))}
+                </select>
+                {columnMapping.studentId && (
+                  <div className="flex items-center gap-1 text-xs text-green-600">
+                    <Check className="w-3 h-3" />
+                    <span>Mapped to "{columnMapping.studentId}"</span>
+                  </div>
+                )}
               </div>
 
-              {/* Classes List */}
-              <div className="bg-white rounded-xl border shadow-sm p-4 sm:p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">My Classes</h3>
-                  <span className="text-sm text-gray-500">{classes.length} classes</span>
-                </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={columnMapping.name}
+                  onChange={(e) => setColumnMapping(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                >
+                  <option value="">Select column...</option>
+                  {uploadColumns.map((col, idx) => (
+                    <option key={idx} value={col}>{col}</option>
+                  ))}
+                </select>
+                {columnMapping.name && (
+                  <div className="flex items-center gap-1 text-xs text-green-600">
+                    <Check className="w-3 h-3" />
+                    <span>Mapped to "{columnMapping.name}"</span>
+                  </div>
+                )}
+              </div>
 
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Program (Optional)</label>
+                <select
+                  value={columnMapping.program}
+                  onChange={(e) => setColumnMapping(prev => ({ ...prev, program: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+                >
+                  <option value="">Select column...</option>
+                  {uploadColumns.map((col, idx) => (
+                    <option key={idx} value={col}>{col}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Student Data Preview </h4>
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      {uploadColumns.slice(0, 7).map((col, idx) => (
+                        <th key={idx} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {uploadPreview.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        {uploadColumns.slice(0, 7).map((_, colIdx) => (
+                          <td key={colIdx} className="px-4 py-2 text-gray-600 whitespace-nowrap">
+                            {row[colIdx]?.toString() || "-"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setUploadStep(1)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={confirmImport}
+                disabled={!columnMapping.studentId || !columnMapping.name}
+                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Confirm Import
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderDetailView = () => {
+    if (!selectedClass) return null;
+
+    const avgAttendance = selectedClass.sessions.length > 0
+      ? Math.round(selectedClass.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / selectedClass.sessions.length)
+      : 0;
+
+    const atRiskCount = selectedClass.students.filter(s => {
+      const studentAvg = selectedClass.sessions.length > 0 ? avgAttendance : 100;
+      return studentAvg < 80;
+    }).length;
+
+    return (
+      <div className="animate-in slide-in-from-right-4 duration-300">
+        <div className="bg-white rounded-xl border shadow-sm mb-6 overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
+          <div className="p-6">
+            <button
+              onClick={() => setViewMode("list")}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back to Classes
+            </button>
+
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="px-2.5 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                    {selectedClass.unitCode}
+                  </span>
+                  {selectedClass.classType && (
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
+                      {selectedClass.classType} • Group {selectedClass.group}
+                    </span>
+                  )}
+                  <span className="text-sm text-gray-500">{selectedClass.createdAt}</span>
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900">{selectedClass.unitName}</h1>
+                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 flex-wrap">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4" />
+                    {selectedClass.day}, {selectedClass.time}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4" />
+                    {selectedClass.location}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Users className="w-4 h-4" />
+                    {selectedClass.students.length} Students
+                  </span>
+                  {selectedClass.lecturer && (
+                    <span className="flex items-center gap-1.5">
+                      <GraduationCap className="w-4 h-4" />
+                      {selectedClass.lecturer}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setViewMode("upload")}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload Students
+                </button>
+                <button
+                  onClick={() => {/* Navigate to attendance */ }}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm"
+                >
+                  <Play className="w-4 h-4" />
+                  Start Attendance
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex border-t">
+            {[
+              { id: "students", label: "Students", icon: Users, count: selectedClass.students.length },
+              { id: "sessions", label: "Sessions", icon: Calendar, count: selectedClass.sessions.length },
+              { id: "summary", label: "Summary", icon: BarChart3 }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors relative ${activeTab === tab.id ? 'text-red-600' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+                {tab.count !== undefined && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === tab.id ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {tab.count}
+                  </span>
+                )}
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border shadow-sm min-h-[400px]">
+          {activeTab === "students" && (
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">Student List</h3>
+                <button className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                  <Plus className="w-4 h-4" />
+                  Add Student
+                </button>
+              </div>
+
+              {selectedClass.students.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Student ID</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Program</th>
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">Nationality</th>
+                        <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {selectedClass.students.map((student) => (
+                        <tr key={student.id} className="hover:bg-gray-50 group">
+                          <td className="px-4 py-3 font-mono text-gray-600">{student.studentNumber}</td>
+                          <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
+                          <td className="px-4 py-3 text-gray-600 text-sm">{student.program || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600 text-sm">{student.nationality || "-"}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded">
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => removeStudent(student.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h4 className="text-gray-900 font-medium mb-1">No students yet</h4>
+                  <p className="text-sm text-gray-500 mb-4">Upload a Swinburne attendance form to import students</p>
+                  <button
+                    onClick={() => setViewMode("upload")}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload Students
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "sessions" && (
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">Attendance Sessions</h3>
+                <button
+                  onClick={createSession}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Session
+                </button>
+              </div>
+
+              {selectedClass.sessions.length > 0 ? (
                 <div className="space-y-3">
-                  {classes.map((cls) => (
-                    <div
-                      key={cls.id}
-                      onClick={() => setSelectedClass(cls)}
-                      className={`flex items-center justify-between p-4 rounded-xl border-l-4 cursor-pointer transition-all hover:shadow-md ${selectedClass?.id === cls.id
-                        ? 'bg-red-50 border-red-500'
-                        : 'bg-gray-50 border-gray-300 hover:bg-gray-100'
-                        }`}
-                      style={{
-                        borderLeftColor:
-                          cls.unitCode === "COS40005" ? '#ef4444' :
-                            cls.unitCode === "COS20019" ? '#6366f1' :
-                              cls.unitCode === "COS30049" ? '#14b8a6' : '#ec4899'
-                      }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-500 font-medium">{cls.unitCode}</p>
-                        <p className="font-semibold text-gray-900 truncate">{cls.unitName}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {cls.day} · {cls.time} · {cls.room}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5">{cls.semester} · {cls.term}</p>
+                  {selectedClass.sessions.map((session) => (
+                    <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg hover:border-red-300 transition-colors group">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${session.status === 'Completed' ? 'bg-green-100' : session.status === 'Ongoing' ? 'bg-amber-100' : 'bg-gray-100'}`}>
+                          <Calendar className={`w-6 h-6 ${session.status === 'Completed' ? 'text-green-600' : session.status === 'Ongoing' ? 'text-amber-600' : 'text-gray-600'}`} />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">{session.date}</p>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                              {session.presentCount} Present
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <X className="w-3.5 h-3.5 text-red-500" />
+                              {session.absentCount} Absent
+                            </span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="text-right ml-4">
-                        <p className="text-lg font-bold text-gray-900">{cls.students.length}</p>
-                        <p className="text-xs text-gray-500">students</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {Math.round(cls.students.reduce((a, s) => a + s.attendance, 0) / cls.students.length || 0)}% avg
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-sm font-semibold ${session.attendancePercentage >= 80 ? 'text-green-600' : 'text-amber-600'}`}>
+                              {session.attendancePercentage}%
+                            </span>
+                            <span className="text-xs text-gray-500">attendance</span>
+                          </div>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${session.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                            session.status === 'Ongoing' ? 'bg-amber-100 text-amber-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                            {session.status}
+                          </span>
+                        </div>
+                        <button className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                          <ArrowRight className="w-5 h-5" />
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-
-            {/* Right Column - Selected Class Details */}
-            <div className="space-y-4">
-              {selectedClass ? (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                  <div className="bg-red-600 text-white p-4 sm:p-5">
-                    <p className="text-xs uppercase tracking-wide opacity-90">Selected Class</p>
-                    <h3 className="text-xl font-bold mt-1">{selectedClass.unitCode}</h3>
-                    <p className="text-sm opacity-90">{selectedClass.unitName}</p>
-
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-red-500">
-                      <span className="text-sm opacity-90">📍 {selectedClass.room}</span>
-                      <span className="text-sm opacity-90">🕐 {selectedClass.day} {selectedClass.time}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 sm:p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold">Students ({selectedClass.students.length})</h4>
-                      <button className="text-xs text-red-600 font-medium hover:underline">
-                        Export List
-                      </button>
-                    </div>
-
-                    <div className="overflow-x-auto -mx-4 px-4">
-                      <table className="w-full min-w-[300px]">
-                        <thead>
-                          <tr className="text-left text-xs text-gray-500 uppercase border-b">
-                            <th className="pb-2 font-medium">ID</th>
-                            <th className="pb-2 font-medium">Name</th>
-                            <th className="pb-2 font-medium text-right">Attendance</th>
-                            <th className="pb-2 font-medium text-right">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="text-sm">
-                          {paginatedStudents.map((student) => (
-                            <tr key={student.id} className="border-b border-gray-50 last:border-0">
-                              <td className="py-3 text-gray-600">{student.id}</td>
-                              <td className="py-3 font-medium text-gray-900">{student.name}</td>
-                              <td className="py-3 text-right">
-                                <span className={`font-semibold ${student.attendance >= 80 ? 'text-green-600' :
-                                  student.attendance >= 60 ? 'text-amber-500' : 'text-red-600'
-                                  }`}>
-                                  {student.attendance}%
-                                </span>
-                              </td>
-                              <td className="py-3 text-right">
-                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${student.status === "Present" ? "bg-green-100 text-green-700" :
-                                  student.status === "Absent" ? "bg-red-100 text-red-700" :
-                                    student.status === "Late" ? "bg-amber-100 text-amber-700" :
-                                      "bg-blue-100 text-blue-700"
-                                  }`}>
-                                  {student.status === "Present" && "✓"}
-                                  {student.status === "Absent" && "✕"}
-                                  {student.status === "Late" && "🕐"}
-                                  {student.status === "Sick Leave" && "📋"}
-                                  {student.status}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div className="flex items-center justify-between mt-4">
-                        <button
-                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                          disabled={currentPage === 1}
-                          className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-                        >
-                          Previous
-                        </button>
-
-                        <span className="text-sm text-gray-500">
-                          Page {currentPage} of {totalPages}
-                        </span>
-
-                        <button
-                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                          disabled={currentPage === totalPages}
-                          className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               ) : (
-                <div className="bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 p-8 text-center">
-                  <div className="text-4xl mb-3">👆</div>
-                  <p className="text-gray-500">Select a class to view student details</p>
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Calendar className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h4 className="text-gray-900 font-medium mb-1">No sessions yet</h4>
+                  <p className="text-sm text-gray-500 mb-4">Create your first attendance session</p>
+                  <button
+                    onClick={createSession}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create Session
+                  </button>
                 </div>
               )}
+            </div>
+          )}
 
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl border shadow-sm p-4 sm:p-5">
-                <h4 className="font-semibold mb-3">Quick Actions</h4>
-                <div className="space-y-2">
-                  <button className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 transition-colors text-left">
-                    <span className="text-sm font-medium">Generate QR Code</span>
-                    <span className="text-gray-400">›</span>
-                  </button>
-                  <button className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 transition-colors text-left">
-                    <span className="text-sm font-medium">Send Alerts</span>
-                    <span className="text-gray-400">›</span>
-                  </button>
-                  <button className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 transition-colors text-left">
-                    <span className="text-sm font-medium">Download Report</span>
-                    <span className="text-gray-400">›</span>
-                  </button>
+          {activeTab === "summary" && (
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-blue-900">Average Attendance</span>
+                    <TrendingUp className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <p className="text-3xl font-bold text-blue-900">{avgAttendance}%</p>
+                  <p className="text-xs text-blue-700 mt-1">Across all sessions</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl border border-red-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-red-900">At Risk Students</span>
+                    <TrendingDown className="w-5 h-5 text-red-600" />
+                  </div>
+                  <p className="text-3xl font-bold text-red-900">{atRiskCount}</p>
+                  <p className="text-xs text-red-700 mt-1">Below 80% attendance</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-green-900">Total Sessions</span>
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  </div>
+                  <p className="text-3xl font-bold text-green-900">{selectedClass.sessions.length}</p>
+                  <p className="text-xs text-green-700 mt-1">Completed sessions</p>
                 </div>
               </div>
-            </div>
 
-          </div>
-
-          {/* Recent Attendance Section */}
-          <div className="mt-6 bg-white rounded-xl border shadow-sm p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Recent Attendance Records</h3>
-              <button className="text-sm text-red-600 font-medium hover:underline">View all</button>
-            </div>
-
-            {classes.length > 0 ? (
-              <div className="overflow-x-auto -mx-4 px-4">
-                <table className="w-full min-w-[500px]">
-                  <thead>
-                    <tr className="text-left text-xs text-gray-500 uppercase border-b">
-                      <th className="pb-3 font-medium">Date</th>
-                      <th className="pb-3 font-medium">Unit</th>
-                      <th className="pb-3 font-medium">Class</th>
-                      <th className="pb-3 font-medium text-right">Present</th>
-                      <th className="pb-3 font-medium text-right">Absent</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-sm">
-                    {classes.slice(0, 3).map((cls) => {
-                      const present = cls.students.filter(s => s.status === "Present").length
-                      const absent = cls.students.length - present
-                      return (
-                        <tr key={cls.id} className="border-b border-gray-50 last:border-0">
-                          <td className="py-3 text-gray-600">Mon, 18 Mar 2026</td>
-                          <td className="py-3 font-medium text-gray-900">{cls.unitCode}</td>
-                          <td className="py-3 text-gray-600">{cls.unitName}</td>
-                          <td className="py-3 text-right">
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                              ✓ {present}
-                            </span>
-                          </td>
-                          <td className="py-3 text-right">
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                              ✕ {absent}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+              <div className="border rounded-xl p-4">
+                <h4 className="font-semibold text-gray-900 mb-4">Attendance Trend</h4>
+                {selectedClass.sessions.length > 0 ? (
+                  <div className="h-64 flex items-end justify-between gap-2">
+                    {selectedClass.sessions.map((session, idx) => (
+                      <div key={session.id} className="flex-1 flex flex-col items-center gap-2">
+                        <div
+                          className={`w-full rounded-t-lg transition-all duration-500 ${session.attendancePercentage >= 80 ? 'bg-green-500' : session.attendancePercentage >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                          style={{ height: `${session.attendancePercentage * 2}px` }}
+                        />
+                        <span className="text-xs text-gray-500 rotate-0 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">
+                          {session.date.slice(5)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-gray-400">
+                    No session data available
+                  </div>
+                )}
               </div>
-            ) : (
-              <p className="text-gray-400 text-center py-8">No attendance records yet.</p>
-            )}
-          </div>
-
+            </div>
+          )}
         </div>
+      </div>
+    );
+  };
 
-      </main>
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto">
+        {viewMode === "list" && renderListView()}
+        {viewMode === "create" && renderCreateView()}
+        {viewMode === "upload" && renderUploadView()}
+        {viewMode === "detail" && renderDetailView()}
+      </div>
     </div>
   );
 }
