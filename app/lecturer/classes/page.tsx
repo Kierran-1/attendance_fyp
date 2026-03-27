@@ -238,7 +238,7 @@ export default function ClassesPage() {
         const lecturer = classDetails[5] || "";
 
         // Handle merged headers in rows 6-7 (indices 5-6)
-        const row6 = allData[4] || [];
+        const row6 = allData[4  ] || [];
         const row7 = allData[5] || [];
 
         const headers: string[] = [];
