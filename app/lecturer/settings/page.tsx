@@ -1,38 +1,107 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useState } from 'react';
+import { Save, User, Bell, Shield } from 'lucide-react';
 
-export default function LecturerDashboard() {
-  const { data: session } = useSession();
+export default function LecturerSettingsPage() {
+  const [form, setForm] = useState({
+    name: 'Dr. Mary Lee',
+    email: 'marylee@swinburne.edu.my',
+    notifications: true,
+    autoCloseSession: false,
+  });
+
+  const handleChange = (field: string, value: any) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = () => {
+    alert('Settings saved (frontend only)');
+  };
 
   return (
-    <div className="min-h-screen">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Welcome back, {session?.user?.name?.split(' ')[0] ?? 'Student'}
-        </h1>
-        <p className="text-gray-500 text-sm mt-1">{session?.user?.email}</p>
+    <div className="space-y-6">
+      
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="text-sm text-gray-500">
+          Manage your lecturer preferences and system settings.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-          <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Overall Attendance</p>
-          <p className="text-3xl font-black text-gray-800">—</p>
+      {/* Profile Section */}
+      <div className="bg-white p-6 rounded-xl border shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <User size={18} />
+          <h2 className="font-semibold">Profile</h2>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-          <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Enrolled Courses</p>
-          <p className="text-3xl font-black text-gray-800">—</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-          <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Classes This Week</p>
-          <p className="text-3xl font-black text-gray-800">—</p>
+
+        <div className="space-y-4">
+          <input
+            type="text"
+            value={form.name}
+            onChange={(e) => handleChange('name', e.target.value)}
+            className="w-full border rounded-lg px-4 py-2"
+            placeholder="Full Name"
+          />
+
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => handleChange('email', e.target.value)}
+            className="w-full border rounded-lg px-4 py-2"
+            placeholder="Email"
+          />
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-        <h2 className="text-base font-bold text-gray-700 mb-4">Recent Attendance</h2>
-        <p className="text-sm text-gray-400">No attendance records yet.</p>
+      {/* Notifications */}
+      <div className="bg-white p-6 rounded-xl border shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Bell size={18} />
+          <h2 className="font-semibold">Notifications</h2>
+        </div>
+
+        <label className="flex items-center justify-between">
+          <span>Email Notifications</span>
+          <input
+            type="checkbox"
+            checked={form.notifications}
+            onChange={(e) =>
+              handleChange('notifications', e.target.checked)
+            }
+          />
+        </label>
       </div>
+
+      {/* Attendance Settings */}
+      <div className="bg-white p-6 rounded-xl border shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Shield size={18} />
+          <h2 className="font-semibold">Attendance Settings</h2>
+        </div>
+
+        <label className="flex items-center justify-between">
+          <span>Auto-close attendance session</span>
+          <input
+            type="checkbox"
+            checked={form.autoCloseSession}
+            onChange={(e) =>
+              handleChange('autoCloseSession', e.target.checked)
+            }
+          />
+        </label>
+      </div>
+
+      {/* Save Button */}
+      <button
+        onClick={handleSave}
+        className="bg-red-600 text-white px-6 py-3 rounded-lg flex items-center gap-2"
+      >
+        <Save size={16} />
+        Save Changes
+      </button>
     </div>
   );
 }

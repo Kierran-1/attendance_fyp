@@ -1,55 +1,58 @@
 'use client';
 
-import { useState, useCallback, useMemo } from "react";
-import * as XLSX from "xlsx";
+import Link from 'next/link';
 import {
-  Plus,
-  Upload,
-  Search,
-  Eye,
-  Play,
-  Edit2,
-  X,
-  ChevronLeft,
-  Users,
-  Calendar,
-  MapPin,
-  Clock,
-  Trash2,
+  ChangeEvent,
+  DragEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import * as XLSX from 'xlsx';
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarDays,
   CheckCircle2,
-  AlertCircle,
+  ChevronRight,
+  Clock3,
+  Eye,
   FileSpreadsheet,
-  ArrowRight,
-  Check,
-  TrendingDown,
-  TrendingUp,
-  BarChart3,
-  GraduationCap
-} from "lucide-react";
+  MapPin,
+  Plus,
+  Search,
+  Upload,
+  Users,
+  X,
+} from 'lucide-react';
 
-// Types
-interface Student {
+type SessionType = 'Lecture' | 'Tutorial' | 'Lab';
+type SessionStatus = 'Completed' | 'Ongoing' | 'Scheduled';
+type ViewMode = 'list' | 'detail' | 'create' | 'upload';
+
+type Student = {
   id: string;
   studentNumber: string;
   name: string;
+  program: string;
+  nationality: string;
+  schoolStatus: string;
+};
 
-  program?: string;
-  nationality?: string;
-  schoolStatus?: string;
-}
-
-interface Session {
+type Session = {
   id: string;
   date: string;
+  time: string;
+  venue: string;
   attendancePercentage: number;
-  status: "Completed" | "Ongoing" | "Scheduled";
+  status: SessionStatus;
   presentCount: number;
   absentCount: number;
   lateCount: number;
   sickCount: number;
-}
+};
 
-interface ClassData {
+type LecturerClass = {
   id: string;
   unitCode: string;
   unitName: string;
@@ -60,1267 +63,1639 @@ interface ClassData {
   classType?: string;
   group?: string;
   term?: string;
+  sessionType?: SessionType;
   students: Student[];
   sessions: Session[];
   createdAt: string;
-}
+};
 
-type ViewMode = "list" | "create" | "upload" | "detail";
+type ParsedMetadata = {
+  term?: string;
+  unitCode?: string;
+  unitName?: string;
+  classType?: string;
+  group?: string;
+  day?: string;
+  time?: string;
+  room?: string;
+  lecturer?: string;
+};
 
-const INITIAL_CLASSES: ClassData[] = [
+const INITIAL_CLASSES: LecturerClass[] = [
   {
-    id: "1",
-    unitCode: "COS40005",
-    unitName: "Final Year Project",
-    day: "Monday",
-    time: "09:00 - 11:00",
-    location: "B201",
-    createdAt: "2026-03-01",
+    id: 'cls-1',
+    unitCode: 'COS40005',
+    unitName: 'Computing Technology Project A',
+    day: 'Monday',
+    time: '09:00 - 11:00',
+    location: 'A304',
+    lecturer: 'Jason Thomas Chew',
+    classType: 'Tutorial',
+    group: '01',
+    term: '2026_MAR_S1',
+    sessionType: 'Tutorial',
+    createdAt: '2026-03-01',
     students: [
-      { id: "1", studentNumber: "102345678", name: "Ahmad Hakim", program: "Bachelor of Computer Science" },
-      { id: "2", studentNumber: "102345679", name: "Priya Nair", program: "Bachelor of Computer Science" },
-      { id: "3", studentNumber: "102345680", name: "Lee Wei Jian", program: "Bachelor of Data Science" },
+      {
+        id: 'st-1',
+        studentNumber: '102788856',
+        name: 'Emily Jong Hui Xiu',
+        program: 'Bachelor of Computer Science',
+        nationality: 'Malaysian',
+        schoolStatus: 'Current',
+      },
+      {
+        id: 'st-2',
+        studentNumber: '102788857',
+        name: 'Nur Aisyah Binti Ahmad',
+        program: 'Bachelor of Computer Science',
+        nationality: 'Malaysian',
+        schoolStatus: 'Current',
+      },
     ],
     sessions: [
-      { id: "s1", date: "2026-03-10", attendancePercentage: 85, status: "Completed", presentCount: 3, absentCount: 0, lateCount: 0, sickCount: 0 },
-      { id: "s2", date: "2026-03-17", attendancePercentage: 67, status: "Completed", presentCount: 2, absentCount: 1, lateCount: 0, sickCount: 0 },
-    ]
+      {
+        id: 'se-1',
+        date: '19 Mar 2026',
+        time: '09:00 - 11:00',
+        venue: 'A304',
+        attendancePercentage: 89,
+        status: 'Completed',
+        presentCount: 25,
+        absentCount: 2,
+        lateCount: 1,
+        sickCount: 0,
+      },
+      {
+        id: 'se-2',
+        date: '26 Mar 2026',
+        time: '09:00 - 11:00',
+        venue: 'A304',
+        attendancePercentage: 68,
+        status: 'Ongoing',
+        presentCount: 19,
+        absentCount: 8,
+        lateCount: 1,
+        sickCount: 0,
+      },
+    ],
   },
   {
-    id: "2",
-    unitCode: "COS20031",
-    unitName: "Database Design Project",
-    day: "Tuesday",
-    time: "13:00 - 15:00",
-    location: "G603",
-    createdAt: "2026-03-01",
-    students: [],
-    sessions: []
-  }
+    id: 'cls-2',
+    unitCode: 'SWE30003',
+    unitName: 'Software Architecture and Design',
+    day: 'Thursday',
+    time: '14:00 - 16:00',
+    location: 'C102',
+    lecturer: 'Siti Khatijah Bolhassan',
+    classType: 'Lecture',
+    group: 'LE1',
+    term: '2026_MAR_S1',
+    sessionType: 'Lecture',
+    createdAt: '2026-03-02',
+    students: [
+      {
+        id: 'st-3',
+        studentNumber: '102799101',
+        name: 'Muhammad Danish',
+        program: 'Bachelor of Software Engineering',
+        nationality: '',
+        schoolStatus: '',
+      },
+    ],
+    sessions: [
+      {
+        id: 'se-3',
+        date: '20 Mar 2026',
+        time: '14:00 - 16:00',
+        venue: 'C102',
+        attendancePercentage: 84,
+        status: 'Completed',
+        presentCount: 44,
+        absentCount: 7,
+        lateCount: 2,
+        sickCount: 0,
+      },
+    ],
+  },
 ];
 
-export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassData[]>(INITIAL_CLASSES);
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
-  const [activeTab, setActiveTab] = useState<"students" | "sessions" | "summary">("students");
-  const [searchQuery, setSearchQuery] = useState("");
+function getSessionTypeClasses(type?: string) {
+  switch (type) {
+    case 'Lecture':
+      return 'border-blue-100 bg-blue-50 text-blue-700';
+    case 'Tutorial':
+      return 'border-rose-100 bg-rose-50 text-[#E4002B]';
+    case 'Lab':
+      return 'border-purple-100 bg-purple-50 text-purple-700';
+    default:
+      return 'border-gray-100 bg-gray-50 text-gray-700';
+  }
+}
+
+function getStatusClasses(status: SessionStatus) {
+  switch (status) {
+    case 'Completed':
+      return 'border-green-100 bg-green-50 text-green-700';
+    case 'Ongoing':
+      return 'border-amber-100 bg-amber-50 text-amber-700';
+    case 'Scheduled':
+      return 'border-gray-200 bg-gray-50 text-gray-700';
+    default:
+      return 'border-gray-200 bg-gray-50 text-gray-700';
+  }
+}
+
+function getAttendanceTextClasses(rate: number) {
+  if (rate >= 90) return 'text-green-600';
+  if (rate >= 75) return 'text-amber-600';
+  return 'text-red-600';
+}
+
+function mapClassTypeToSessionType(classType?: string): SessionType {
+  const value = (classType || '').toLowerCase();
+
+  if (value.includes('lab')) return 'Lab';
+  if (value.includes('tutorial') || value.includes('tu')) return 'Tutorial';
+  return 'Lecture';
+}
+
+export default function LecturerClassesPage() {
+  const [classes, setClasses] = useState<LecturerClass[]>(INITIAL_CLASSES);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(
+    INITIAL_CLASSES[0]?.id ?? null
+  );
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedType, setSelectedType] = useState<'All' | SessionType>('All');
 
   const [createForm, setCreateForm] = useState({
-    unitCode: "",
-    unitName: "",
-    day: "Monday",
-    time: "",
-    location: ""
+    unitCode: '',
+    unitName: '',
+    day: 'Monday',
+    time: '',
+    location: '',
+    lecturer: '',
+    classType: 'Lecture',
+    group: '',
+    term: '',
   });
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadPreview, setUploadPreview] = useState<any[]>([]);
+  const [uploadPreview, setUploadPreview] = useState<string[][]>([]);
   const [uploadColumns, setUploadColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState({
-    studentId: "",
-    name: "",
-    program: ""
+    studentId: '',
+    name: '',
+    program: '',
   });
-  const [isDragging, setIsDragging] = useState(false);
+  const [parsedMetadata, setParsedMetadata] = useState<ParsedMetadata>({});
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const [parsedMetadata, setParsedMetadata] = useState<{
-    term?: string;
-    unitCode?: string;
-    unitName?: string;
-    classType?: string;
-    group?: string;
-    day?: string;
-    time?: string;
-    room?: string;
-    lecturer?: string;
-  }>({});
+  useEffect(() => {
+    try {
+      const importedRaw = localStorage.getItem('lecturerImportedClasses');
+      if (!importedRaw) return;
+
+      const importedClasses: LecturerClass[] = JSON.parse(importedRaw);
+
+      if (!Array.isArray(importedClasses) || importedClasses.length === 0) return;
+
+      setClasses((prev) => {
+        const existingIds = new Set(prev.map((item) => item.id));
+        const uniqueImported = importedClasses.filter(
+          (item) => !existingIds.has(item.id)
+        );
+
+        if (uniqueImported.length === 0) return prev;
+
+        return [...uniqueImported, ...prev];
+      });
+
+      setSelectedClassId((prevSelectedId) => {
+        if (prevSelectedId) return prevSelectedId;
+        return importedClasses[0]?.id ?? INITIAL_CLASSES[0]?.id ?? null;
+      });
+    } catch (error) {
+      console.error('Failed to load imported classes from localStorage:', error);
+    }
+  }, []);
 
   const filteredClasses = useMemo(() => {
-    return classes.filter(c =>
-      c.unitCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.unitName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [classes, searchQuery]);
+    return classes.filter((item) => {
+      const matchesSearch =
+        item.unitCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.unitName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.lecturer || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+      const classSessionType =
+        item.sessionType || mapClassTypeToSessionType(item.classType);
+      const matchesType =
+        selectedType === 'All' ? true : classSessionType === selectedType;
+
+      return matchesSearch && matchesType;
+    });
+  }, [classes, searchTerm, selectedType]);
+
+  const selectedClass =
+    classes.find((item) => item.id === selectedClassId) ?? null;
 
   const stats = useMemo(() => {
-    const totalStudents = classes.reduce((acc, c) => acc + c.students.length, 0);
-    const totalSessions = classes.reduce((acc, c) => acc + c.sessions.length, 0);
-    const atRiskStudents = classes.reduce((acc, c) => {
-      const avgAttendance = c.sessions.length > 0
-        ? c.sessions.reduce((s, sess) => s + sess.attendancePercentage, 0) / c.sessions.length
-        : 100;
-      return acc + (avgAttendance < 80 ? c.students.length : 0);
-    }, 0);
+    const totalStudents = classes.reduce((sum, item) => sum + item.students.length, 0);
+    const totalSessions = classes.reduce((sum, item) => sum + item.sessions.length, 0);
+    const avgAttendance =
+      classes.length > 0
+        ? Math.round(
+            classes.reduce((sum, item) => {
+              if (item.sessions.length === 0) return sum;
+              const classAvg =
+                item.sessions.reduce(
+                  (inner, session) => inner + session.attendancePercentage,
+                  0
+                ) / item.sessions.length;
+              return sum + classAvg;
+            }, 0) / classes.length
+          )
+        : 0;
 
-    return { totalStudents, totalSessions, atRiskStudents, classCount: classes.length };
+    return {
+      totalStudents,
+      totalSessions,
+      classCount: classes.length,
+      avgAttendance,
+    };
   }, [classes]);
 
-  const handleCreateClass = () => {
-    if (!createForm.unitCode || !createForm.unitName) return;
-
-    const newClass: ClassData = {
-      id: Date.now().toString(),
-      unitCode: createForm.unitCode,
-      unitName: createForm.unitName,
-      day: createForm.day,
-      time: createForm.time || "TBA",
-      location: createForm.location || "TBA",
-      students: [],
-      sessions: [],
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
-    setClasses(prev => [...prev, newClass]);
-    setCreateForm({ unitCode: "", unitName: "", day: "Monday", time: "", location: "" });
-    setViewMode("list");
+  const openClassDetail = (classId: string) => {
+    setSelectedClassId(classId);
+    setViewMode('detail');
   };
 
-  const handleFileUpload = (file: File) => {
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      alert('Please upload an Excel file (.xlsx or .xls)');
+  const resetUploadState = () => {
+    setUploadFile(null);
+    setUploadPreview([]);
+    setUploadColumns([]);
+    setColumnMapping({
+      studentId: '',
+      name: '',
+      program: '',
+    });
+    setParsedMetadata({});
+    setUploadStep(1);
+    setIsDragging(false);
+  };
+
+  const handleCreateClass = () => {
+    if (!createForm.unitCode.trim() || !createForm.unitName.trim()) return;
+
+    const newClass: LecturerClass = {
+      id: `class-${Date.now()}`,
+      unitCode: createForm.unitCode.trim(),
+      unitName: createForm.unitName.trim(),
+      day: createForm.day.trim() || 'TBA',
+      time: createForm.time.trim() || 'TBA',
+      location: createForm.location.trim() || 'TBA',
+      lecturer: createForm.lecturer.trim() || 'TBA',
+      classType: createForm.classType.trim() || 'Lecture',
+      group: createForm.group.trim() || '',
+      term: createForm.term.trim() || '',
+      sessionType: mapClassTypeToSessionType(createForm.classType),
+      students: [],
+      sessions: [],
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+
+    setClasses((prev) => [newClass, ...prev]);
+    setSelectedClassId(newClass.id);
+    setCreateForm({
+      unitCode: '',
+      unitName: '',
+      day: 'Monday',
+      time: '',
+      location: '',
+      lecturer: '',
+      classType: 'Lecture',
+      group: '',
+      term: '',
+    });
+    setViewMode('detail');
+  };
+
+  const parseAttendanceWorkbook = (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      window.alert('Please upload an Excel file (.xlsx or .xls).');
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+
+    reader.onload = (event) => {
       try {
-        const data = e.target?.result;
+        const data = event.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const allRows = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          blankrows: false,
+        }) as (string | number | null)[][];
 
-        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
-
-        if (allData.length < 8) {
-          alert('File does not contain enough rows. Expected Swinburne attendance format.');
+        if (allRows.length < 7) {
+          window.alert(
+            'The file does not contain enough rows for the attendance format.'
+          );
           return;
         }
 
-        // Extract term from Row 4 (index 3)
+        const row4 = allRows[2] || [];
+        const row5 = allRows[3] || [];
+        const row6 = allRows[4] || [];
+        const row7 = allRows[5] || [];
 
-        const row4 = allData[2] || [];
-        const row4Text = row4.join(' ');
+        const row4Text = row4.map(String).join(' ');
+        const row5Parts = row5
+          .map((value) => String(value ?? '').trim())
+          .filter((value) => value.length > 0);
 
-        // Extract term
         const termMatch = row4Text.match(/Term\s*:\s*([^,]+)/i);
-        const term = termMatch ? termMatch[1].trim() : "";
+        const term = termMatch ? termMatch[1].trim() : '';
 
-        let unitCode = "";
-        let unitName = "";
+        let unitCode = '';
+        let unitName = '';
 
-        if (row4Text.includes("Unit")) {
-          const unitPart = row4Text.split("Unit")[1]; // get everything after "Unit"
-
-          if (unitPart) {
-            const cleaned = unitPart.replace(":", "").trim(); // remove colon
-            const parts = cleaned.split("-");
-
-            unitCode = parts[0]?.trim() || "";
-            unitName = parts.slice(1).join("-").trim() || "";
-          }
+        const unitMatch = row4Text.match(/Unit\s*:?\s*([A-Z0-9]+)\s*-\s*(.+)$/i);
+        if (unitMatch) {
+          unitCode = unitMatch[1].trim();
+          unitName = unitMatch[2].trim();
+        } else if (row4Text.includes('Unit')) {
+          const unitPart = row4Text.split('Unit').pop()?.replace(':', '').trim() || '';
+          const parts = unitPart.split('-');
+          unitCode = parts[0]?.trim() || '';
+          unitName = parts.slice(1).join('-').trim() || '';
         }
-        // Row 5
-        const row5 = allData[3] || [];
-        const row5Text = row5.join(',');
 
-        const classDetails = row5Text
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter((s: string) => s.length > 0);
-
-        const classType = classDetails[0] || "";
-        const group = classDetails[1] || "";
-        const day = classDetails[2] || "";
-        const time = classDetails[3] || "";
-        const room = classDetails[4] || "";
-        const lecturer = classDetails[5] || "";
-
-        // Handle merged headers in rows 6-7 (indices 5-6)
-        const row6 = allData[4] || [];
-        const row7 = allData[5] || [];
+        const classType = row5Parts[0] || '';
+        const group = row5Parts[1] || '';
+        const day = row5Parts[2] || '';
+        const time = row5Parts[3] || '';
+        const room = row5Parts[4] || '';
+        const lecturer = row5Parts[5] || '';
 
         const headers: string[] = [];
         const maxCols = Math.max(row6.length, row7.length);
 
-        for (let i = 0; i < maxCols; i++) {
-          const row6Val = row6[i]?.toString().trim();
-          const row7Val = row7[i]?.toString().trim();
+        for (let index = 0; index < maxCols; index += 1) {
+          const topValue = String(row6[index] ?? '').trim();
+          const bottomValue = String(row7[index] ?? '').trim();
 
-          if (i < 8) {
-            if (i === 0) headers.push(row6Val || 'Sl.No');
-            else if (i === 1) headers.push(row6Val || 'Student Number');
-            else if (i === 2) headers.push('Empty');
-            else if (i === 3) headers.push(row6Val || 'Student Name');
-            else if (i === 4) headers.push(row6Val || 'Program');
-            else if (i === 5) headers.push(row6Val || 'Registered Course');
-            else if (i === 6) headers.push(row6Val || 'Nationality');
-            else if (i === 7) headers.push(row6Val || 'School Status');
+          if (index < 8) {
+            if (index === 0) headers.push(topValue || 'Sl.No');
+            else if (index === 1) headers.push(topValue || 'Student Number');
+            else if (index === 2) headers.push('Empty');
+            else if (index === 3) headers.push(topValue || 'Student Name');
+            else if (index === 4) headers.push(topValue || 'Program');
+            else if (index === 5) headers.push(topValue || 'Registered Course');
+            else if (index === 6) headers.push(topValue || 'Nationality');
+            else if (index === 7) headers.push(topValue || 'School Status');
           } else {
-            if (row6Val && row6Val.includes('/')) {
-              headers.push(`Week_${row6Val.replace(/\//g, '_')}`);
-            } else if (row6Val) {
-              headers.push(row6Val);
-            } else if (row7Val && /^\d+$/.test(row7Val)) {
-              headers.push(`Week_${row7Val}`);
+            if (topValue && topValue.includes('/')) {
+              headers.push(`Week_${topValue.replace(/\//g, '_')}`);
+            } else if (topValue) {
+              headers.push(topValue);
+            } else if (bottomValue && /^\d+$/.test(bottomValue)) {
+              headers.push(`Week_${bottomValue}`);
             } else {
-              headers.push(`Column_${i + 1}`);
+              headers.push(`Column_${index + 1}`);
             }
           }
         }
 
         const coreHeaders = headers.slice(0, 8);
-        const studentData = allData.slice(6).map((row: any) => {
-          const paddedRow = [...row];
-          while (paddedRow.length < headers.length) {
-            paddedRow.push('');
-          }
-          return paddedRow.slice(0, 8);
+        const studentRows = allRows.slice(6).map((row) => {
+          const padded = [...row.map((value) => String(value ?? ''))];
+          while (padded.length < headers.length) padded.push('');
+          return padded.slice(0, 8);
         });
 
-        setParsedMetadata({
-          term,           // "2026_MAR_S1"
-          unitCode,       // "COS20031"
-          unitName,       // "Database Design Project"
-          classType,      // "LE1"
-          group,          // "01"
-          day,            // "Mon"
-          time,           // "10:00 - 12:00"
-          room,           // "B006"
-          lecturer        // "Jason Thomas Chew"
-        });
-
-        setUploadColumns(coreHeaders);
-        setUploadPreview(studentData);
-        setUploadFile(file);
-        setUploadStep(2);
-
-        // Auto-suggest mappings
         const findColumn = (patterns: string[]) => {
-          return coreHeaders.find(h => patterns.some(p => h?.toLowerCase().includes(p.toLowerCase()))) || "";
+          return (
+            coreHeaders.find((header) =>
+              patterns.some((pattern) =>
+                header.toLowerCase().includes(pattern.toLowerCase())
+              )
+            ) || ''
+          );
         };
 
-        setColumnMapping({
-          studentId: findColumn(["student number"]),
-          name: findColumn(["student name"]),
-          program: findColumn(["program"]) || ""
+        setParsedMetadata({
+          term,
+          unitCode,
+          unitName,
+          classType,
+          group,
+          day,
+          time,
+          room,
+          lecturer,
         });
-
+        setUploadColumns(coreHeaders);
+        setUploadPreview(studentRows);
+        setUploadFile(file);
+        setColumnMapping({
+          studentId: findColumn(['student number']),
+          name: findColumn(['student name']),
+          program: findColumn(['program']),
+        });
+        setUploadStep(2);
       } catch (error) {
-        console.error('Error parsing Excel:', error);
-        alert('Error parsing Excel file. Please ensure it is a valid Swinburne attendance form.');
+        console.error(error);
+        window.alert(
+          'Error parsing Excel file. Please check that it follows the expected attendance format.'
+        );
       }
     };
+
     reader.readAsBinaryString(file);
   };
 
-  const handleDrag = useCallback((e: React.DragEvent, active: boolean) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(active);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files?.[0]) {
-      handleFileUpload(e.dataTransfer.files[0]);
-    }
-  }, []);
-
   const confirmImport = () => {
+    if (!uploadFile) return;
+
     if (!columnMapping.studentId || !columnMapping.name) {
-      alert('Please map at least Student ID and Name columns');
+      window.alert('Please map at least Student ID and Name columns.');
       return;
     }
 
-    if (!uploadFile) return;
+    const studentNumberCol = uploadColumns.indexOf(columnMapping.studentId);
+    const nameCol = uploadColumns.indexOf(columnMapping.name);
+    const programCol = columnMapping.program
+      ? uploadColumns.indexOf(columnMapping.program)
+      : -1;
+    const nationalityCol = uploadColumns.findIndex((item) =>
+      item.toLowerCase().includes('nationality')
+    );
+    const schoolStatusCol = uploadColumns.findIndex((item) =>
+      item.toLowerCase().includes('school status')
+    );
 
-    // Debug: Check what metadata we have
-    console.log('ConfirmImport - parsedMetadata:', parsedMetadata);
-    console.log('ConfirmImport - unitCode:', parsedMetadata.unitCode);
-    console.log('ConfirmImport - unitName:', parsedMetadata.unitName);
+    const newStudents: Student[] = uploadPreview
+      .filter((row) => row && row.length > 0 && row[0] !== '')
+      .map((row, index) => {
+        const studentNumber = String(row[studentNumberCol] ?? '').trim();
+        const name = String(row[nameCol] ?? '').trim();
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
+        if (!studentNumber || !name) return null;
 
-        // Re-parse the metadata here to ensure we have it
-        // FIXED HERE SOMEHOW
-        const row4 = allData[2]; // ✅ Term + Unit
-        const row4Text = row4.join(' ');
-        const termMatch = row4Text.match(/Term\s*:\s*([^,\s]+)/i);
-        const term = termMatch ? termMatch[1].trim() : '';
-        const unitMatch = row4Text.match(/Unit\s*:\s*([^-]+)-\s*(.+)/i);
-        const unitCode = unitMatch ? unitMatch[1].trim() : '';
-        const unitName = unitMatch ? unitMatch[2].trim() : '';
-
-        const row5 = allData[3] || [];
-        const row5Text = row5.join(',');
-        const classDetails = row5Text.split(',').map((s: string) => s.trim());
-        const classType = classDetails[0] || '';
-        const group = classDetails[1] || '';
-        const day = classDetails[2] || '';
-        const time = classDetails[3] || '';
-        const room = classDetails[4] || '';
-        const lecturer = classDetails[5] || '';
-
-        // Use the re-parsed metadata or fall back to state
-        const finalMetadata = {
-          term: term || parsedMetadata.term,
-          unitCode: unitCode || parsedMetadata.unitCode,
-          unitName: unitName || parsedMetadata.unitName,
-          classType: classType || parsedMetadata.classType,
-          group: group || parsedMetadata.group,
-          day: day || parsedMetadata.day,
-          time: time || parsedMetadata.time,
-          room: room || parsedMetadata.room,
-          lecturer: lecturer || parsedMetadata.lecturer,
+        return {
+          id: `student-${Date.now()}-${index}`,
+          studentNumber,
+          name,
+          program:
+            programCol >= 0 ? String(row[programCol] ?? '').trim() : '',
+          nationality:
+            nationalityCol >= 0 ? String(row[nationalityCol] ?? '').trim() : '',
+          schoolStatus:
+            schoolStatusCol >= 0 ? String(row[schoolStatusCol] ?? '').trim() : '',
         };
+      })
+      .filter((item): item is Student => item !== null);
 
-        console.log('Final metadata for import:', finalMetadata);
+    if (newStudents.length === 0) {
+      window.alert('No valid students were found. Please check the column mappings.');
+      return;
+    }
 
-        // Rest of the student parsing logic...
-        const studentData = allData.slice(6);
-        const headers = uploadColumns;
-
-        const newStudents: Student[] = studentData
-          .filter((row: any) => row && row.length > 0 && row[0])
-          .map((row: any, idx: number) => {
-            const studentNumberCol = headers.indexOf(columnMapping.studentId);
-            const nameCol = headers.indexOf(columnMapping.name);
-            const programCol = columnMapping.program ? headers.indexOf(columnMapping.program) : -1;
-            const nationalityCol = headers.findIndex((h: string) => h.toLowerCase().includes('nationality'));
-            const schoolStatusCol = headers.findIndex((h: string) => h.toLowerCase().includes('school status'));
-
-            const studentNumber = row[studentNumberCol]?.toString().trim() || "";
-            const name = row[nameCol]?.toString().trim() || "";
-
-            if (!studentNumber || !name) return null;
-
-            return {
-              id: Date.now().toString() + idx,
-              studentNumber,
-              name,
-              program: programCol >= 0 ? row[programCol]?.toString().trim() || "" : "",
-              nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || "" : "",
-              schoolStatus: schoolStatusCol >= 0 ? row[schoolStatusCol]?.toString().trim() || "" : ""
-            };
-          })
-          .filter((s: Student | null): s is Student => s !== null);
-
-        if (newStudents.length === 0) {
-          alert('No valid students found. Please check your column mappings.');
-          return;
-        }
-
-        console.log("ROW 4 TEXT:", row4Text);
-        console.log("ROW 5 TEXT:", row5Text);
-        console.log("UNIT MATCH:", unitMatch);
-        console.log("FINAL METADATA:", finalMetadata);
-
-        // Create the class with the parsed metadata
-        const newClass: ClassData = {
-          id: Date.now().toString(),
-          unitCode: finalMetadata.unitCode || "IMPORTED",
-          unitName: finalMetadata.unitName || "Imported Class",
-          day: finalMetadata.day || "TBA",
-          time: finalMetadata.time || "TBA",
-          location: finalMetadata.room || "TBA",
-          lecturer: finalMetadata.lecturer,
-          classType: finalMetadata.classType,
-          group: finalMetadata.group,
-          term: finalMetadata.term,
-          students: newStudents,
-          sessions: [],
-          createdAt: new Date().toISOString().split('T')[0]
-        };
-
-        console.log('Creating new class:', newClass);
-
-        setClasses(prev => [...prev, newClass]);
-
-        // Reset state
-        setUploadFile(null);
-        setUploadPreview([]);
-        setUploadColumns([]);
-        setColumnMapping({ studentId: "", name: "", program: "" });
-        setParsedMetadata({});
-        setUploadStep(1);
-        setViewMode("list");
-
-      } catch (error) {
-        console.error('Error importing:', error);
-        alert('Error importing students: ' + (error as Error).message);
-      }
+    const importedClass: LecturerClass = {
+      id: `class-${Date.now()}`,
+      unitCode: parsedMetadata.unitCode || 'IMPORTED',
+      unitName: parsedMetadata.unitName || 'Imported Class',
+      day: parsedMetadata.day || 'TBA',
+      time: parsedMetadata.time || 'TBA',
+      location: parsedMetadata.room || 'TBA',
+      lecturer: parsedMetadata.lecturer || 'TBA',
+      classType: parsedMetadata.classType || 'Lecture',
+      group: parsedMetadata.group || '',
+      term: parsedMetadata.term || '',
+      sessionType: mapClassTypeToSessionType(parsedMetadata.classType),
+      students: newStudents,
+      sessions: [],
+      createdAt: new Date().toISOString().split('T')[0],
     };
-    reader.readAsBinaryString(uploadFile);
+
+    setClasses((prev) => [importedClass, ...prev]);
+    setSelectedClassId(importedClass.id);
+
+    try {
+      const existingRaw = localStorage.getItem('lecturerImportedClasses');
+      const existing: LecturerClass[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const updated = [importedClass, ...existing];
+      localStorage.setItem('lecturerImportedClasses', JSON.stringify(updated));
+    } catch (error) {
+      console.error('Failed to save imported class to localStorage:', error);
+    }
+
+    resetUploadState();
+    setViewMode('detail');
   };
 
   const removeStudent = (studentId: string) => {
     if (!selectedClass) return;
-    setClasses(prev => prev.map(c =>
-      c.id === selectedClass.id
-        ? { ...c, students: c.students.filter(s => s.id !== studentId) }
-        : c
-    ));
-    setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
+
+    setClasses((prev) =>
+      prev.map((item) =>
+        item.id === selectedClass.id
+          ? {
+              ...item,
+              students: item.students.filter((student) => student.id !== studentId),
+            }
+          : item
+      )
+    );
   };
 
   const createSession = () => {
     if (!selectedClass) return;
+
     const newSession: Session = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
+      id: `session-${Date.now()}`,
+      date: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      time: selectedClass.time || 'TBA',
+      venue: selectedClass.location || 'TBA',
       attendancePercentage: 0,
-      status: "Scheduled",
+      status: 'Scheduled',
       presentCount: 0,
       absentCount: selectedClass.students.length,
       lateCount: 0,
-      sickCount: 0
+      sickCount: 0,
     };
 
-    setClasses(prev => prev.map(c =>
-      c.id === selectedClass.id
-        ? { ...c, sessions: [...c.sessions, newSession] }
-        : c
-    ));
-    setSelectedClass(prev => prev ? { ...prev, sessions: [...prev.sessions, newSession] } : null);
+    setClasses((prev) =>
+      prev.map((item) =>
+        item.id === selectedClass.id
+          ? { ...item, sessions: [newSession, ...item.sessions] }
+          : item
+      )
+    );
   };
 
   const deleteClass = (classId: string) => {
-    if (confirm("Are you sure you want to delete this class?")) {
-      setClasses(prev => prev.filter(c => c.id !== classId));
-      if (selectedClass?.id === classId) {
-        setSelectedClass(null);
-        setViewMode("list");
+    const confirmed = window.confirm('Are you sure you want to delete this class?');
+    if (!confirmed) return;
+
+    setClasses((prev) => prev.filter((item) => item.id !== classId));
+
+    try {
+      const importedRaw = localStorage.getItem('lecturerImportedClasses');
+      if (importedRaw) {
+        const importedClasses: LecturerClass[] = JSON.parse(importedRaw);
+        const updatedImported = importedClasses.filter((item) => item.id !== classId);
+        localStorage.setItem(
+          'lecturerImportedClasses',
+          JSON.stringify(updatedImported)
+        );
       }
+    } catch (error) {
+      console.error('Failed to update localStorage after delete:', error);
+    }
+
+    if (selectedClassId === classId) {
+      const remaining = classes.filter((item) => item.id !== classId);
+      setSelectedClassId(remaining[0]?.id ?? null);
+      setViewMode('list');
     }
   };
 
-  const renderListView = () => (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wide">Total Classes</span>
-            <span className="p-2 bg-blue-50 rounded-lg"><BarChart3 className="w-4 h-4 text-blue-600" /></span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.classCount}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wide">Total Students</span>
-            <span className="p-2 bg-green-50 rounded-lg"><Users className="w-4 h-4 text-green-600" /></span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.totalStudents}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wide">Sessions Held</span>
-            <span className="p-2 bg-purple-50 rounded-lg"><Calendar className="w-4 h-4 text-purple-600" /></span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.totalSessions}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wide">At Risk</span>
-            <span className="p-2 bg-red-50 rounded-lg"><AlertCircle className="w-4 h-4 text-red-600" /></span>
-          </div>
-          <p className="text-2xl font-bold text-red-600">{stats.atRiskStudents}</p>
-        </div>
-      </div>
+  const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) parseAttendanceWorkbook(file);
+  };
 
-      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white p-4 rounded-xl border shadow-sm">
-        <div className="relative w-full sm:w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search classes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
-          />
+  const handleDragState = (
+    event: DragEvent<HTMLLabelElement>,
+    active: boolean
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(active);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (file) parseAttendanceWorkbook(file);
+  };
+
+  return (
+    <div className="space-y-6">
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
+            Lecturer Panel
+          </p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
+            Classes
+          </h1>
+          <p className="mt-2 text-sm leading-7 text-gray-500">
+            Manage classes, import student rosters, review sessions, and view class
+            details.
+          </p>
         </div>
-        <div className="flex gap-3 w-full sm:w-auto">
-          <button
-            onClick={() => setViewMode("upload")}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/lecturer/upload-roster"
+            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
-            <Upload className="w-4 h-4" />
-            Upload Excel
+            <Upload size={16} />
+            Upload Roster Page
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => {
+              resetUploadState();
+              setViewMode('upload');
+            }}
+            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+          >
+            <Upload size={16} />
+            Quick Upload Here
           </button>
+
           <button
-            onClick={() => setViewMode("create")}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm"
+            type="button"
+            onClick={() => setViewMode('create')}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026]"
           >
-            <Plus className="w-4 h-4" />
+            <Plus size={16} />
             Create Class
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredClasses.map((cls) => {
-          const avgAttendance = cls.sessions.length > 0
-            ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
-            : 0;
-
-          return (
-            <div
-              key={cls.id}
-              className="group bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
-            >
-              <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">{cls.unitCode}</p>
-                      {cls.classType && (
-                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                          {cls.classType}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="font-bold text-gray-900 line-clamp-1">{cls.unitName}</h3>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => deleteClass(cls.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Clock className="w-4 h-4 text-gray-400" />
-                    <span>{cls.day}, {cls.time}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MapPin className="w-4 h-4 text-gray-400" />
-                    <span>{cls.location}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Users className="w-4 h-4 text-gray-400" />
-                    <span>{cls.students.length} Students</span>
-                  </div>
-                  {cls.lecturer && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <GraduationCap className="w-4 h-4 text-gray-400" />
-                      <span>{cls.lecturer}</span>
-                    </div>
-                  )}
-                </div>
-
-                {cls.sessions.length > 0 && (
-                  <div className="mb-4 pt-3 border-t">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Avg Attendance</span>
-                      <span className={`font-semibold ${avgAttendance >= 80 ? 'text-green-600' : avgAttendance >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                        {avgAttendance}%
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${avgAttendance >= 80 ? 'bg-green-500' : avgAttendance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-                        style={{ width: `${avgAttendance}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={() => { setSelectedClass(cls); setViewMode("detail"); }}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <Eye className="w-4 h-4" />
-                    View
-                  </button>
-                  <button
-                    onClick={() => {/* Navigate to attendance page */ }}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                  >
-                    <Play className="w-4 h-4" />
-                    Start
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const renderCreateView = () => (
-    <div className="max-w-2xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
-      <div className="bg-white rounded-xl border shadow-sm">
-        <div className="p-6 border-b">
-          <button
-            onClick={() => setViewMode("list")}
-            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to Classes
-          </button>
-          <h2 className="text-xl font-bold text-gray-900">Create New Class</h2>
-          <p className="text-sm text-gray-500 mt-1">Set up a new class for attendance tracking</p>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Total Classes
+            </p>
+            <BookOpen size={18} className="text-gray-300" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-gray-900">
+            {stats.classCount}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">Lecturer teaching units</p>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Unit Code <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                placeholder="e.g., COS40005"
-                value={createForm.unitCode}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, unitCode: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm uppercase"
-              />
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Total Students
+            </p>
+            <Users size={18} className="text-gray-300" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-gray-900">
+            {stats.totalStudents}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">Across all classes</p>
+        </div>
+
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Total Sessions
+            </p>
+            <CalendarDays size={18} className="text-gray-300" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-gray-900">
+            {stats.totalSessions}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">Recorded class sessions</p>
+        </div>
+
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Avg. Attendance
+            </p>
+            <CheckCircle2 size={18} className="text-gray-300" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-[#E4002B]">
+            {stats.avgAttendance}%
+          </p>
+          <p className="mt-2 text-xs text-gray-500">Sample overview rate</p>
+        </div>
+      </section>
+
+      {viewMode === 'list' && (
+        <>
+          <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div className="grid gap-4 lg:grid-cols-[1.5fr_220px]">
+              <div>
+                <label
+                  htmlFor="class-search"
+                  className="mb-2 block text-sm font-semibold text-gray-700"
+                >
+                  Search classes
+                </label>
+
+                <div className="relative">
+                  <Search
+                    size={18}
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    id="class-search"
+                    type="text"
+                    placeholder="Search by unit code, unit name, or lecturer"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="class-type-filter"
+                  className="mb-2 block text-sm font-semibold text-gray-700"
+                >
+                  Filter by type
+                </label>
+
+                <select
+                  id="class-type-filter"
+                  value={selectedType}
+                  onChange={(e) =>
+                    setSelectedType(e.target.value as 'All' | SessionType)
+                  }
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                >
+                  <option value="All">All</option>
+                  <option value="Lecture">Lecture</option>
+                  <option value="Tutorial">Tutorial</option>
+                  <option value="Lab">Lab</option>
+                </select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Unit Name <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                placeholder="e.g., Final Year Project"
-                value={createForm.unitName}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, unitName: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
-              />
+          </section>
+
+          <section className="space-y-4">
+            {filteredClasses.length > 0 ? (
+              filteredClasses.map((item) => {
+                const classSessionType =
+                  item.sessionType || mapClassTypeToSessionType(item.classType);
+
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm transition hover:shadow-md"
+                  >
+                    <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-[#E4002B]">
+                            {item.unitCode}
+                          </span>
+
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getSessionTypeClasses(
+                              classSessionType
+                            )}`}
+                          >
+                            {classSessionType}
+                          </span>
+                        </div>
+
+                        <h2 className="text-xl font-black tracking-tight text-gray-900">
+                          {item.unitName}
+                        </h2>
+
+                        <p className="mt-2 text-sm text-gray-500">
+                          Lecturer: {item.lecturer || 'TBA'}
+                        </p>
+
+                        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                          <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                              <CalendarDays size={14} />
+                              Day
+                            </div>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {item.day}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                              <Clock3 size={14} />
+                              Time
+                            </div>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {item.time}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                              <MapPin size={14} />
+                              Venue
+                            </div>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {item.location}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                              <Users size={14} />
+                              Students
+                            </div>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {item.students.length}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-full xl:w-[240px]">
+                        <div className="rounded-3xl border border-rose-100 bg-rose-50/60 p-5">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#E4002B]">
+                            Class Overview
+                          </p>
+
+                          <p
+                            className={`mt-3 text-4xl font-black tracking-tight ${getAttendanceTextClasses(
+                              item.sessions.length > 0
+                                ? Math.round(
+                                    item.sessions.reduce(
+                                      (sum, session) =>
+                                        sum + session.attendancePercentage,
+                                      0
+                                    ) / item.sessions.length
+                                  )
+                                : 0
+                            )}`}
+                          >
+                            {item.sessions.length > 0
+                              ? Math.round(
+                                  item.sessions.reduce(
+                                    (sum, session) => sum + session.attendancePercentage,
+                                    0
+                                  ) / item.sessions.length
+                                )
+                              : 0}
+                            %
+                          </p>
+
+                          <p className="mt-2 text-xs text-gray-500">
+                            Average attendance for this class
+                          </p>
+
+                          <div className="mt-5 space-y-3">
+                            <button
+                              type="button"
+                              onClick={() => openClassDetail(item.id)}
+                              className="flex w-full items-center justify-between rounded-2xl border border-white bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                            >
+                              <span>View Details</span>
+                              <ChevronRight size={16} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => deleteClass(item.id)}
+                              className="flex w-full items-center justify-between rounded-2xl border border-white bg-white px-4 py-3 text-sm font-semibold text-red-600 transition hover:border-red-100 hover:bg-red-50"
+                            >
+                              <span>Delete Class</span>
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-10 text-center shadow-sm">
+                <h2 className="text-xl font-bold text-gray-900">No classes found</h2>
+                <p className="mt-3 text-sm leading-7 text-gray-500">
+                  Try changing the search term or filter.
+                </p>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {viewMode === 'create' && (
+        <section className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
+                Create Class
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-gray-900">
+                Add a new class
+              </h2>
+              <p className="mt-2 text-sm leading-7 text-gray-500">
+                Create a lecturer class manually before connecting it to backend data.
+              </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Day</label>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Unit Code
+              </label>
+              <input
+                type="text"
+                value={createForm.unitCode}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, unitCode: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Unit Name
+              </label>
+              <input
+                type="text"
+                value={createForm.unitName}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, unitName: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Day
+              </label>
               <select
                 value={createForm.day}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, day: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm bg-white"
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, day: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
               >
-                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(day => (
-                  <option key={day} value={day}>{day}</option>
-                ))}
+                <option>Monday</option>
+                <option>Tuesday</option>
+                <option>Wednesday</option>
+                <option>Thursday</option>
+                <option>Friday</option>
               </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Time</label>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Time
+              </label>
               <input
                 type="text"
-                placeholder="e.g., 09:00 - 11:00"
+                placeholder="e.g. 09:00 - 11:00"
                 value={createForm.time}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, time: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, time: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
               />
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Location (Optional)</label>
-            <input
-              type="text"
-              placeholder="e.g., B201, G603"
-              value={createForm.location}
-              onChange={(e) => setCreateForm(prev => ({ ...prev, location: e.target.value }))}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
-          <button
-            onClick={() => setViewMode("list")}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreateClass}
-            disabled={!createForm.unitCode || !createForm.unitName}
-            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          >
-            Create Class
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderUploadView = () => (
-    <div className="max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
-      <div className="bg-white rounded-xl border shadow-sm">
-        <div className="p-6 border-b">
-          <button
-            onClick={() => {
-              setViewMode("list");
-              setUploadStep(1);
-              setUploadFile(null);
-              setUploadPreview([]);
-              setParsedMetadata({});
-            }}
-            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to Classes
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${uploadStep >= 1 ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-600'}`}>1</span>
-              <span className={`text-sm font-medium ${uploadStep >= 1 ? 'text-gray-900' : 'text-gray-500'}`}>Upload</span>
-            </div>
-            <div className="w-12 h-0.5 bg-gray-200">
-              <div className={`h-full bg-red-600 transition-all duration-300 ${uploadStep >= 2 ? 'w-full' : 'w-0'}`} />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${uploadStep >= 2 ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-600'}`}>2</span>
-              <span className={`text-sm font-medium ${uploadStep >= 2 ? 'text-gray-900' : 'text-gray-500'}`}>Map Columns</span>
-            </div>
-          </div>
-        </div>
-
-        {uploadStep === 1 ? (
-          <div className="p-8">
-            <div
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${isDragging ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-              onDragEnter={(e) => handleDrag(e, true)}
-              onDragLeave={(e) => handleDrag(e, false)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-            >
-              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileSpreadsheet className="w-8 h-8 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Swinburne Attendance Form</h3>
-              <p className="text-sm text-gray-500 mb-2 max-w-md mx-auto">
-                Upload the official Swinburne attendance Excel file.
-              </p>
-              <p className="text-xs text-gray-400 mb-6 max-w-md mx-auto">
-                The system will automatically extract class information from rows 4-5 and student data from row 8 onwards.
-              </p>
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-                className="hidden"
-                id="file-upload"
-              />
-              <label
-                htmlFor="file-upload"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors cursor-pointer shadow-sm"
-              >
-                <Upload className="w-4 h-4" />
-                Choose File
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Location
               </label>
-              <p className="text-xs text-gray-400 mt-4">Supports .xlsx, .xls • Max 10MB</p>
+              <input
+                type="text"
+                value={createForm.location}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, location: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Lecturer
+              </label>
+              <input
+                type="text"
+                value={createForm.lecturer}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, lecturer: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Class Type
+              </label>
+              <select
+                value={createForm.classType}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, classType: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+              >
+                <option>Lecture</option>
+                <option>Tutorial</option>
+                <option>Lab</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Group
+              </label>
+              <input
+                type="text"
+                value={createForm.group}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, group: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Term
+              </label>
+              <input
+                type="text"
+                value={createForm.term}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, term: e.target.value }))
+                }
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+              />
             </div>
           </div>
-        ) : (
-          <div className="p-6">
-            {Object.keys(parsedMetadata).length > 0 && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Detected Class Information
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  {parsedMetadata.unitCode && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Unit Code</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.unitCode}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.unitName && (
-                    <div className="col-span-2">
-                      <span className="text-blue-600 text-xs uppercase">Unit Name</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.unitName}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.classType && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Type</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.classType}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.group && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Group</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.group}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.day && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Day</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.day}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.time && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Time</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.time}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.room && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Room</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.room}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.lecturer && (
-                    <div className="col-span-2">
-                      <span className="text-blue-600 text-xs uppercase">Lecturer</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.lecturer}</p>
-                    </div>
-                  )}
+
+          <div className="mt-8">
+            <button
+              type="button"
+              onClick={handleCreateClass}
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
+            >
+              <Plus size={16} />
+              Create Class
+            </button>
+          </div>
+        </section>
+      )}
+
+      {viewMode === 'upload' && (
+        <section className="space-y-6">
+          <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
+                  Upload Roster
+                </p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-gray-900">
+                  Import Swinburne attendance sheet
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-gray-500">
+                  Upload an Excel roster, preview student data, map the required
+                  columns, and confirm import.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  resetUploadState();
+                  setViewMode('list');
+                }}
+                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+            </div>
+
+            {uploadStep === 1 && (
+              <div className="space-y-6">
+                <label
+                  htmlFor="roster-upload"
+                  onDragEnter={(e) => handleDragState(e, true)}
+                  onDragOver={(e) => handleDragState(e, true)}
+                  onDragLeave={(e) => handleDragState(e, false)}
+                  onDrop={handleDrop}
+                  className={`block cursor-pointer rounded-[28px] border-2 border-dashed p-10 text-center transition ${
+                    isDragging
+                      ? 'border-[#E4002B] bg-rose-50'
+                      : 'border-gray-200 bg-gray-50 hover:border-[#E4002B]/40 hover:bg-rose-50/40'
+                  }`}
+                >
+                  <input
+                    id="roster-upload"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                  />
+
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-white shadow-sm">
+                    <FileSpreadsheet size={28} className="text-[#E4002B]" />
+                  </div>
+
+                  <h3 className="mt-5 text-xl font-black tracking-tight text-gray-900">
+                    Drop Excel file here or click to upload
+                  </h3>
+                  <p className="mt-3 text-sm leading-7 text-gray-500">
+                    Supports .xlsx and .xls attendance roster files.
+                  </p>
+                </label>
+
+                <div className="rounded-3xl border border-rose-100 bg-rose-50 p-5">
+                  <p className="text-sm font-bold text-[#E4002B]">Expected file flow</p>
+                  <p className="mt-2 text-sm leading-7 text-gray-700">
+                    The upload parser reads the attendance sheet metadata, builds a
+                    student preview, and lets you confirm the roster before creating
+                    the class.
+                  </p>
                 </div>
               </div>
             )}
 
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Excel Columns</h3>
-              <p className="text-sm text-gray-500">Verify the column mappings for student data. The system has auto-detected based on the Swinburne format.</p>
-            </div>
+            {uploadStep === 2 && (
+              <div className="space-y-6">
+                <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+                  <div className="space-y-6">
+                    <div className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5">
+                      <h3 className="text-base font-bold text-gray-900">
+                        Parsed Metadata
+                      </h3>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                  Student ID <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={columnMapping.studentId}
-                  onChange={(e) => setColumnMapping(prev => ({ ...prev, studentId: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
-                >
-                  <option value="">Select column...</option>
-                  {uploadColumns.map((col, idx) => (
-                    <option key={idx} value={col}>{col}</option>
-                  ))}
-                </select>
-                {columnMapping.studentId && (
-                  <div className="flex items-center gap-1 text-xs text-green-600">
-                    <Check className="w-3 h-3" />
-                    <span>Mapped to "{columnMapping.studentId}"</span>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Term
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.term || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Unit Code
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.unitCode || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3 sm:col-span-2">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Unit Name
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.unitName || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Class Type
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.classType || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Group
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.group || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Day
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.day || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Time
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.time || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Room
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.room || '—'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl bg-white px-4 py-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                            Lecturer
+                          </p>
+                          <p className="mt-2 text-sm font-semibold text-gray-800">
+                            {parsedMetadata.lecturer || '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5">
+                      <h3 className="text-base font-bold text-gray-900">
+                        Column Mapping
+                      </h3>
+
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label className="mb-2 block text-sm font-semibold text-gray-700">
+                            Student ID Column
+                          </label>
+                          <select
+                            value={columnMapping.studentId}
+                            onChange={(e) =>
+                              setColumnMapping((prev) => ({
+                                ...prev,
+                                studentId: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                          >
+                            <option value="">Select column</option>
+                            {uploadColumns.map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-semibold text-gray-700">
+                            Student Name Column
+                          </label>
+                          <select
+                            value={columnMapping.name}
+                            onChange={(e) =>
+                              setColumnMapping((prev) => ({
+                                ...prev,
+                                name: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                          >
+                            <option value="">Select column</option>
+                            {uploadColumns.map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-semibold text-gray-700">
+                            Program Column
+                          </label>
+                          <select
+                            value={columnMapping.program}
+                            onChange={(e) =>
+                              setColumnMapping((prev) => ({
+                                ...prev,
+                                program: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                          >
+                            <option value="">Optional</option>
+                            {uploadColumns.map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={columnMapping.name}
-                  onChange={(e) => setColumnMapping(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
-                >
-                  <option value="">Select column...</option>
-                  {uploadColumns.map((col, idx) => (
-                    <option key={idx} value={col}>{col}</option>
-                  ))}
-                </select>
-                {columnMapping.name && (
-                  <div className="flex items-center gap-1 text-xs text-green-600">
-                    <Check className="w-3 h-3" />
-                    <span>Mapped to "{columnMapping.name}"</span>
+                  <div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
+                    <div className="border-b border-gray-100 px-6 py-4">
+                      <h3 className="text-base font-bold text-gray-900">
+                        Student Preview
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Preview of imported rows before confirmation
+                      </p>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-gray-50 text-gray-500">
+                          <tr>
+                            {uploadColumns.slice(0, 8).map((column) => (
+                              <th key={column} className="px-4 py-3 font-semibold">
+                                {column}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {uploadPreview.slice(0, 12).map((row, rowIndex) => (
+                            <tr key={rowIndex} className="border-t border-gray-100">
+                              {row.map((cell, cellIndex) => (
+                                <td
+                                  key={`${rowIndex}-${cellIndex}`}
+                                  className="px-4 py-3 text-gray-700"
+                                >
+                                  {cell || '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="px-6 py-4 text-xs text-gray-500">
+                      Showing up to 12 preview rows.
+                    </div>
                   </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Program (Optional)</label>
-                <select
-                  value={columnMapping.program}
-                  onChange={(e) => setColumnMapping(prev => ({ ...prev, program: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
-                >
-                  <option value="">Select column...</option>
-                  {uploadColumns.map((col, idx) => (
-                    <option key={idx} value={col}>{col}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Student Data Preview </h4>
-              <div className="border rounded-lg overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      {uploadColumns.slice(0, 7).map((col, idx) => (
-                        <th key={idx} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {uploadPreview.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        {uploadColumns.slice(0, 7).map((_, colIdx) => (
-                          <td key={colIdx} className="px-4 py-2 text-gray-600 whitespace-nowrap">
-                            {row[colIdx]?.toString() || "-"}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setUploadStep(1)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Back
-              </button>
-              <button
-                onClick={confirmImport}
-                disabled={!columnMapping.studentId || !columnMapping.name}
-                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Confirm Import
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderDetailView = () => {
-    if (!selectedClass) return null;
-
-    const avgAttendance = selectedClass.sessions.length > 0
-      ? Math.round(selectedClass.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / selectedClass.sessions.length)
-      : 0;
-
-    const atRiskCount = selectedClass.students.filter(s => {
-      const studentAvg = selectedClass.sessions.length > 0 ? avgAttendance : 100;
-      return studentAvg < 80;
-    }).length;
-
-    return (
-      <div className="animate-in slide-in-from-right-4 duration-300">
-        <div className="bg-white rounded-xl border shadow-sm mb-6 overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
-          <div className="p-6">
-            <button
-              onClick={() => setViewMode("list")}
-              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Back to Classes
-            </button>
-
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="px-2.5 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
-                    {selectedClass.unitCode}
-                  </span>
-                  {selectedClass.classType && (
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
-                      {selectedClass.classType} • Group {selectedClass.group}
-                    </span>
-                  )}
-                  <span className="text-sm text-gray-500">{selectedClass.createdAt}</span>
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900">{selectedClass.unitName}</h1>
-                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 flex-wrap">
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4" />
-                    {selectedClass.day}, {selectedClass.time}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4" />
-                    {selectedClass.location}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Users className="w-4 h-4" />
-                    {selectedClass.students.length} Students
-                  </span>
-                  {selectedClass.lecturer && (
-                    <span className="flex items-center gap-1.5">
-                      <GraduationCap className="w-4 h-4" />
-                      {selectedClass.lecturer}
-                    </span>
-                  )}
-                </div>
-              </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setViewMode("upload")}
-                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload Students
-                </button>
-                <button
-                  onClick={() => {/* Navigate to attendance */ }}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm"
-                >
-                  <Play className="w-4 h-4" />
-                  Start Attendance
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex border-t">
-            {[
-              { id: "students", label: "Students", icon: Users, count: selectedClass.students.length },
-              { id: "sessions", label: "Sessions", icon: Calendar, count: selectedClass.sessions.length },
-              { id: "summary", label: "Summary", icon: BarChart3 }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors relative ${activeTab === tab.id ? 'text-red-600' : 'text-gray-600 hover:text-gray-900'}`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-                {tab.count !== undefined && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === tab.id ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {tab.count}
-                  </span>
-                )}
-                {activeTab === tab.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border shadow-sm min-h-[400px]">
-          {activeTab === "students" && (
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900">Student List</h3>
-                <button className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                  <Plus className="w-4 h-4" />
-                  Add Student
-                </button>
-              </div>
-
-              {selectedClass.students.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-b">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Student ID</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Name</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Program</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Nationality</th>
-                        <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {selectedClass.students.map((student) => (
-                        <tr key={student.id} className="hover:bg-gray-50 group">
-                          <td className="px-4 py-3 font-mono text-gray-600">{student.studentNumber}</td>
-                          <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
-                          <td className="px-4 py-3 text-gray-600 text-sm">{student.program || "-"}</td>
-                          <td className="px-4 py-3 text-gray-600 text-sm">{student.nationality || "-"}</td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded">
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => removeStudent(student.id)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Users className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <h4 className="text-gray-900 font-medium mb-1">No students yet</h4>
-                  <p className="text-sm text-gray-500 mb-4">Upload a Swinburne attendance form to import students</p>
+                <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => setViewMode("upload")}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                    type="button"
+                    onClick={confirmImport}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
                   >
-                    <Upload className="w-4 h-4" />
-                    Upload Students
+                    <CheckCircle2 size={16} />
+                    Confirm Import
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={resetUploadState}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                  >
+                    <X size={16} />
+                    Reset Upload
                   </button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
-          {activeTab === "sessions" && (
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900">Attendance Sessions</h3>
+      {viewMode === 'detail' && selectedClass && (
+        <section className="space-y-6">
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-[#E4002B]">
+                    {selectedClass.unitCode}
+                  </span>
+
+                  <span
+                    className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getSessionTypeClasses(
+                      selectedClass.sessionType ||
+                        mapClassTypeToSessionType(selectedClass.classType)
+                    )}`}
+                  >
+                    {selectedClass.sessionType ||
+                      mapClassTypeToSessionType(selectedClass.classType)}
+                  </span>
+                </div>
+
+                <h2 className="text-2xl font-black tracking-tight text-gray-900">
+                  {selectedClass.unitName}
+                </h2>
+
+                <p className="mt-2 text-sm text-gray-500">
+                  Lecturer: {selectedClass.lecturer || 'TBA'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={createSession}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                 >
-                  <Plus className="w-4 h-4" />
+                  <ArrowLeft size={16} />
+                  Back to List
+                </button>
+
+                <Link
+                  href="/lecturer/attendance"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                >
+                  <Eye size={16} />
+                  Open Attendance
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={createSession}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
+                >
+                  <Plus size={16} />
                   Create Session
                 </button>
               </div>
-
-              {selectedClass.sessions.length > 0 ? (
-                <div className="space-y-3">
-                  {selectedClass.sessions.map((session) => (
-                    <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg hover:border-red-300 transition-colors group">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${session.status === 'Completed' ? 'bg-green-100' : session.status === 'Ongoing' ? 'bg-amber-100' : 'bg-gray-100'}`}>
-                          <Calendar className={`w-6 h-6 ${session.status === 'Completed' ? 'text-green-600' : session.status === 'Ongoing' ? 'text-amber-600' : 'text-gray-600'}`} />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-900">{session.date}</p>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                              {session.presentCount} Present
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <X className="w-3.5 h-3.5 text-red-500" />
-                              {session.absentCount} Absent
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-sm font-semibold ${session.attendancePercentage >= 80 ? 'text-green-600' : 'text-amber-600'}`}>
-                              {session.attendancePercentage}%
-                            </span>
-                            <span className="text-xs text-gray-500">attendance</span>
-                          </div>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${session.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                            session.status === 'Ongoing' ? 'bg-amber-100 text-amber-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                            {session.status}
-                          </span>
-                        </div>
-                        <button className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
-                          <ArrowRight className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Calendar className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <h4 className="text-gray-900 font-medium mb-1">No sessions yet</h4>
-                  <p className="text-sm text-gray-500 mb-4">Create your first attendance session</p>
-                  <button
-                    onClick={createSession}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Create Session
-                  </button>
-                </div>
-              )}
             </div>
-          )}
 
-          {activeTab === "summary" && (
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-blue-900">Average Attendance</span>
-                    <TrendingUp className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <p className="text-3xl font-bold text-blue-900">{avgAttendance}%</p>
-                  <p className="text-xs text-blue-700 mt-1">Across all sessions</p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl bg-gray-50 px-4 py-4">
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                  <CalendarDays size={14} />
+                  Day
                 </div>
-
-                <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl border border-red-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-red-900">At Risk Students</span>
-                    <TrendingDown className="w-5 h-5 text-red-600" />
-                  </div>
-                  <p className="text-3xl font-bold text-red-900">{atRiskCount}</p>
-                  <p className="text-xs text-red-700 mt-1">Below 80% attendance</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-green-900">Total Sessions</span>
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  </div>
-                  <p className="text-3xl font-bold text-green-900">{selectedClass.sessions.length}</p>
-                  <p className="text-xs text-green-700 mt-1">Completed sessions</p>
-                </div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {selectedClass.day}
+                </p>
               </div>
 
-              <div className="border rounded-xl p-4">
-                <h4 className="font-semibold text-gray-900 mb-4">Attendance Trend</h4>
-                {selectedClass.sessions.length > 0 ? (
-                  <div className="h-64 flex items-end justify-between gap-2">
-                    {selectedClass.sessions.map((session, idx) => (
-                      <div key={session.id} className="flex-1 flex flex-col items-center gap-2">
-                        <div
-                          className={`w-full rounded-t-lg transition-all duration-500 ${session.attendancePercentage >= 80 ? 'bg-green-500' : session.attendancePercentage >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-                          style={{ height: `${session.attendancePercentage * 2}px` }}
-                        />
-                        <span className="text-xs text-gray-500 rotate-0 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">
-                          {session.date.slice(5)}
-                        </span>
+              <div className="rounded-2xl bg-gray-50 px-4 py-4">
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                  <Clock3 size={14} />
+                  Time
+                </div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {selectedClass.time}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 px-4 py-4">
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                  <MapPin size={14} />
+                  Venue
+                </div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {selectedClass.location}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-gray-50 px-4 py-4">
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                  <Users size={14} />
+                  Students
+                </div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {selectedClass.students.length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
+              <div className="border-b border-gray-100 px-6 py-4">
+                <h3 className="text-base font-bold text-gray-900">Students</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Enrolled student list for this class
+                </p>
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {selectedClass.students.length > 0 ? (
+                  selectedClass.students.map((student) => (
+                    <div
+                      key={student.id}
+                      className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">
+                          {student.name}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {student.studentNumber}
+                        </p>
+                        {student.program && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            {student.program}
+                          </p>
+                        )}
                       </div>
-                    ))}
-                  </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeStudent(student.id)}
+                        className="self-start rounded-2xl border border-red-100 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))
                 ) : (
-                  <div className="h-64 flex items-center justify-center text-gray-400">
-                    No session data available
+                  <div className="px-6 py-8 text-sm text-gray-500">
+                    No students added yet.
                   </div>
                 )}
               </div>
             </div>
-          )}
-        </div>
-      </div>
-    );
-  };
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto">
-        {viewMode === "list" && renderListView()}
-        {viewMode === "create" && renderCreateView()}
-        {viewMode === "upload" && renderUploadView()}
-        {viewMode === "detail" && renderDetailView()}
-      </div>
+            <div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
+              <div className="border-b border-gray-100 px-6 py-4">
+                <h3 className="text-base font-bold text-gray-900">Sessions</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Session records and attendance progress
+                </p>
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {selectedClass.sessions.length > 0 ? (
+                  selectedClass.sessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getStatusClasses(
+                              session.status
+                            )}`}
+                          >
+                            {session.status}
+                          </span>
+                        </div>
+
+                        <p className="text-sm font-bold text-gray-900">
+                          {session.date}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {session.time} · {session.venue}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Present: {session.presentCount} · Absent: {session.absentCount}{' '}
+                          · Late: {session.lateCount} · Sick: {session.sickCount}
+                        </p>
+                      </div>
+
+                      <div className="text-left sm:text-right">
+                        <p
+                          className={`text-lg font-black tracking-tight ${getAttendanceTextClasses(
+                            session.attendancePercentage
+                          )}`}
+                        >
+                          {session.attendancePercentage}%
+                        </p>
+                        <p className="text-xs text-gray-500">attendance rate</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-6 py-8 text-sm text-gray-500">
+                    No sessions recorded yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

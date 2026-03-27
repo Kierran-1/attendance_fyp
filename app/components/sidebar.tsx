@@ -178,7 +178,7 @@ export default function Sidebar({ panelTitle, menu, isOpen, onClose }: SidebarPr
               </button>
 
               <div className="hs-dropdown-menu hidden w-48 bg-white border border-gray-200 rounded shadow mt-1">
-                <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                <a  href="/lecturer/profile" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
                   My account
                 </a>
 
