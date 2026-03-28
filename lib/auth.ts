@@ -51,28 +51,45 @@ export const authOptions: AuthOptions = {
       // Guard: adapter hasn't persisted the user yet (shouldn't happen, but be safe)
       if (!dbUser) return true;
 
-      const hasProfile =
-        dbUser.studentProfile ||
-        dbUser.lecturerProfile;
+      const hasProfile = dbUser.studentProfile || dbUser.lecturerProfile;
 
       if (!hasProfile) {
-        const role = getRoleFromEmail(user.email);
+        // Respect any manually-assigned role already in the DB.
+        // Only fall back to email-derived role for brand-new users (default STUDENT role
+        // and email clearly indicates LECTURER).
+        const emailRole = getRoleFromEmail(user.email);
+        const role =
+          dbUser.role === UserRole.LECTURER
+            ? UserRole.LECTURER
+            : emailRole === UserRole.LECTURER
+            ? UserRole.LECTURER
+            : UserRole.STUDENT;
 
-        await prisma.user.update({
-          where: { id: dbUser.id },
-          data: { role },
-        });
+        if (role !== dbUser.role) {
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: { role },
+          });
+        }
 
         if (role === UserRole.STUDENT) {
+          // Derive a studentId from the email prefix; fall back to a timestamped
+          // value if that ID is already taken by an imported student.
+          const baseId = user.email.split('@')[0];
+          const taken = await prisma.studentProfile.findUnique({
+            where: { studentId: baseId },
+          });
           await prisma.studentProfile.create({
             data: {
               userId: dbUser.id,
-              studentId: user.email.split('@')[0],
+              studentId: taken ? `${baseId}-${Date.now()}` : baseId,
             },
           });
-        } else if (role === UserRole.LECTURER) {
-          await prisma.lecturerProfile.create({
-            data: { userId: dbUser.id },
+        } else {
+          await prisma.lecturerProfile.upsert({
+            where: { userId: dbUser.id },
+            update: {},
+            create: { userId: dbUser.id },
           });
         }
       }

@@ -38,6 +38,10 @@ export async function GET() {
       name: c.name,
       semester: c.semester,
       year: c.year,
+      sessionType: c.sessionType,
+      venue: c.venue,
+      scheduleDay: c.scheduleDay,
+      scheduleTime: c.scheduleTime,
       enrollmentCount: c._count.enrollments,
     })),
   });

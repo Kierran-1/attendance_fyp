@@ -182,13 +182,38 @@ export async function GET() {
     })
   );
 
+  const activeSession = await prisma.attendanceSession.findFirst({
+    where: { lecturerId: lecturerProfile.id, isActive: true },
+    include: {
+      course: { select: { code: true, name: true, venue: true, sessionType: true } },
+      _count: { select: { attendanceRecords: true } },
+    },
+  });
+
+  const activeSessionCourseEnrollments = activeSession
+    ? await prisma.courseEnrollment.count({ where: { courseId: activeSession.courseId } })
+    : 0;
+
   return NextResponse.json({
     stats: {
       todaysClasses,
       avgAttendancePct,
       atRiskCount: atRiskStudents.length,
       totalStudents,
+      totalCourses: courses.length,
     },
+    activeSession: activeSession
+      ? {
+          id: activeSession.id,
+          courseCode: activeSession.course.code,
+          courseName: activeSession.course.name,
+          sessionType: activeSession.course.sessionType,
+          venue: activeSession.course.venue ?? '—',
+          startTime: activeSession.startTime,
+          checkedInCount: activeSession._count.attendanceRecords,
+          totalStudents: activeSessionCourseEnrollments,
+        }
+      : null,
     todaysCourses: courses.map((c) => {
       const todaySession = c.attendanceSessions[0] ?? null;
       return {
