@@ -120,22 +120,16 @@ export async function POST(request: NextRequest) {
           data: {
             userId: user.id,
             studentId,
-            ...(program && { program }),
-            ...(nationality && { nationality }),
-            ...(schoolStatus && { schoolStatus }),
+            ...(program && { major: program }),
           },
         });
         if (!existingUser) created++;
       } else {
         // Update optional fields if provided
-        if (program || nationality || schoolStatus) {
+        if (program) {
           await prisma.studentProfile.update({
             where: { id: studentProfile.id },
-            data: {
-              ...(program && { program }),
-              ...(nationality && { nationality }),
-              ...(schoolStatus && { schoolStatus }),
-            },
+            data: { major: program },
           });
         }
       }

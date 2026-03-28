@@ -74,10 +74,10 @@ export async function GET(request: NextRequest) {
   const termString = `Term : ${course.year}_MAR_S1 - ${course.year} March Semester 1, Unit : ${course.code} - ${course.name}`;
   const classInfo = [
     course.classType ?? '',
-    course.section ?? '',
-    course.dayOfWeek ?? '',
-    course.classTime ?? '',
-    course.room ?? '',
+    course.classGroup ?? '',
+    course.scheduleDay ?? '',
+    course.scheduleTime ?? '',
+    course.venue ?? '',
     lecturerName,
   ]
     .filter(Boolean)
@@ -148,10 +148,10 @@ export async function GET(request: NextRequest) {
     ws[`A${row}`] = { v: `${i + 1}L` };
     ws[`B${row}`] = { v: student.studentId };
     ws[`D${row}`] = { v: student.user.name ?? '' };
-    ws[`E${row}`] = { v: student.program ?? student.major ?? '' };
+    ws[`E${row}`] = { v: student.major ?? '' };
     ws[`F${row}`] = { v: course.code };
-    ws[`G${row}`] = { v: student.nationality ?? '' };
-    ws[`H${row}`] = { v: student.schoolStatus ?? 'Active' };
+    ws[`G${row}`] = { v: '' };
+    ws[`H${row}`] = { v: 'Active' };
 
     for (let si = 0; si < sessions.length; si++) {
       const colIdx = sessionColStart + si;
