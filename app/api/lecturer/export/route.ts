@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
   const lecturerName = profile.user.name ?? 'Lecturer';
   const termString = `Term : ${course.year}_MAR_S1 - ${course.year} March Semester 1, Unit : ${course.code} - ${course.name}`;
   const classInfo = [
-    course.classType ?? '',
+    course.sessionType ?? '',
     course.classGroup ?? '',
     course.scheduleDay ?? '',
     course.scheduleTime ?? '',

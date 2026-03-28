@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { ClassType } from '@prisma/client';
+import { SessionType } from '@prisma/client';
 import crypto from 'crypto';
 
 // DEV ONLY — seeds 3 courses, 15 students, 8 weeks of sessions, and varied attendance records.
@@ -30,9 +30,9 @@ const STUDENTS = [
 const ATTENDANCE_RATES = [0.92, 0.88, 0.95, 0.85, 0.90, 0.88, 0.92, 0.85, 0.90, 0.88, 0.62, 0.55, 0.68, 0.40, 0.35];
 
 const COURSES_DATA = [
-  { code: 'COS40005', name: 'Computing Technology Project',    semester: 'Sem 1', year: 2026, capacity: 40, classType: ClassType.LECTURE, classGroup: '01', scheduleDay: 'Tue', scheduleTime: '13:00 - 15:00', venue: 'G603' },
-  { code: 'COS20019', name: 'Web Technology',                  semester: 'Sem 1', year: 2026, capacity: 60, classType: ClassType.LECTURE, classGroup: '01', scheduleDay: 'Mon', scheduleTime: '09:00 - 11:00', venue: 'G501' },
-  { code: 'COS30049', name: 'Computing Technology Innovation', semester: 'Sem 1', year: 2026, capacity: 50, classType: ClassType.LECTURE, classGroup: '02', scheduleDay: 'Wed', scheduleTime: '11:00 - 13:00', venue: 'G602' },
+  { code: 'COS40005', name: 'Computing Technology Project',    semester: 'Sem 1', year: 2026, capacity: 40, sessionType: SessionType.LECTURE, classGroup: '01', scheduleDay: 'Tue', scheduleTime: '13:00 - 15:00', venue: 'G603' },
+  { code: 'COS20019', name: 'Web Technology',                  semester: 'Sem 1', year: 2026, capacity: 60, sessionType: SessionType.LECTURE, classGroup: '01', scheduleDay: 'Mon', scheduleTime: '09:00 - 11:00', venue: 'G501' },
+  { code: 'COS30049', name: 'Computing Technology Innovation', semester: 'Sem 1', year: 2026, capacity: 50, sessionType: SessionType.LECTURE, classGroup: '02', scheduleDay: 'Wed', scheduleTime: '11:00 - 13:00', venue: 'G602' },
 ];
 
 // Which student indices are enrolled per course
@@ -143,7 +143,6 @@ export async function POST() {
                   userId: student.userId,
                   sessionId: attendanceSession.id,
                   checkInTime: new Date(sessionStart.getTime() + Math.floor(Math.random() * 600_000)),
-                  recognitionMethod: 'QR_CODE',
                   status: 'PRESENT',
                 },
               });

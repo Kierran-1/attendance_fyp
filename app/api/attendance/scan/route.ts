@@ -64,7 +64,6 @@ export async function POST(request: NextRequest) {
       userId: payload.userId,
       sessionId: payload.sessionId,
       checkInTime: new Date(),
-      recognitionMethod: 'QR_CODE',
       status: 'PRESENT',
     },
   });
