@@ -1,679 +1,942 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
+import { QRCodeSVG } from 'qrcode.react';
 import {
-  ArrowLeft,
-  CalendarDays,
-  CheckCircle2,
-  ChevronRight,
-  Clock3,
-  FileDown,
-  MapPin,
-  PlayCircle,
-  Search,
+  Camera,
+  ScanLine,
   Users,
+  Clock,
+  ChevronDown,
+  ChevronRight,
+  Play,
+  Square,
+  Download,
+  History,
+  BarChart3,
+  AlertCircle,
+  CheckCircle,
   XCircle,
+  Search,
+  Calendar,
+  MoreVertical,
+  RefreshCw,
+  QrCode,
+  Smartphone
 } from 'lucide-react';
 
-type SessionType = 'Lecture' | 'Tutorial' | 'Lab';
-type SessionStatus = 'Completed' | 'Ongoing' | 'Scheduled';
-type AttendanceMark = 'Present' | 'Absent' | 'Late' | 'Sick';
-
-type Student = {
+// Types
+interface Unit {
   id: string;
-  studentNumber: string;
+  code: string;
   name: string;
-  program: string;
-  nationality: string;
-  schoolStatus: string;
-};
+  classes: ClassSession[];
+}
 
-type Session = {
+interface ClassSession {
   id: string;
-  date: string;
-  time: string;
-  venue: string;
-  attendancePercentage: number;
-  status: SessionStatus;
-  presentCount: number;
-  absentCount: number;
-  lateCount: number;
-  sickCount: number;
-};
-
-type LecturerClass = {
-  id: string;
-  unitCode: string;
-  unitName: string;
+  type: 'Lecture' | 'Tutorial' | 'Lab';
+  group: string;
   day: string;
   time: string;
-  location: string;
-  lecturer?: string;
-  classType?: string;
-  group?: string;
-  term?: string;
-  sessionType?: SessionType;
-  students: Student[];
-  sessions: Session[];
-  createdAt: string;
-};
+  room: string;
+  duration: number; // in minutes
+}
 
-type StudentAttendanceRow = Student & {
-  attendance: AttendanceMark;
-};
+interface CheckedInStudent {
+  id: string;
+  studentName: string;
+  studentId: string;
+  checkInTime: string;
+  status: 'Present' | 'Late' | 'Absent';
+  method: 'QR' | 'Manual' | 'Face' | 'BT';
+}
 
-const INITIAL_CLASSES: LecturerClass[] = [
+interface SessionHistory {
+  id: string;
+  unitCode: string;
+  classType: string;
+  date: string;
+  time: string;
+  attendanceRate: number;
+  totalStudents: number;
+  presentCount: number;
+  status: 'Completed' | 'Upcoming' | 'In Progress';
+}
+
+interface DashboardStats {
+  overallRate: number;
+  weeklyTrend: number[];
+  atRiskStudents: AtRiskStudent[];
+  classComparison: ClassComparison[];
+}
+
+interface AtRiskStudent {
+  id: string;
+  name: string;
+  studentId: string;
+  attendanceRate: number;
+  missedClasses: number;
+}
+
+interface ClassComparison {
+  unitCode: string;
+  attendanceRate: number;
+}
+
+// Mock Data
+const MOCK_UNITS: Unit[] = [
   {
-    id: 'cls-1',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    day: 'Monday',
-    time: '09:00 - 11:00',
-    location: 'A304',
-    lecturer: 'Jason Thomas Chew',
-    classType: 'Tutorial',
-    group: '01',
-    term: '2026_MAR_S1',
-    sessionType: 'Tutorial',
-    createdAt: '2026-03-01',
-    students: [
-      {
-        id: 'st-1',
-        studentNumber: '102788856',
-        name: 'John Doe',
-        program: 'Bachelor of Computer Science',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-      {
-        id: 'st-2',
-        studentNumber: '102788857',
-        name: 'Nur Aisyah Binti Ahmad',
-        program: 'Bachelor of Computer Science',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-      {
-        id: 'st-3',
-        studentNumber: '102788858',
-        name: 'Lee Wen Hao',
-        program: 'Bachelor of Computer Science',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-    ],
-    sessions: [
-      {
-        id: 'se-1',
-        date: '19 Mar 2026',
-        time: '09:00 - 11:00',
-        venue: 'A304',
-        attendancePercentage: 89,
-        status: 'Completed',
-        presentCount: 25,
-        absentCount: 2,
-        lateCount: 1,
-        sickCount: 0,
-      },
-      {
-        id: 'se-2',
-        date: '26 Mar 2026',
-        time: '09:00 - 11:00',
-        venue: 'A304',
-        attendancePercentage: 68,
-        status: 'Ongoing',
-        presentCount: 19,
-        absentCount: 8,
-        lateCount: 1,
-        sickCount: 0,
-      },
+    id: '1',
+    code: 'COS20007',
+    name: 'Object Oriented Programming',
+    classes: [
+      { id: 'c1', type: 'Lecture', group: 'Lecture 1', day: 'Monday', time: '09:00 - 11:00', room: 'BA301', duration: 120 },
+      { id: 'c2', type: 'Tutorial', group: 'Tut 1', day: 'Tuesday', time: '14:00 - 16:00', room: 'BA202', duration: 120 },
+      { id: 'c3', type: 'Lab', group: 'Lab 1', day: 'Wednesday', time: '10:00 - 12:00', room: 'LAB-A', duration: 120 },
+      { id: 'c4', type: 'Lab', group: 'Lab 2', day: 'Thursday', time: '14:00 - 16:00', room: 'LAB-B', duration: 120 },
     ],
   },
   {
-    id: 'cls-2',
-    unitCode: 'SWE30003',
-    unitName: 'Software Architecture and Design',
-    day: 'Thursday',
-    time: '14:00 - 16:00',
-    location: 'C102',
-    lecturer: 'Siti Khatijah Bolhassan',
-    classType: 'Lecture',
-    group: 'LE1',
-    term: '2026_MAR_S1',
-    sessionType: 'Lecture',
-    createdAt: '2026-03-02',
-    students: [
-      {
-        id: 'st-4',
-        studentNumber: '102799101',
-        name: 'Muhammad Danish',
-        program: 'Bachelor of Software Engineering',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-      {
-        id: 'st-5',
-        studentNumber: '102799102',
-        name: 'Chloe Ting',
-        program: 'Bachelor of Software Engineering',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-    ],
-    sessions: [
-      {
-        id: 'se-3',
-        date: '20 Mar 2026',
-        time: '14:00 - 16:00',
-        venue: 'C102',
-        attendancePercentage: 84,
-        status: 'Completed',
-        presentCount: 44,
-        absentCount: 7,
-        lateCount: 2,
-        sickCount: 0,
-      },
+    id: '2',
+    code: 'COS30041',
+    name: 'Web Development',
+    classes: [
+      { id: 'c5', type: 'Lecture', group: 'Lecture 1', day: 'Tuesday', time: '09:00 - 11:00', room: 'BA401', duration: 120 },
+      { id: 'c6', type: 'Tutorial', group: 'Tut 1', day: 'Wednesday', time: '14:00 - 16:00', room: 'BA302', duration: 120 },
     ],
   },
 ];
 
-function mapClassTypeToSessionType(classType?: string): SessionType {
-  const value = (classType || '').toLowerCase();
-  if (value.includes('lab')) return 'Lab';
-  if (value.includes('tutorial') || value.includes('tu')) return 'Tutorial';
-  return 'Lecture';
-}
+const MOCK_HISTORY: SessionHistory[] = [
+  { id: 'h1', unitCode: 'COS20007', classType: 'Lecture', date: '2026-03-20', time: '09:00 - 11:00', attendanceRate: 85, totalStudents: 40, presentCount: 34, status: 'Completed' },
+  { id: 'h2', unitCode: 'COS20007', classType: 'Tutorial', date: '2026-03-21', time: '14:00 - 16:00', attendanceRate: 78, totalStudents: 20, presentCount: 15, status: 'Completed' },
+  { id: 'h3', unitCode: 'COS30041', classType: 'Lecture', date: '2026-03-25', time: '09:00 - 11:00', attendanceRate: 92, totalStudents: 35, presentCount: 32, status: 'Completed' },
+  { id: 'h4', unitCode: 'COS20007', classType: 'Lab', date: '2026-03-27', time: '10:00 - 12:00', attendanceRate: 0, totalStudents: 15, presentCount: 0, status: 'Upcoming' },
+];
 
-function getStatusBadge(status: AttendanceMark) {
-  switch (status) {
-    case 'Present':
-      return 'border-green-100 bg-green-50 text-green-700';
-    case 'Absent':
-      return 'border-red-100 bg-red-50 text-red-600';
-    case 'Late':
-      return 'border-amber-100 bg-amber-50 text-amber-700';
-    case 'Sick':
-      return 'border-blue-100 bg-blue-50 text-blue-700';
-    default:
-      return 'border-gray-100 bg-gray-50 text-gray-700';
-  }
-}
+const MOCK_DASHBOARD: DashboardStats = {
+  overallRate: 84,
+  weeklyTrend: [82, 85, 78, 88, 84, 86, 84],
+  atRiskStudents: [
+    { id: 's1', name: 'John Smith', studentId: '101234', attendanceRate: 45, missedClasses: 11 },
+    { id: 's2', name: 'Sarah Lee', studentId: '101235', attendanceRate: 60, missedClasses: 8 },
+    { id: 's3', name: 'Mike Johnson', studentId: '101236', attendanceRate: 68, missedClasses: 6 },
+  ],
+  classComparison: [
+    { unitCode: 'COS20007', attendanceRate: 82 },
+    { unitCode: 'COS30041', attendanceRate: 88 },
+    { unitCode: 'COS10009', attendanceRate: 79 },
+  ],
+};
 
-function getSessionBadge(type?: string) {
-  switch (type) {
-    case 'Lecture':
-      return 'border-blue-100 bg-blue-50 text-blue-700';
-    case 'Tutorial':
-      return 'border-rose-100 bg-rose-50 text-[#E4002B]';
-    case 'Lab':
-      return 'border-purple-100 bg-purple-50 text-purple-700';
-    default:
-      return 'border-gray-100 bg-gray-50 text-gray-700';
-  }
-}
+export default function AttendancePage() {
+  const { data: session } = useSession();
 
-export default function LecturerAttendancePage() {
-  const [classes, setClasses] = useState<LecturerClass[]>(INITIAL_CLASSES);
-  const [selectedClassId, setSelectedClassId] = useState<string>(
-    INITIAL_CLASSES[0]?.id ?? ''
-  );
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sessionStarted, setSessionStarted] = useState(false);
+  // State
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+  const [expandedUnit, setExpandedUnit] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<{
+    unit: Unit;
+    classSession: ClassSession;
+    startTime: Date;
+    qrToken: string;
+  } | null>(null);
+  
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [checkedIn, setCheckedIn] = useState<CheckedInStudent[]>([]);
+  const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [manualEntry, setManualEntry] = useState('');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'scanner' | 'history'>('dashboard');
+  const [selectedHistorySession, setSelectedHistorySession] = useState<SessionHistory | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'completed' | 'upcoming'>('all');
 
-  const [attendanceRows, setAttendanceRows] = useState<StudentAttendanceRow[]>([]);
+  // QR Scanner refs
+  const readerRef = useRef<BrowserQRCodeReader | null>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
 
+  // Timer effect for active session
   useEffect(() => {
-    try {
-      const importedRaw = localStorage.getItem('lecturerImportedClasses');
-      if (!importedRaw) return;
+    if (!activeSession) return;
 
-      const importedClasses: LecturerClass[] = JSON.parse(importedRaw);
-      if (!Array.isArray(importedClasses) || importedClasses.length === 0) return;
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - activeSession.startTime.getTime();
+      const remaining = Math.max(0, activeSession.classSession.duration * 60 * 1000 - elapsed);
+      setTimeRemaining(remaining);
 
-      setClasses((prev) => {
-        const existingIds = new Set(prev.map((item) => item.id));
-        const uniqueImported = importedClasses.filter(
-          (item) => !existingIds.has(item.id)
-        );
-        return [...uniqueImported, ...prev];
-      });
-
-      if (!selectedClassId && importedClasses[0]?.id) {
-        setSelectedClassId(importedClasses[0].id);
+      // Refresh QR every 30 seconds
+      if (Math.floor(elapsed / 30000) > Math.floor((elapsed - 1000) / 30000)) {
+        refreshQRToken();
       }
-    } catch (error) {
-      console.error('Failed to load imported classes:', error);
+
+      if (remaining === 0) {
+        endSession();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeSession]);
+
+  // Generate QR token
+  const generateQRToken = () => {
+    return `${activeSession?.unit.code}-${activeSession?.classSession.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  const refreshQRToken = () => {
+    if (activeSession) {
+      setActiveSession({ ...activeSession, qrToken: generateQRToken() });
     }
-  }, [selectedClassId]);
+  };
 
-  const selectedClass =
-    classes.find((item) => item.id === selectedClassId) ?? classes[0] ?? null;
-
-  useEffect(() => {
-    if (!selectedClass) {
-      setAttendanceRows([]);
-      return;
-    }
-
-    const rows: StudentAttendanceRow[] = selectedClass.students.map((student) => ({
-      ...student,
-      attendance: 'Absent',
-    }));
-
-    setAttendanceRows(rows);
-    setSessionStarted(false);
-  }, [selectedClassId, selectedClass]);
-
-  const filteredRows = useMemo(() => {
-    return attendanceRows.filter((item) => {
-      return (
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.studentNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.program.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+  // Session controls
+  const startSession = (unit: Unit, classSession: ClassSession) => {
+    setActiveSession({
+      unit,
+      classSession,
+      startTime: new Date(),
+      qrToken: generateQRToken(),
     });
-  }, [attendanceRows, searchTerm]);
-
-  const counts = useMemo(() => {
-    const present = attendanceRows.filter((item) => item.attendance === 'Present').length;
-    const absent = attendanceRows.filter((item) => item.attendance === 'Absent').length;
-    const late = attendanceRows.filter((item) => item.attendance === 'Late').length;
-    const sick = attendanceRows.filter((item) => item.attendance === 'Sick').length;
-
-    const total = attendanceRows.length;
-    const attendanceRate =
-      total > 0 ? Math.round(((present + late + sick) / total) * 100) : 0;
-
-    return { present, absent, late, sick, total, attendanceRate };
-  }, [attendanceRows]);
-
-  const handleMarkAttendance = (studentId: string, value: AttendanceMark) => {
-    setAttendanceRows((prev) =>
-      prev.map((item) =>
-        item.id === studentId ? { ...item, attendance: value } : item
-      )
-    );
+    setCheckedIn([]);
+    setActiveTab('dashboard');
   };
 
-  const handleStartSession = () => {
-    setSessionStarted(true);
+  const endSession = () => {
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
+    }
+    readerRef.current = null;
+    setScanning(false);
+    setActiveSession(null);
+    setTimeRemaining(0);
   };
 
-  const handleExportCsv = () => {
-    if (!selectedClass) return;
+  // QR Scanner functions
+  const startScanning = async () => {
+    readerRef.current = new BrowserQRCodeReader();
+    setScanning(true);
+    setScanResult(null);
 
-    const rows = [
-      ['Unit Code', selectedClass.unitCode],
-      ['Unit Name', selectedClass.unitName],
-      ['Lecturer', selectedClass.lecturer || ''],
-      ['Day', selectedClass.day],
-      ['Time', selectedClass.time],
-      ['Venue', selectedClass.location],
-      [],
-      ['Student Number', 'Student Name', 'Program', 'Attendance'],
-      ...attendanceRows.map((item) => [
-        item.studentNumber,
-        item.name,
-        item.program,
-        item.attendance,
-      ]),
-    ];
-
-    const csvContent = rows
-      .map((row) =>
-        row
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(',')
-      )
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    link.href = url;
-    link.setAttribute(
-      'download',
-      `${selectedClass.unitCode}_attendance_export.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      controlsRef.current = await readerRef.current.decodeFromVideoDevice(
+        undefined,
+        'qr-video',
+        (result) => {
+          if (result) {
+            handleScan(result.getText());
+          }
+        }
+      );
+    } catch {
+      setScanResult({ success: false, message: 'Camera not available' });
+      setScanning(false);
+    }
   };
 
-  if (!selectedClass) {
-    return (
-      <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-10 text-center shadow-sm">
-        <h2 className="text-xl font-bold text-gray-900">
-          No lecturer class available
-        </h2>
-        <p className="mt-3 text-sm leading-7 text-gray-500">
-          Please create or import a class first.
-        </p>
-      </div>
-    );
-  }
+  const stopScanning = () => {
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
+    }
+    readerRef.current = null;
+    setScanning(false);
+  };
 
-  const selectedSessionType =
-    selectedClass.sessionType || mapClassTypeToSessionType(selectedClass.classType);
+  const handleScan = async (tokenText: string) => {
+    try {
+      // Mock API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const mockStudent: CheckedInStudent = {
+        id: Math.random().toString(36).substr(2, 9),
+        studentName: `Student ${checkedIn.length + 1}`,
+        studentId: `10${1000 + checkedIn.length}`,
+        checkInTime: new Date().toISOString(),
+        status: 'Present',
+        method: 'QR',
+      };
+
+      setCheckedIn(prev => [...prev, mockStudent]);
+      setScanResult({ success: true, message: `Checked in: ${mockStudent.studentName}` });
+    } catch {
+      setScanResult({ success: false, message: 'Scan failed' });
+    }
+
+    setTimeout(() => setScanResult(null), 3000);
+  };
+
+  const handleManualEntry = () => {
+    if (!manualEntry.trim()) return;
+    
+    const mockStudent: CheckedInStudent = {
+      id: Math.random().toString(36).substr(2, 9),
+      studentName: `Student (Manual)`,
+      studentId: manualEntry,
+      checkInTime: new Date().toISOString(),
+      status: 'Present',
+      method: 'Manual',
+    };
+
+    setCheckedIn(prev => [...prev, mockStudent]);
+    setScanResult({ success: true, message: `Manually checked in: ${manualEntry}` });
+    setManualEntry('');
+    setTimeout(() => setScanResult(null), 3000);
+  };
+
+  // Format time
+  const formatTime = (ms: number) => {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const formatDateTime = (iso: string) => {
+    return new Date(iso).toLocaleString();
+  };
+
+  // Filtered history
+  const filteredHistory = MOCK_HISTORY.filter(h => {
+    if (historyFilter === 'all') return true;
+    return h.status.toLowerCase() === historyFilter;
+  });
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Lecturer Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
-            Attendance
-          </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
-            Manage live class attendance and keep the selected unit tracked clearly.
-          </p>
-        </div>
+    <div className="min-h-screen">
 
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/lecturer/classes"
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-          >
-            <ArrowLeft size={16} />
-            Back to Classes
-          </Link>
-
-          <button
-            type="button"
-            onClick={handleStartSession}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
-          >
-            <PlayCircle size={16} />
-            {sessionStarted ? 'Session Active' : 'Start Session'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-          >
-            <FileDown size={16} />
-            Export CSV
-          </button>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-          <div>
-            <label
-              htmlFor="selected-class"
-              className="mb-2 block text-sm font-semibold text-gray-700"
-            >
-              Select Unit
-            </label>
-            <select
-              id="selected-class"
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-            >
-              {classes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.unitCode} - {item.unitName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="student-search"
-              className="mb-2 block text-sm font-semibold text-gray-700"
-            >
-              Search Student
-            </label>
-            <div className="relative">
-              <Search
-                size={18}
-                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-              <input
-                id="student-search"
-                type="text"
-                placeholder="Search by student number, name, or program"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-            Selected Unit
-          </p>
-          <p className="mt-3 text-2xl font-black tracking-tight text-gray-900">
-            {selectedClass.unitCode}
-          </p>
-          <p className="mt-2 text-xs text-gray-500">{selectedClass.unitName}</p>
-        </div>
-
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-            Present / Valid
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-tight text-green-600">
-            {counts.present + counts.late + counts.sick}
-          </p>
-          <p className="mt-2 text-xs text-gray-500">
-            Present, late, and sick counted
-          </p>
-        </div>
-
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-            Absent
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-tight text-red-600">
-            {counts.absent}
-          </p>
-          <p className="mt-2 text-xs text-gray-500">Students not marked present</p>
-        </div>
-
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-            Attendance Rate
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-tight text-[#E4002B]">
-            {counts.attendanceRate}%
-          </p>
-          <p className="mt-2 text-xs text-gray-500">For currently selected unit</p>
-        </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-[#E4002B]">
-                {selectedClass.unitCode}
-              </span>
-              <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getSessionBadge(
-                  selectedSessionType
-                )}`}
-              >
-                {selectedSessionType}
-              </span>
-              <span
-                className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${
-                  sessionStarted
-                    ? 'border-green-100 bg-green-50 text-green-700'
-                    : 'border-gray-200 bg-gray-50 text-gray-700'
-                }`}
-              >
-                {sessionStarted ? 'Session Active' : 'Not Started'}
-              </span>
+      <div className=" mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* Left Sidebar - Units & Classes */}
+          <div className="lg:col-span-3 space-y-6">
+            {/* Units List */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  My Units
+                </h2>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {MOCK_UNITS.map((unit) => (
+                  <div key={unit.id}>
+                    <button
+                      onClick={() => setExpandedUnit(expandedUnit === unit.id ? null : unit.id)}
+                      className={`w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors ${
+                        selectedUnit === unit.id ? 'bg-red-50 border-l-4 border-red-500' : ''
+                      }`}
+                    >
+                      <div className="text-left">
+                        <p className="text-sm font-medium text-gray-900">{unit.code}</p>
+                        <p className="text-xs text-gray-500 truncate max-w-[180px]">{unit.name}</p>
+                      </div>
+                      <ChevronDown 
+                        className={`w-4 h-4 text-gray-400 transition-transform ${
+                          expandedUnit === unit.id ? 'rotate-180' : ''
+                        }`} 
+                      />
+                    </button>
+                    
+                    {/* Expanded Classes */}
+                    {expandedUnit === unit.id && (
+                      <div className="bg-gray-50 px-4 py-2 space-y-2">
+                        {unit.classes.map((cls) => (
+                          <div key={cls.id} className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                cls.type === 'Lecture' ? 'bg-purple-100 text-purple-700' :
+                                cls.type === 'Tutorial' ? 'bg-blue-100 text-blue-700' :
+                                'bg-orange-100 text-orange-700'
+                              }`}>
+                                {cls.type}
+                              </span>
+                              <span className="text-xs text-gray-500">{cls.group}</span>
+                            </div>
+                            <p className="text-xs text-gray-600 mb-1">{cls.day}, {cls.time}</p>
+                            <p className="text-xs text-gray-500 mb-2">Room: {cls.room}</p>
+                            <button
+                              onClick={() => startSession(unit, cls)}
+                              disabled={activeSession !== null}
+                              className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-red-500 text-white text-xs font-medium rounded-md hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <Play className="w-3 h-3" />
+                              Start Session
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <h2 className="text-2xl font-black tracking-tight text-gray-900">
-              {selectedClass.unitName}
-            </h2>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <InfoBox icon={<CalendarDays size={14} />} label="Day" value={selectedClass.day} />
-              <InfoBox icon={<Clock3 size={14} />} label="Time" value={selectedClass.time} />
-              <InfoBox icon={<MapPin size={14} />} label="Venue" value={selectedClass.location} />
-              <InfoBox icon={<Users size={14} />} label="Students" value={String(selectedClass.students.length)} />
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-rose-100 bg-rose-50 p-4">
-              <p className="text-sm font-bold text-[#E4002B]">Tracked Unit Note</p>
-              <p className="mt-2 text-sm leading-7 text-gray-700">
-                All attendance marks on this page are currently tracked against
-                <strong> {selectedClass.unitCode}</strong>.
-              </p>
+            {/* Quick Stats */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Today's Overview</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">Sessions</span>
+                  <span className="text-sm font-medium text-gray-900">2</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">Total Students</span>
+                  <span className="text-sm font-medium text-gray-900">55</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">Avg Attendance</span>
+                  <span className="text-sm font-medium text-green-600">82%</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h3 className="text-base font-bold text-gray-900">Quick Links</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Continue lecturer workflow for this unit
-            </p>
-
-            <div className="mt-4 space-y-3">
-              <Link
-                href="/lecturer/classes"
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-              >
-                <span>Manage Classes</span>
-                <ChevronRight size={16} />
-              </Link>
-
-              <Link
-                href="/lecturer/upload-roster"
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-              >
-                <span>Upload Roster</span>
-                <ChevronRight size={16} />
-              </Link>
-
-              <Link
-                href="/lecturer/reports"
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-              >
-                <span>Open Reports</span>
-                <ChevronRight size={16} />
-              </Link>
+          {/* Main Content Area */}
+          <div className="lg:col-span-9 space-y-6">
+            
+            {/* Tab Navigation */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-1">
+              <div className="flex space-x-1">
+                {[
+                  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+                  { id: 'scanner', label: 'QR Scanner', icon: Camera },
+                  { id: 'history', label: 'History', icon: History },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                      activeTab === tab.id
+                        ? 'bg-red-500 text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-6 py-4">
-            <h2 className="text-base font-bold text-gray-900">Student Attendance List</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Mark attendance for the selected unit
-            </p>
-          </div>
-
-          <div className="divide-y divide-gray-100">
-            {filteredRows.length > 0 ? (
-              filteredRows.map((student) => (
-                <div
-                  key={student.id}
-                  className="flex flex-col gap-4 px-6 py-5 xl:flex-row xl:items-center xl:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-900">{student.name}</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {student.studentNumber}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">{student.program}</p>
-
-                    <div className="mt-3">
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getStatusBadge(
-                          student.attendance
-                        )}`}
+            {/* Dashboard Tab */}
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6">
+                
+                {/* Active Session Card */}
+                {activeSession ? (
+                  <div className="bg-white rounded-xl shadow-lg border-2 border-red-500 overflow-hidden">
+                    <div className="bg-red-500 px-6 py-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                        <h2 className="text-lg font-bold text-white">Active Session</h2>
+                      </div>
+                      <button
+                        onClick={endSession}
+                        className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
                       >
-                        {student.attendance}
-                      </span>
+                        <Square className="w-4 h-4" />
+                        End Session
+                      </button>
+                    </div>
+                    
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* QR Code Section */}
+                      <div className="flex flex-col items-center justify-center bg-gray-50 rounded-xl p-6">
+                        <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
+                          <QRCodeSVG 
+                            value={activeSession.qrToken} 
+                            size={200}
+                            level="H"
+                            includeMargin={true}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                          <RefreshCw className="w-4 h-4 animate-spin" style={{ animationDuration: '3s' }} />
+                          Refreshes every 30s
+                        </div>
+                        <button
+                          onClick={refreshQRToken}
+                          className="text-sm text-red-600 hover:text-red-700 font-medium"
+                        >
+                          Refresh Now
+                        </button>
+                      </div>
+
+                      {/* Session Info */}
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Unit</p>
+                            <p className="text-lg font-bold text-gray-900">{activeSession.unit.code}</p>
+                            <p className="text-sm text-gray-600 truncate">{activeSession.unit.name}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Class Type</p>
+                            <p className="text-lg font-bold text-gray-900">{activeSession.classSession.type}</p>
+                            <p className="text-sm text-gray-600">{activeSession.classSession.group}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Time Remaining</p>
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-5 h-5 text-red-600" />
+                            <span className="text-3xl font-mono font-bold text-gray-900">
+                              {formatTime(timeRemaining)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Check-ins</p>
+                          <div className="flex items-center gap-2">
+                            <Users className="w-5 h-5 text-green-600" />
+                            <span className="text-2xl font-bold text-gray-900">
+                              {checkedIn.length} <span className="text-sm text-gray-500 font-normal">/ 40 enrolled</span>
+                            </span>
+                          </div>
+                          <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${(checkedIn.length / 40) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Attendance List */}
+                    <div className="border-t border-gray-200 px-6 py-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Check-ins</h3>
+                      {checkedIn.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic">No students checked in yet...</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {checkedIn.slice(-10).map((student) => (
+                            <span 
+                              key={student.id}
+                              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                            >
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              {student.studentName}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
+                ) : (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Play className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Session</h3>
+                    <p className="text-sm text-gray-500 mb-4">Select a unit and class from the sidebar to start a session</p>
+                  </div>
+                )}
 
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleMarkAttendance(student.id, 'Present')}
-                      className="rounded-2xl border border-green-100 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-100"
-                    >
-                      Present
-                    </button>
+                {/* Dashboard Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-gray-700">Overall Attendance</h3>
+                      <BarChart3 className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <span className="text-4xl font-bold text-gray-900">{MOCK_DASHBOARD.overallRate}%</span>
+                      <span className="text-sm text-green-600 mb-1">↑ 2%</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">This semester</p>
+                  </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleMarkAttendance(student.id, 'Late')}
-                      className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
-                    >
-                      Late
-                    </button>
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-gray-700">Weekly Trend</h3>
+                      <div className="flex gap-1">
+                        {MOCK_DASHBOARD.weeklyTrend.map((val, i) => (
+                          <div 
+                            key={i}
+                            className="w-2 bg-red-500 rounded-t"
+                            style={{ height: `${val}px`, opacity: 0.3 + (i * 0.1) }}
+                          ></div>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500">Last 7 days</p>
+                  </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleMarkAttendance(student.id, 'Sick')}
-                      className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-                    >
-                      Sick
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleMarkAttendance(student.id, 'Absent')}
-                      className="rounded-2xl border border-red-100 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
-                    >
-                      Absent
-                    </button>
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-gray-700">At-Risk Students</h3>
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <span className="text-4xl font-bold text-red-600">{MOCK_DASHBOARD.atRiskStudents.length}</span>
+                      <span className="text-sm text-gray-500 mb-1">&lt;75% attendance</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Require attention</p>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="px-6 py-10 text-center">
-                <h3 className="text-lg font-bold text-gray-900">
-                  No students found
-                </h3>
-                <p className="mt-2 text-sm text-gray-500">
-                  Try changing the search keyword.
-                </p>
+
+                {/* At-Risk Students Table */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-700">Students Requiring Attention</h3>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attendance</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Missed</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {MOCK_DASHBOARD.atRiskStudents.map((student) => (
+                        <tr key={student.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-3 font-medium text-gray-900">{student.name}</td>
+                          <td className="px-6 py-3 text-gray-600">{student.studentId}</td>
+                          <td className="px-6 py-3">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              student.attendanceRate < 50 ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {student.attendanceRate}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 text-gray-600">{student.missedClasses} classes</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
+
+            {/* QR Scanner Tab */}
+            {activeTab === 'scanner' && (
+              <div className="space-y-6">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <ScanLine className="w-5 h-5" />
+                    Manual Check-in Scanner
+                  </h2>
+                  
+                  {!activeSession && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                      <p className="text-sm text-yellow-800">
+                        <AlertCircle className="w-4 h-4 inline mr-1" />
+                        No active session. Start a session from the dashboard to enable check-ins.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Camera Scanner */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium text-gray-700">Camera Scanner</h3>
+                        {!scanning ? (
+                          <button
+                            onClick={startScanning}
+                            disabled={!activeSession}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Camera className="w-4 h-4" />
+                            Start Camera
+                          </button>
+                        ) : (
+                          <button
+                            onClick={stopScanning}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors"
+                          >
+                            <Square className="w-4 h-4" />
+                            Stop
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className={`relative bg-black rounded-xl overflow-hidden ${scanning ? 'block' : 'hidden'}`} style={{ aspectRatio: '4/3' }}>
+                        <video id="qr-video" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 border-2 border-red-500 opacity-50 pointer-events-none">
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 border-2 border-white rounded-lg"></div>
+                        </div>
+                      </div>
+                      
+                      {!scanning && (
+                        <div className="bg-gray-100 rounded-xl flex items-center justify-center" style={{ aspectRatio: '4/3' }}>
+                          <div className="text-center">
+                            <Camera className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">Camera inactive</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {scanResult && (
+                        <div className={`p-4 rounded-lg flex items-center gap-2 ${
+                          scanResult.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                        }`}>
+                          {scanResult.success ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                          <span className="text-sm font-medium">{scanResult.message}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Manual Entry */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-medium text-gray-700">Manual Entry</h3>
+                      <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Student ID or Email</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={manualEntry}
+                              onChange={(e) => setManualEntry(e.target.value)}
+                              onKeyPress={(e) => e.key === 'Enter' && handleManualEntry()}
+                              placeholder="Enter student ID..."
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                              disabled={!activeSession}
+                            />
+                            <button
+                              onClick={handleManualEntry}
+                              disabled={!activeSession || !manualEntry.trim()}
+                              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Check In
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-200 pt-4"> 
+                          <p className="text-xs text-gray-500 mb-2">Quick Actions</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button className="flex items-center justify-center gap-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                              <Smartphone className="w-3 h-3" />
+                              NFC Tap
+                            </button>
+                            <button className="flex items-center justify-center gap-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                              <Users className="w-3 h-3" />
+                              Bulk Entry
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Recent Manual Check-ins */}
+                      <div className="bg-white border border-gray-200 rounded-xl p-4">
+                        <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">Recent Verifications</h4>
+                        {checkedIn.filter(s => s.method === 'Manual').length === 0 ? (
+                          <p className="text-xs text-gray-500 italic">No manual entries yet</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {checkedIn.filter(s => s.method === 'Manual').slice(-3).map((student) => (
+                              <div key={student.id} className="flex items-center justify-between text-sm">
+                                <span className="font-medium text-gray-900">{student.studentId}</span>
+                                <span className="text-xs text-gray-500">{formatDateTime(student.checkInTime)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* History Tab */}
+            {activeTab === 'history' && (
+              <div className="space-y-6">
+                {!selectedHistorySession ? (
+                  <>
+                    {/* Filters */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-2">
+                        {(['all', 'completed', 'upcoming'] as const).map((filter) => (
+                          <button
+                            key={filter}
+                            onClick={() => setHistoryFilter(filter)}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                              historyFilter === filter
+                                ? 'bg-red-600 text-white'
+                                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                      <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                        <Download className="w-4 h-4" />
+                        Export All
+                      </button>
+                    </div>
+
+                    {/* History Table */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date & Time</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attendance</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {filteredHistory.map((session) => (
+                            <tr key={session.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4">
+                                <div className="font-medium text-gray-900">{session.unitCode}</div>
+                                <div className="text-xs text-gray-500">{session.classType}</div>
+                              </td>
+                              <td className="px-6 py-4 text-gray-600">
+                                {session.date}<br />
+                                <span className="text-xs text-gray-500">{session.time}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-16 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-red-600 h-2 rounded-full"
+                                      style={{ width: `${session.attendanceRate}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-700">
+                                    {session.presentCount}/{session.totalStudents}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  session.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                                  session.status === 'Upcoming' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {session.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setSelectedHistorySession(session)}
+                                    className="text-red-600 hover:text-red-700 text-xs font-medium"
+                                  >
+                                    View Details
+                                  </button>
+                                  <button className="text-gray-400 hover:text-gray-600">
+                                    <MoreVertical className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  /* Session Detail View */
+                  <div className="space-y-6">
+                    <button
+                      onClick={() => setSelectedHistorySession(null)}
+                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                    >
+                      <ChevronRight className="w-4 h-4 rotate-180" />
+                      Back to History
+                    </button>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <div>
+                          <h2 className="text-xl font-bold text-gray-900">{selectedHistorySession.unitCode}</h2>
+                          <p className="text-sm text-gray-500">{selectedHistorySession.classType} • {selectedHistorySession.date}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
+                            <Download className="w-4 h-4" />
+                            Export CSV
+                          </button>
+                          <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700">
+                            <RefreshCw className="w-4 h-4" />
+                            Sync to LMS
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-4 gap-4 mb-6">
+                        {[
+                          { label: 'Total', value: selectedHistorySession.totalStudents, color: 'blue' },
+                          { label: 'Present', value: selectedHistorySession.presentCount, color: 'green' },
+                          { label: 'Absent', value: selectedHistorySession.totalStudents - selectedHistorySession.presentCount, color: 'red' },
+                          { label: 'Rate', value: `${selectedHistorySession.attendanceRate}%`, color: 'purple' },
+                        ].map((stat) => (
+                          <div key={stat.label} className={`bg-${stat.color}-50 rounded-lg p-4 text-center`}>
+                            <p className={`text-2xl font-bold text-${stat.color}-600`}>{stat.value}</p>
+                            <p className={`text-xs text-${stat.color}-600 uppercase tracking-wider`}>{stat.label}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Student List */}
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student ID</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check-in Time</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {checkedIn.length > 0 ? checkedIn.map((student) => (
+                              <tr key={student.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 font-medium text-gray-900">{student.studentId}</td>
+                                <td className="px-4 py-3 text-gray-600">{student.studentName}</td>
+                                <td className="px-4 py-3 text-gray-600">{formatDateTime(student.checkInTime)}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                    student.status === 'Present' ? 'bg-green-100 text-green-700' :
+                                    student.status === 'Late' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>
+                                    {student.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                                    {student.method === 'QR' && <QrCode className="w-3 h-3" />}
+                                    {student.method === 'Manual' && <Smartphone className="w-3 h-3" />}
+                                    {student.method}
+                                  </span>
+                                </td>
+                              </tr>
+                            )) : (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                                  No attendance records for this session
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
-      </section>
-    </div>
-  );
-}
-
-function InfoBox({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl bg-gray-50 px-4 py-4">
-      <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
-        {icon}
-        {label}
       </div>
-      <p className="text-sm font-semibold text-gray-800">{value}</p>
     </div>
   );
 }
