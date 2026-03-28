@@ -1,135 +1,192 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { signIn } from 'next-auth/react';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handleMicrosoftLogin = async () => {
     setLoading(true);
+
+    // Uses the existing Azure AD / Microsoft provider already set up in the project.
+    // After successful login, user will continue to the redirect page.
     await signIn('azure-ad', { callbackUrl: '/auth/redirect' });
-    // loading stays true — the page will navigate away on success
   };
 
   return (
-    <div className="flex min-h-screen">
+    <main className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-red-50">
+      <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-6 py-10 sm:px-8 lg:px-12">
+        <div className="grid w-full overflow-hidden rounded-[32px] border border-rose-100 bg-white shadow-2xl shadow-rose-100/60 lg:grid-cols-2">
+          {/* =========================================================
+              LEFT PANEL
+              ========================================================= */}
+          <section className="relative hidden overflow-hidden bg-[#111111] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+            <div className="absolute inset-0 auth-grid" />
+            <div
+              className="absolute -left-24 top-0 h-72 w-72 rounded-full"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(228,0,43,0.20) 0%, transparent 70%)',
+              }}
+            />
+            <div
+              className="absolute bottom-0 right-0 h-80 w-80 rounded-full"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(228,0,43,0.12) 0%, transparent 70%)',
+              }}
+            />
 
-      {/* ── LEFT PANEL ── */}
-      <div className="hidden lg:flex flex-1 bg-[#0f0f0f] flex-col justify-between p-12 relative overflow-hidden">
+            {/* Brand */}
+            <div className="relative z-10 fade-up">
+              <Link
+                href="/"
+                className="mb-8 inline-flex items-center gap-2 text-sm text-white/70 transition hover:text-white"
+              >
+                <ArrowLeft size={16} />
+                Back to Home
+              </Link>
 
-        <div className="absolute inset-0 auth-grid" />
-        <div className="absolute -top-20 -left-20 w-[500px] h-[500px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(228,0,43,0.18) 0%, transparent 65%)' }} />
-        <div className="absolute -bottom-16 -right-16 w-[400px] h-[400px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(228,0,43,0.10) 0%, transparent 65%)' }} />
+              <div className="mb-5 flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E4002B] text-lg font-black text-white shadow-lg shadow-rose-500/20">
+                  AS
+                </div>
 
-        {/* Brand */}
-        <div className="relative z-10 fade-up">
-          <div className="w-12 h-12 bg-[#E4002B] rounded-xl flex items-center justify-center text-white font-black text-lg mb-4"
-            style={{ boxShadow: '0 0 40px rgba(228,0,43,0.4)' }}>
-            AS
-          </div>
-          <div className="text-white text-2xl font-black tracking-tight">
-            Attend<span className="text-[#E4002B]">Sync</span>
-          </div>
-          <div className="text-white/40 text-sm mt-1">Swinburne University of Technology Sarawak</div>
-        </div>
-
-        {/* Headline */}
-        <div className="relative z-10 fade-up-1">
-          <h2 className="text-5xl font-black text-white leading-tight tracking-tighter mb-4">
-            Attendance,<br />on{' '}
-            <span className="text-[#E4002B]">autopilot.</span>
-          </h2>
-          <p className="text-white/40 text-base leading-relaxed max-w-sm">
-            Smart recognition and real-time sync for every class.
-            No more roll calls. No more delays. Just scan and go.
-          </p>
-        </div>
-
-        {/* Stats */}
-        <div className="relative z-10 fade-up-2 flex gap-4">
-          {[
-            { val: '1,284', label: 'Students' },
-            { val: '84%', label: 'Avg Attendance', red: true },
-            { val: '36', label: 'Active Courses' },
-          ].map((s) => (
-            <div key={s.label}
-              className="bg-white/[0.06] border border-white/10 rounded-2xl px-6 py-5 backdrop-blur-sm hover:bg-white/10 transition-all cursor-default">
-              <div className="text-white text-3xl font-black tracking-tight">
-                {s.red
-                  ? <><span className="text-[#E4002B]">{s.val.replace('%', '')}</span>%</>
-                  : s.val}
+                <div>
+                  <p className="text-2xl font-black tracking-tight">
+                    Attend<span className="text-[#E4002B]">Sync</span>
+                  </p>
+                  <p className="text-sm text-white/55">
+                    Swinburne Sarawak Attendance System
+                  </p>
+                </div>
               </div>
-              <div className="text-white/50 text-xs uppercase tracking-widest mt-2 font-semibold">{s.label}</div>
+
+              <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-white/70">
+                Secure Sign-In
+              </div>
             </div>
-          ))}
+
+            {/* Public-facing message */}
+            <div className="relative z-10 fade-up-1">
+              <h1 className="text-4xl font-black leading-tight tracking-tight xl:text-5xl">
+                Access your
+                <span className="block text-[#E4002B]">AttendSync portal.</span>
+              </h1>
+
+              <p className="mt-5 max-w-md text-base leading-8 text-white/65">
+                Sign in using your Swinburne Microsoft account to continue to the
+                system.
+              </p>
+            </div>
+
+            {/* Minimal public-safe note */}
+            <div className="relative z-10 fade-up-2 rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
+              <p className="text-sm font-semibold text-white">Access Note</p>
+              <p className="mt-2 text-sm leading-7 text-white/65">
+                This page is for account access only. Protected system features are
+                available after sign-in.
+              </p>
+            </div>
+          </section>
+
+          {/* =========================================================
+              RIGHT PANEL
+              ========================================================= */}
+          <section className="flex min-h-[700px] flex-col justify-center px-6 py-10 sm:px-10 lg:px-14">
+            <div className="mx-auto w-full max-w-md fade-up">
+              {/* Mobile brand */}
+              <div className="mb-10 flex items-center gap-3 lg:hidden">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E4002B] text-sm font-black text-white">
+                  AS
+                </div>
+                <div>
+                  <p className="text-lg font-black tracking-tight">
+                    Attend<span className="text-[#E4002B]">Sync</span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Swinburne Sarawak Attendance System
+                  </p>
+                </div>
+              </div>
+
+              <Link
+                href="/"
+                className="mb-8 inline-flex items-center gap-2 text-sm text-gray-500 transition hover:text-gray-800 lg:hidden"
+              >
+                <ArrowLeft size={16} />
+                Back to Home
+              </Link>
+
+              <p className="mb-3 text-sm font-bold uppercase tracking-[0.18em] text-[#E4002B]">
+                Login
+              </p>
+
+              <h2 className="text-3xl font-black tracking-tight text-gray-900 sm:text-4xl">
+                Welcome back
+              </h2>
+
+              <p className="mt-3 text-base leading-8 text-gray-600">
+                Sign in with your Swinburne Microsoft account.
+              </p>
+
+              {/* Microsoft Sign In */}
+              <button
+                onClick={handleMicrosoftLogin}
+                disabled={loading}
+                className="mt-10 flex w-full items-center justify-center gap-3 rounded-2xl bg-[#2B2B2B] px-6 py-4 text-base font-semibold text-white transition hover:bg-[#1B1B1B] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Redirecting to Microsoft...
+                  </>
+                ) : (
+                  <>
+                    {/* Microsoft logo */}
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 21 21"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+                      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+                      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+                    </svg>
+                    Sign in with Microsoft
+                  </>
+                )}
+              </button>
+
+              {/* Public-safe helper note */}
+              <div className="mt-5 flex gap-3 rounded-2xl border border-rose-100 bg-rose-50 p-4">
+                <ShieldCheck
+                  size={18}
+                  className="mt-0.5 flex-shrink-0 text-[#E4002B]"
+                />
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Secure Sign-In</p>
+                  <p className="mt-1 text-sm leading-6 text-gray-600">
+                    You will be redirected to Microsoft to authenticate with your
+                    university account.
+                  </p>
+                </div>
+              </div>
+
+              {/* Very short footer note */}
+              <p className="mt-8 text-center text-xs text-gray-400">
+                Need help signing in? Contact IT support.
+              </p>
+            </div>
+          </section>
         </div>
-
-
       </div>
-
-      {/* ── RIGHT PANEL ── */}
-      <div className="w-full lg:w-[560px] flex-shrink-0 bg-white flex flex-col items-center justify-center px-8 sm:px-16 py-16 relative">
-
-        <div className="hidden lg:block absolute top-0 left-0 bottom-0 w-px"
-          style={{ background: 'linear-gradient(to bottom, transparent, rgba(228,0,43,0.3), transparent)' }} />
-
-        <div className="w-full max-w-md fade-up">
-
-          {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-10 lg:hidden">
-            <div className="w-9 h-9 bg-[#E4002B] rounded-lg flex items-center justify-center text-white font-black text-sm">AS</div>
-            <div className="font-black text-lg tracking-tight">Attend<span className="text-[#E4002B]">Sync</span></div>
-          </div>
-
-          <h1 className="text-4xl font-black tracking-tight text-gray-900 mb-3">Welcome back</h1>
-          <p className="text-gray-400 text-base mb-12 leading-relaxed">Sign in with your Swinburne Microsoft account to continue.</p>
-
-          {/* Microsoft Sign In Button */}
-          <button
-            onClick={handleMicrosoftLogin}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 py-4 bg-[#2F2F2F] hover:bg-[#1a1a1a] text-white font-semibold rounded-xl text-base transition-all hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                Redirecting to Microsoft...
-              </>
-            ) : (
-              <>
-                {/* Official Microsoft logo squares */}
-                <svg width="18" height="18" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                  <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                  <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                  <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-                </svg>
-                Sign in with Microsoft
-              </>
-            )}
-          </button>
-
-          {/* Info box */}
-          <div className="mt-5 bg-gray-50 border border-gray-100 rounded-xl p-4 flex gap-3">
-            <ShieldCheck size={18} className="text-[#E4002B] flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-gray-400 leading-relaxed">
-              <span className="text-gray-600 font-bold block mb-0.5">Secure Sign-In</span>
-              You will be redirected to Microsoft&apos;s authentication page. Sign in with your university account — the same one you use for Teams and Outlook.
-            </p>
-          </div>
-
-          <p className="text-center text-xs text-gray-300 mt-10">
-            Having trouble?{' '}
-            <a href="mailto:it@swinburne.edu.my" className="text-[#E4002B] font-semibold hover:underline">
-              Contact IT Support
-            </a>
-          </p>
-        </div>
-      </div>
-    </div>
+    </main>
   );
 }

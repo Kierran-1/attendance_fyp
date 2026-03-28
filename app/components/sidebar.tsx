@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
@@ -8,7 +8,7 @@ import { useSession, signOut } from "next-auth/react"
 type MenuItem = {
   name: string
   href: string
-  icon: string
+  icon: ReactNode
 }
 
 type MenuSection = {
@@ -128,10 +128,9 @@ export default function Sidebar({ panelTitle, menu, isOpen, onClose }: SidebarPr
                                 : "text-gray-700 hover:bg-gray-100"
                             }`}
                           >
-                            <span
-                              className={active ? "text-[#E4002B]" : "text-gray-500"}
-                              dangerouslySetInnerHTML={{ __html: item.icon }}
-                            />
+                            <span className={active ? "text-[#E4002B]" : "text-gray-500"}>
+                              {item.icon}
+                            </span>
                             {item.name}
                           </Link>
                         </li>
@@ -178,7 +177,7 @@ export default function Sidebar({ panelTitle, menu, isOpen, onClose }: SidebarPr
               </button>
 
               <div className="hs-dropdown-menu hidden w-48 bg-white border border-gray-200 rounded shadow mt-1">
-                <a href="#" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                <a  href="/lecturer/profile" className="block px-3 py-2 text-gray-700 hover:bg-gray-100 rounded">
                   My account
                 </a>
 
