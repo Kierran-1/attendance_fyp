@@ -44,7 +44,7 @@ export async function GET() {
       },
       include: {
         course: {
-          select: { code: true, name: true },
+          select: { code: true, name: true, venue: true },
         },
       },
     });
@@ -58,6 +58,7 @@ export async function GET() {
         id: activeSession.id,
         courseId: activeSession.courseId,
         course: activeSession.course,
+        sessionType: activeSession.sessionType,
         startTime: activeSession.startTime,
         endTime: activeSession.endTime,
       },

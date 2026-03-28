@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -13,148 +15,108 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
-/*
- * later need to replace the QRPreview component with a real QR generator using actual signed session/user data from backend
- * Later replacement:
- * - qrcode library
- * - server-generated signed QR payload
- * - real validation via backend
-*/
-
-const studentProfile = {
-  name: 'John Doe',
-  studentId: '102788856',
-  email: '102788856@students.swinburne.edu.my',
-  program: 'Bachelor of Computer Science',
+type ActiveSession = {
+  id: string;
+  courseId: string;
+  course: { code: string; name: string; venue: string };
+  sessionType: string;
+  startTime: string;
+  endTime: string;
 };
 
-const activeAttendanceSession = {
-  available: true,
-  unitCode: 'COS40005',
-  unitName: 'Computing Technology Project A',
-  sessionType: 'Tutorial Session',
-  validUntil: '10:10 AM',
-  venue: 'A304',
+type StudentProfile = {
+  studentId: string;
+  major: string | null;
 };
 
-/**
- * Creates a repeatable numeric hash from a string.
- * Used to generate a consistent QR-style pattern preview.
- */
-function createSeed(value: string) {
-  let hash = 0;
-
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-
-  return Math.abs(hash);
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
-function QRPreview({ value }: { value: string }) {
-  const cells = useMemo(() => {
-    const size = 25;
-    const seed = createSeed(value);
-    const matrix: boolean[][] = [];
-
-    for (let row = 0; row < size; row += 1) {
-      const currentRow: boolean[] = [];
-
-      for (let col = 0; col < size; col += 1) {
-        const inTopLeftFinder = row < 7 && col < 7;
-        const inTopRightFinder = row < 7 && col >= size - 7;
-        const inBottomLeftFinder = row >= size - 7 && col < 7;
-
-        if (inTopLeftFinder || inTopRightFinder || inBottomLeftFinder) {
-          const localRow = row % 7;
-          const localCol = col % 7;
-
-          const isOuter =
-            localRow === 0 ||
-            localRow === 6 ||
-            localCol === 0 ||
-            localCol === 6;
-
-          const isInner =
-            localRow >= 2 &&
-            localRow <= 4 &&
-            localCol >= 2 &&
-            localCol <= 4;
-
-          currentRow.push(isOuter || isInner);
-        } else {
-          const bit =
-            ((seed + row * 37 + col * 19 + row * col * 7) ^
-              (row * 97 + col * 57)) %
-            2;
-
-          currentRow.push(bit === 0);
-        }
-      }
-
-      matrix.push(currentRow);
-    }
-
-    return matrix;
-  }, [value]);
-
-  return (
-    <svg
-      viewBox="0 0 250 250"
-      className="h-[260px] w-[260px] rounded-3xl bg-white p-4 shadow-inner sm:h-[300px] sm:w-[300px]"
-      aria-label="Student QR code preview"
-      role="img"
-    >
-      <rect x="0" y="0" width="250" height="250" fill="white" />
-      {cells.map((row, rowIndex) =>
-        row.map((filled, colIndex) =>
-          filled ? (
-            <rect
-              key={`${rowIndex}-${colIndex}`}
-              x={colIndex * 10}
-              y={rowIndex * 10}
-              width="10"
-              height="10"
-              rx="1"
-              fill="#111111"
-            />
-          ) : null
-        )
-      )}
-    </svg>
-  );
+function formatSessionType(raw: string) {
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
 export default function StudentQRCodePage() {
+  const { data: authSession } = useSession();
+
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [qrToken, setQrToken] = useState<string | null>(null);
   const [qrVersion, setQrVersion] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [qrLoading, setQrLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const qrPayload = useMemo(() => {
-    return JSON.stringify({
-      studentId: studentProfile.studentId,
-      unitCode: activeAttendanceSession.unitCode,
-      sessionType: activeAttendanceSession.sessionType,
-      version: qrVersion,
-    });
-  }, [qrVersion]);
-
-  const handleRefresh = () => {
-    setQrVersion((prev) => prev + 1);
-  };
-
-  const handleCopyStudentId = async () => {
+  const fetchQrToken = useCallback(async (sessionId: string) => {
+    setQrLoading(true);
     try {
-      await navigator.clipboard.writeText(studentProfile.studentId);
-      setCopied(true);
+      const res = await fetch('/api/attendance/generate-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = await res.json();
+      setQrToken(data.token ?? null);
+      setQrVersion((v) => v + 1);
+    } catch {
+      setQrToken(null);
+    } finally {
+      setQrLoading(false);
+    }
+  }, []);
 
-      window.setTimeout(() => {
-        setCopied(false);
-      }, 1500);
+  const fetchActiveSession = useCallback(async () => {
+    const res = await fetch('/api/attendance/active-session');
+    const data = await res.json();
+    const session: ActiveSession | null = data.session ?? null;
+    setActiveSession(session);
+    return session;
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      setLoading(true);
+      try {
+        const [dashRes, session] = await Promise.all([
+          fetch('/api/student/dashboard').then((r) => r.json()),
+          fetchActiveSession(),
+        ]);
+        if (dashRes.profile) {
+          setProfile({ studentId: dashRes.profile.studentId, major: dashRes.profile.major });
+        }
+        if (session) {
+          await fetchQrToken(session.id);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+    init();
+  }, [fetchActiveSession, fetchQrToken]);
+
+  async function handleRefresh() {
+    const session = await fetchActiveSession();
+    if (session) {
+      await fetchQrToken(session.id);
+    }
+  }
+
+  async function handleCopyStudentId() {
+    if (!profile?.studentId) return;
+    try {
+      await navigator.clipboard.writeText(profile.studentId);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
     } catch {
       setCopied(false);
     }
-  };
+  }
+
+  const sessionAvailable = activeSession !== null && qrToken !== null;
 
   return (
     <div className="space-y-6">
@@ -185,9 +147,10 @@ export default function StudentQRCodePage() {
           <button
             type="button"
             onClick={handleRefresh}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026]"
+            disabled={qrLoading}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026] disabled:opacity-60"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={16} className={qrLoading ? 'animate-spin' : ''} />
             Refresh QR
           </button>
         </div>
@@ -202,8 +165,8 @@ export default function StudentQRCodePage() {
             </p>
             <QrCode size={18} className="text-gray-300" />
           </div>
-          <p className="text-2xl font-black tracking-tight text-green-600">
-            {activeAttendanceSession.available ? 'Active' : 'Unavailable'}
+          <p className={`text-2xl font-black tracking-tight ${loading ? 'text-gray-400' : sessionAvailable ? 'text-green-600' : 'text-gray-400'}`}>
+            {loading ? 'Loading…' : sessionAvailable ? 'Active' : 'No Session'}
           </p>
           <p className="mt-2 text-xs text-gray-500">
             Based on current session availability
@@ -218,7 +181,7 @@ export default function StudentQRCodePage() {
             <CheckCircle2 size={18} className="text-gray-300" />
           </div>
           <p className="text-2xl font-black tracking-tight text-gray-900">
-            {activeAttendanceSession.unitCode}
+            {activeSession?.course.code ?? '—'}
           </p>
           <p className="mt-2 text-xs text-gray-500">Current displayed session</p>
         </div>
@@ -231,7 +194,7 @@ export default function StudentQRCodePage() {
             <ShieldCheck size={18} className="text-gray-300" />
           </div>
           <p className="text-2xl font-black tracking-tight text-gray-900">
-            Tutorial
+            {activeSession ? formatSessionType(activeSession.sessionType) : '—'}
           </p>
           <p className="mt-2 text-xs text-gray-500">
             Student-facing session label
@@ -246,7 +209,7 @@ export default function StudentQRCodePage() {
             <Clock3 size={18} className="text-gray-300" />
           </div>
           <p className="text-2xl font-black tracking-tight text-[#E4002B]">
-            {activeAttendanceSession.validUntil}
+            {activeSession ? formatTime(activeSession.endTime) : '—'}
           </p>
           <p className="mt-2 text-xs text-gray-500">Refresh when needed</p>
         </div>
@@ -274,20 +237,33 @@ export default function StudentQRCodePage() {
             </div>
           </div>
 
-          {activeAttendanceSession.available ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center rounded-[28px] bg-gray-50 py-20">
+              <RefreshCw size={32} className="animate-spin text-gray-300" />
+              <p className="mt-4 text-sm text-gray-400">Loading session…</p>
+            </div>
+          ) : sessionAvailable ? (
             <div className="flex flex-col items-center rounded-[28px] bg-gradient-to-br from-rose-50 via-white to-red-50 px-4 py-8">
-              <QRPreview value={qrPayload} />
+              <div className="h-[260px] w-[260px] rounded-3xl bg-white p-4 shadow-inner sm:h-[300px] sm:w-[300px] flex items-center justify-center">
+                <QRCodeSVG
+                  value={qrToken!}
+                  size={220}
+                  bgColor="#ffffff"
+                  fgColor="#111111"
+                  level="M"
+                />
+              </div>
 
               <div className="mt-6 text-center">
                 <p className="text-lg font-black tracking-tight text-gray-900">
-                  {studentProfile.name}
+                  {authSession?.user?.name ?? '—'}
                 </p>
                 <p className="mt-1 text-sm text-gray-500">
-                  {studentProfile.studentId}
+                  {profile?.studentId ?? '—'}
                 </p>
                 <p className="mt-2 text-sm font-semibold text-[#E4002B]">
-                  {activeAttendanceSession.unitCode} ·{' '}
-                  {activeAttendanceSession.sessionType}
+                  {activeSession.course.code} ·{' '}
+                  {formatSessionType(activeSession.sessionType)} Session
                 </p>
               </div>
 
@@ -295,9 +271,10 @@ export default function StudentQRCodePage() {
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
+                  disabled={qrLoading}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-60"
                 >
-                  <RefreshCw size={16} />
+                  <RefreshCw size={16} className={qrLoading ? 'animate-spin' : ''} />
                   Refresh QR
                 </button>
 
@@ -341,10 +318,10 @@ export default function StudentQRCodePage() {
                   Unit
                 </p>
                 <p className="mt-2 text-sm font-semibold text-gray-800">
-                  {activeAttendanceSession.unitCode}
+                  {activeSession?.course.code ?? '—'}
                 </p>
                 <p className="mt-1 text-sm text-gray-500">
-                  {activeAttendanceSession.unitName}
+                  {activeSession?.course.name ?? 'No session active'}
                 </p>
               </div>
 
@@ -353,7 +330,7 @@ export default function StudentQRCodePage() {
                   Session
                 </p>
                 <p className="mt-2 text-sm font-semibold text-gray-800">
-                  {activeAttendanceSession.sessionType}
+                  {activeSession ? `${formatSessionType(activeSession.sessionType)} Session` : '—'}
                 </p>
               </div>
 
@@ -362,7 +339,7 @@ export default function StudentQRCodePage() {
                   Venue
                 </p>
                 <p className="mt-2 text-sm font-semibold text-gray-800">
-                  {activeAttendanceSession.venue}
+                  {activeSession?.course.venue ?? '—'}
                 </p>
               </div>
 
@@ -371,7 +348,7 @@ export default function StudentQRCodePage() {
                   Valid Until
                 </p>
                 <p className="mt-2 text-sm font-semibold text-[#E4002B]">
-                  {activeAttendanceSession.validUntil}
+                  {activeSession ? formatTime(activeSession.endTime) : '—'}
                 </p>
               </div>
             </div>
@@ -392,7 +369,7 @@ export default function StudentQRCodePage() {
                   Student Name
                 </p>
                 <p className="mt-2 text-sm font-semibold text-gray-800">
-                  {studentProfile.name}
+                  {authSession?.user?.name ?? '—'}
                 </p>
               </div>
 
@@ -402,17 +379,19 @@ export default function StudentQRCodePage() {
                 </p>
                 <div className="mt-2 flex items-center gap-2">
                   <p className="text-sm font-semibold text-gray-800">
-                    {studentProfile.studentId}
+                    {profile?.studentId ?? '—'}
                   </p>
 
-                  <button
-                    type="button"
-                    onClick={handleCopyStudentId}
-                    className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-                  >
-                    <Copy size={12} />
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
+                  {profile?.studentId && (
+                    <button
+                      type="button"
+                      onClick={handleCopyStudentId}
+                      className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                    >
+                      <Copy size={12} />
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -421,7 +400,7 @@ export default function StudentQRCodePage() {
                   Email
                 </p>
                 <p className="mt-2 text-sm font-semibold text-gray-800">
-                  {studentProfile.email}
+                  {authSession?.user?.email ?? '—'}
                 </p>
               </div>
 
@@ -430,7 +409,7 @@ export default function StudentQRCodePage() {
                   Program
                 </p>
                 <p className="mt-2 text-sm font-semibold text-gray-800">
-                  {studentProfile.program}
+                  {profile?.major ?? '—'}
                 </p>
               </div>
             </div>
