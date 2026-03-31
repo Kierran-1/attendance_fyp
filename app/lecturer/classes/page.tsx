@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
   Plus,
@@ -27,7 +27,8 @@ import {
   GraduationCap,
   ChevronDown,
   ChevronUp,
-  FolderOpen
+  FolderOpen,
+  Loader2
 } from "lucide-react";
 
 // Types
@@ -69,44 +70,10 @@ interface ClassData {
 
 type ViewMode = "list" | "create" | "upload" | "detail";
 
-const INITIAL_CLASSES: ClassData[] = [
-  {
-    id: "1",
-    unitCode: "COS40005",
-    unitName: "Final Year Project",
-    day: "Monday",
-    time: "09:00 - 11:00",
-    location: "B201",
-    createdAt: "2026-03-01",
-    students: [
-      { id: "1", studentNumber: "102345678", name: "Ahmad Hakim", program: "Bachelor of Computer Science" },
-      { id: "2", studentNumber: "102345679", name: "Priya Nair", program: "Bachelor of Computer Science" },
-      { id: "3", studentNumber: "102345680", name: "Lee Wei Jian", program: "Bachelor of Data Science" },
-    ],
-    sessions: [
-      { id: "s1", date: "2026-03-10", attendancePercentage: 85, status: "Completed", presentCount: 3, absentCount: 0, lateCount: 0, sickCount: 0 },
-      { id: "s2", date: "2026-03-17", attendancePercentage: 67, status: "Completed", presentCount: 2, absentCount: 1, lateCount: 0, sickCount: 0 },
-    ]
-  },
-  {
-    id: "2",
-    unitCode: "SWE30003",
-    unitName: "Software Architecture and Design",
-    day: "Tuesday",
-    time: "13:00 - 15:00",
-    location: "G603",
-    lecturer: "Jason Thomas Chew",
-    classType: "LA1",
-    group: "01",
-    term: "2026_MAR_S1",
-    createdAt: "2026-03-01",
-    students: [],
-    sessions: []
-  }
-];
-
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassData[]>(INITIAL_CLASSES);
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
   const [activeTab, setActiveTab] = useState<"students" | "sessions" | "summary">("students");
@@ -148,10 +115,37 @@ export default function ClassesPage() {
     columns: string[];
   }>>([]);
 
+  // Fetch data from API
+  useEffect(() => {
+    async function fetchCourses() {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/lecturer/courses');
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch courses');
+        }
+
+        const data = await response.json();
+        setClasses(data);
+
+        // Auto-expand all units on initial load
+        const unitCodes = new Set<string>(data.map((c: ClassData) => c.unitCode));
+        setExpandedUnits(unitCodes);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCourses();
+  }, []);
+
   // Group classes by Unit Code
   const groupedClasses = useMemo(() => {
     const groups: { [key: string]: ClassData[] } = {};
-    
+
     classes.forEach(cls => {
       const key = cls.unitCode;
       if (!groups[key]) {
@@ -166,7 +160,7 @@ export default function ClassesPage() {
   // Get unique students across all sheets for a unit (UNION)
   const getUniqueStudentsForUnit = (unitClasses: ClassData[]) => {
     const uniqueStudents = new Map<string, Student>();
-    
+
     unitClasses.forEach(cls => {
       cls.students.forEach(student => {
         // Use studentNumber as the key for deduplication
@@ -175,14 +169,14 @@ export default function ClassesPage() {
         }
       });
     });
-    
+
     return uniqueStudents;
   };
 
   // Get unique students across ALL classes (global union)
   const allUniqueStudents = useMemo(() => {
     const uniqueStudents = new Map<string, Student>();
-    
+
     classes.forEach(cls => {
       cls.students.forEach(student => {
         if (!uniqueStudents.has(student.studentNumber)) {
@@ -190,7 +184,7 @@ export default function ClassesPage() {
         }
       });
     });
-    
+
     return uniqueStudents;
   }, [classes]);
 
@@ -199,7 +193,7 @@ export default function ClassesPage() {
     return Object.entries(groupedClasses).map(([unitCode, unitClasses]) => {
       const firstClass = unitClasses[0];
       const uniqueStudents = getUniqueStudentsForUnit(unitClasses);
-      
+
       return {
         unitCode,
         unitName: firstClass.unitName,
@@ -234,46 +228,57 @@ export default function ClassesPage() {
   const stats = useMemo(() => {
     const totalUniqueStudents = allUniqueStudents.size; // UNION across all classes
     const totalSessions = classes.reduce((acc, c) => acc + c.sessions.length, 0);
-    
+
     // At-risk calculation also needs to be by unique student
     const atRiskStudentNumbers = new Set<string>();
-    
+
     classes.forEach(c => {
       const avgAttendance = c.sessions.length > 0
         ? c.sessions.reduce((s, sess) => s + sess.attendancePercentage, 0) / c.sessions.length
         : 100;
-      
+
       if (avgAttendance < 80) {
         c.students.forEach(s => atRiskStudentNumbers.add(s.studentNumber));
       }
     });
 
-    return { 
+    return {
       totalStudents: totalUniqueStudents, // UNION count
-      totalSessions, 
+      totalSessions,
       atRiskStudents: atRiskStudentNumbers.size, // UNION count
-      classCount: classes.length 
+      classCount: classes.length
     };
   }, [classes, allUniqueStudents]);
 
-  const handleCreateClass = () => {
+  const handleCreateClass = async () => {
     if (!createForm.unitCode || !createForm.unitName) return;
 
-    const newClass: ClassData = {
-      id: Date.now().toString(),
-      unitCode: createForm.unitCode,
-      unitName: createForm.unitName,
-      day: createForm.day,
-      time: createForm.time || "TBA",
-      location: createForm.location || "TBA",
-      students: [],
-      sessions: [],
-      createdAt: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const response = await fetch('/api/lecturer/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: createForm.unitCode,
+          name: createForm.unitName,
+          scheduleDay: createForm.day,
+          scheduleTime: createForm.time,
+          venue: createForm.location,
+          sessionType: 'LECTURE',
+          semester: '2026_MAR_S1',
+          year: 2026,
+          capacity: 50,
+        }),
+      });
 
-    setClasses(prev => [...prev, newClass]);
-    setCreateForm({ unitCode: "", unitName: "", day: "Monday", time: "", location: "" });
-    setViewMode("list");
+      if (!response.ok) throw new Error('Failed to create course');
+
+      const newClass = await response.json();
+      setClasses(prev => [...prev, newClass]);
+      setCreateForm({ unitCode: "", unitName: "", day: "Monday", time: "", location: "" });
+      setViewMode("list");
+    } catch (err) {
+      alert('Failed to create class: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
   };
 
   const parseSheet = (worksheet: XLSX.WorkSheet, sheetName: string) => {
@@ -418,7 +423,7 @@ export default function ClassesPage() {
         // Calculate UNION of unique students across all sheets
         const uniqueStudentNumbers = new Set<string>();
         let totalRawStudents = 0;
-        
+
         allSheets.forEach(sheet => {
           const studentNumberCol = sheet.columns.indexOf('Student Number');
           if (studentNumberCol >= 0) {
@@ -474,7 +479,7 @@ export default function ClassesPage() {
     }
   }, []);
 
-  const confirmImport = () => {
+  const confirmImport = async () => {
     if (!columnMapping.studentId || !columnMapping.name) {
       alert('Please map at least Student ID and Name columns');
       return;
@@ -482,131 +487,195 @@ export default function ClassesPage() {
 
     if (!uploadFile || parsedSheets.length === 0) return;
 
-    // Create a map to track unique students across all sheets
-    const globalStudentMap = new Map<string, Student>();
-    const newClasses: ClassData[] = [];
-    const timestamp = Date.now();
+    try {
+      // Create a map to track unique students across all sheets
+      const globalStudentMap = new Map<string, Student>();
+      const newClasses: ClassData[] = [];
+      const timestamp = Date.now();
 
-    parsedSheets.forEach((sheet, sheetIndex) => {
-      const { metadata, students: studentData, columns } = sheet;
+      parsedSheets.forEach((sheet, sheetIndex) => {
+        const { metadata, students: studentData, columns } = sheet;
 
-      // Parse students for this sheet
-      const sheetStudents: Student[] = studentData
-        .filter((row: any) => row && row.length > 0 && row[0])
-        .map((row: any, idx: number) => {
-          const studentNumberCol = columns.indexOf(columnMapping.studentId);
-          const nameCol = columns.indexOf(columnMapping.name);
-          const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
-          const nationalityCol = columns.findIndex((h: string) => h.toLowerCase().includes('nationality'));
-          const schoolStatusCol = columns.findIndex((h: string) => h.toLowerCase().includes('school status'));
+        // Parse students for this sheet
+        const sheetStudents: Student[] = studentData
+          .filter((row: any) => row && row.length > 0 && row[0])
+          .map((row: any, idx: number) => {
+            const studentNumberCol = columns.indexOf(columnMapping.studentId);
+            const nameCol = columns.indexOf(columnMapping.name);
+            const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
+            const nationalityCol = columns.findIndex((h: string) => h.toLowerCase().includes('nationality'));
+            const schoolStatusCol = columns.findIndex((h: string) => h.toLowerCase().includes('school status'));
 
-          const studentNumber = row[studentNumberCol]?.toString().trim() || "";
-          const name = row[nameCol]?.toString().trim() || "";
+            const studentNumber = row[studentNumberCol]?.toString().trim() || "";
+            const name = row[nameCol]?.toString().trim() || "";
 
-          if (!studentNumber || !name) return null;
+            if (!studentNumber || !name) return null;
 
-          const student: Student = {
-            id: `${timestamp}_${sheetIndex}_${idx}`,
-            studentNumber,
-            name,
-            program: programCol >= 0 ? row[programCol]?.toString().trim() || "" : "",
-            nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || "" : "",
-            schoolStatus: schoolStatusCol >= 0 ? row[schoolStatusCol]?.toString().trim() || "" : ""
-          };
+            const student: Student = {
+              id: `${timestamp}_${sheetIndex}_${idx}`,
+              studentNumber,
+              name,
+              program: programCol >= 0 ? row[programCol]?.toString().trim() || "" : "",
+              nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || "" : "",
+              schoolStatus: schoolStatusCol >= 0 ? row[schoolStatusCol]?.toString().trim() || "" : ""
+            };
 
-          // Add to global map for union tracking
-          if (!globalStudentMap.has(studentNumber)) {
-            globalStudentMap.set(studentNumber, student);
-          }
+            // Add to global map for union tracking
+            if (!globalStudentMap.has(studentNumber)) {
+              globalStudentMap.set(studentNumber, student);
+            }
 
-          return student;
-        })
-        .filter((s: Student | null): s is Student => s !== null);
+            return student;
+          })
+          .filter((s: Student | null): s is Student => s !== null);
 
-      // Create class for this sheet
-      const newClass: ClassData = {
-        id: `${timestamp}_${sheetIndex}`,
-        unitCode: metadata.unitCode || "IMPORTED",
-        unitName: metadata.unitName || "Imported Class",
-        day: metadata.day || "TBA",
-        time: metadata.time || "TBA",
-        location: metadata.room || "TBA",
-        lecturer: metadata.lecturer,
-        classType: metadata.classType,
-        group: metadata.group,
-        term: metadata.term,
-        students: sheetStudents,
-        sessions: [],
-        createdAt: new Date().toISOString().split('T')[0]
+        // Create class for this sheet
+        const newClass: ClassData = {
+          id: `${timestamp}_${sheetIndex}`,
+          unitCode: metadata.unitCode || "IMPORTED",
+          unitName: metadata.unitName || "Imported Class",
+          day: metadata.day || "TBA",
+          time: metadata.time || "TBA",
+          location: metadata.room || "TBA",
+          lecturer: metadata.lecturer,
+          classType: metadata.classType,
+          group: metadata.group,
+          term: metadata.term,
+          students: sheetStudents,
+          sessions: [],
+          createdAt: new Date().toISOString().split('T')[0]
+        };
+
+        newClasses.push(newClass);
+      });
+
+      if (newClasses.length === 0) {
+        alert('No valid classes to import');
+        return;
+      }
+
+      // TODO: Send to API to persist in database
+      // For now, just add to local state
+      console.log(`Importing ${newClasses.length} classes with ${globalStudentMap.size} unique students`);
+
+      // Add all new classes
+      setClasses(prev => [...prev, ...newClasses]);
+
+      // Auto-expand the newly added unit
+      const unitCode = newClasses[0].unitCode;
+      setExpandedUnits(prev => new Set([...prev, unitCode]));
+
+      // Reset state
+      setUploadFile(null);
+      setUploadPreview([]);
+      setUploadColumns([]);
+      setColumnMapping({ studentId: "", name: "", program: "" });
+      setParsedSheets([]);
+      setUploadStep(1);
+      setViewMode("list");
+    } catch (error) {
+      alert('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  const removeStudent = async (studentId: string) => {
+    if (!selectedClass) return;
+
+    try {
+      // TODO: API call to remove enrollment
+      // await fetch(`/api/lecturer/courses/${selectedClass.id}/students/${studentId}`, {
+      //   method: 'DELETE'
+      // });
+
+      setClasses(prev => prev.map(c =>
+        c.id === selectedClass.id
+          ? { ...c, students: c.students.filter(s => s.id !== studentId) }
+          : c
+      ));
+      setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
+    } catch (err) {
+      alert('Failed to remove student');
+    }
+  };
+
+  const createSession = async () => {
+    if (!selectedClass) return;
+
+    try {
+      // TODO: API call to create session
+      // const response = await fetch(`/api/lecturer/courses/${selectedClass.id}/sessions`, {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ startTime: new Date(), endTime: new Date(Date.now() + 2 * 60 * 60 * 1000) })
+      // });
+
+      const newSession: Session = {
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0],
+        attendancePercentage: 0,
+        status: "Scheduled",
+        presentCount: 0,
+        absentCount: selectedClass.students.length,
+        lateCount: 0,
+        sickCount: 0
       };
 
-      newClasses.push(newClass);
-    });
-
-    if (newClasses.length === 0) {
-      alert('No valid classes to import');
-      return;
+      setClasses(prev => prev.map(c =>
+        c.id === selectedClass.id
+          ? { ...c, sessions: [...c.sessions, newSession] }
+          : c
+      ));
+      setSelectedClass(prev => prev ? { ...prev, sessions: [...prev.sessions, newSession] } : null);
+    } catch (err) {
+      alert('Failed to create session');
     }
-
-    console.log(`Importing ${newClasses.length} classes with ${globalStudentMap.size} unique students`);
-
-    // Add all new classes
-    setClasses(prev => [...prev, ...newClasses]);
-    
-    // Auto-expand the newly added unit
-    const unitCode = newClasses[0].unitCode;
-    setExpandedUnits(prev => new Set([...prev, unitCode]));
-
-    // Reset state
-    setUploadFile(null);
-    setUploadPreview([]);
-    setUploadColumns([]);
-    setColumnMapping({ studentId: "", name: "", program: "" });
-    setParsedSheets([]);
-    setUploadStep(1);
-    setViewMode("list");
   };
 
-  const removeStudent = (studentId: string) => {
-    if (!selectedClass) return;
-    setClasses(prev => prev.map(c =>
-      c.id === selectedClass.id
-        ? { ...c, students: c.students.filter(s => s.id !== studentId) }
-        : c
-    ));
-    setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
-  };
+  const deleteClass = async (classId: string) => {
+    if (!confirm("Are you sure you want to delete this class?")) return;
 
-  const createSession = () => {
-    if (!selectedClass) return;
-    const newSession: Session = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
-      attendancePercentage: 0,
-      status: "Scheduled",
-      presentCount: 0,
-      absentCount: selectedClass.students.length,
-      lateCount: 0,
-      sickCount: 0
-    };
+    try {
+      // TODO: API call to delete course
+      // await fetch(`/api/lecturer/courses/${classId}`, { method: 'DELETE' });
 
-    setClasses(prev => prev.map(c =>
-      c.id === selectedClass.id
-        ? { ...c, sessions: [...c.sessions, newSession] }
-        : c
-    ));
-    setSelectedClass(prev => prev ? { ...prev, sessions: [...prev.sessions, newSession] } : null);
-  };
-
-  const deleteClass = (classId: string) => {
-    if (confirm("Are you sure you want to delete this class?")) {
       setClasses(prev => prev.filter(c => c.id !== classId));
       if (selectedClass?.id === classId) {
         setSelectedClass(null);
         setViewMode("list");
       }
+    } catch (err) {
+      alert('Failed to delete class');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-gray-500">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-lg">Loading classes...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-xl border shadow-sm text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Classes</h3>
+          <p className="text-gray-500 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const renderListView = () => (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -673,152 +742,176 @@ export default function ClassesPage() {
 
       {/* Units Accordion */}
       <div className="space-y-4">
-        {units.map((unit) => {
-          const isExpanded = expandedUnits.has(unit.unitCode);
-          const filteredUnitClasses = unit.classes.filter(c => 
-            c.unitCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.unitName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.classType?.toLowerCase().includes(searchQuery.toLowerCase())
-          );
-
-          if (filteredUnitClasses.length === 0) return null;
-
-          return (
-            <div key={unit.unitCode} className="bg-white rounded-xl border shadow-sm overflow-hidden">
-              {/* Unit Header */}
+        {units.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border shadow-sm">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FolderOpen className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Classes Found</h3>
+            <p className="text-gray-500 mb-4">Upload a master attendance list or create a new class to get started.</p>
+            <div className="flex gap-3 justify-center">
               <button
-                onClick={() => toggleUnit(unit.unitCode)}
-                className="w-full p-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                onClick={() => setViewMode("upload")}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-                    {unit.unitCode.slice(0, 2)}
-                  </div>
-                  <div className="text-left">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-gray-900 text-lg">{unit.unitCode}</h3>
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                        {filteredUnitClasses.length} class{filteredUnitClasses.length !== 1 ? 'es' : ''}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500">{unit.unitName}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="hidden sm:flex flex-col items-end text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Users className="w-4 h-4" />
-                      {unit.totalStudents} total students
-                    </span>
-                    <span className="text-xs text-gray-400">across all groups</span>
-                  </div>
-                  {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  )}
-                </div>
+                Upload List
               </button>
+              <button
+                onClick={() => setViewMode("create")}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Create Class
+              </button>
+            </div>
+          </div>
+        ) : (
+          units.map((unit) => {
+            const isExpanded = expandedUnits.has(unit.unitCode);
+            const filteredUnitClasses = unit.classes.filter(c =>
+              c.unitCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              c.unitName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              c.classType?.toLowerCase().includes(searchQuery.toLowerCase())
+            );
 
-              {/* Classes Grid */}
-              {isExpanded && (
-                <div className="border-t bg-gray-50 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredUnitClasses.map((cls) => {
-                      const avgAttendance = cls.sessions.length > 0
-                        ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
-                        : 0;
+            if (filteredUnitClasses.length === 0) return null;
 
-                      return (
-                        <div
-                          key={cls.id}
-                          className="group bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
-                        >
-                          <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
-                          <div className="p-5">
-                            <div className="flex items-start justify-between mb-4">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">
-                                    {cls.classType || 'Class'} {cls.group ? `• Group ${cls.group}` : ''}
-                                  </p>
+            return (
+              <div key={unit.unitCode} className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                {/* Unit Header */}
+                <button
+                  onClick={() => toggleUnit(unit.unitCode)}
+                  className="w-full p-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                      {unit.unitCode.slice(0, 2)}
+                    </div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-gray-900 text-lg">{unit.unitCode}</h3>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          {filteredUnitClasses.length} class{filteredUnitClasses.length !== 1 ? 'es' : ''}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500">{unit.unitName}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="hidden sm:flex flex-col items-end text-sm text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-4 h-4" />
+                        {unit.totalStudents} total students
+                      </span>
+                      <span className="text-xs text-gray-400">across all groups</span>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Classes Grid */}
+                {isExpanded && (
+                  <div className="border-t bg-gray-50 p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredUnitClasses.map((cls) => {
+                        const avgAttendance = cls.sessions.length > 0
+                          ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
+                          : 0;
+
+                        return (
+                          <div
+                            key={cls.id}
+                            className="group bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+                          >
+                            <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
+                            <div className="p-5">
+                              <div className="flex items-start justify-between mb-4">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">
+                                      {cls.classType || 'Class'} {cls.group ? `• Group ${cls.group}` : ''}
+                                    </p>
+                                  </div>
+                                  <h3 className="font-bold text-gray-900 line-clamp-1">{cls.unitName}</h3>
                                 </div>
-                                <h3 className="font-bold text-gray-900 line-clamp-1">{cls.unitName}</h3>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => deleteClass(cls.id)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                              <div className="space-y-2 mb-4">
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Clock className="w-4 h-4 text-gray-400" />
+                                  <span>{cls.day}, {cls.time}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <MapPin className="w-4 h-4 text-gray-400" />
+                                  <span>{cls.location}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Users className="w-4 h-4 text-gray-400" />
+                                  <span>{cls.students.length} Students</span>
+                                </div>
+                                {cls.lecturer && (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <GraduationCap className="w-4 h-4 text-gray-400" />
+                                    <span>{cls.lecturer}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {cls.sessions.length > 0 && (
+                                <div className="mb-4 pt-3 border-t">
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-500">Avg Attendance</span>
+                                    <span className={`font-semibold ${avgAttendance >= 80 ? 'text-green-600' : avgAttendance >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                      {avgAttendance}%
+                                    </span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-500 ${avgAttendance >= 80 ? 'bg-green-500' : avgAttendance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                      style={{ width: `${avgAttendance}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex gap-2 pt-2">
                                 <button
-                                  onClick={() => deleteClass(cls.id)}
-                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  onClick={() => { setSelectedClass(cls); setViewMode("detail"); }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Eye className="w-4 h-4" />
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => {/* Navigate to attendance page */ }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                                >
+                                  <Play className="w-4 h-4" />
+                                  Start
                                 </button>
                               </div>
                             </div>
-
-                            <div className="space-y-2 mb-4">
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Clock className="w-4 h-4 text-gray-400" />
-                                <span>{cls.day}, {cls.time}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <MapPin className="w-4 h-4 text-gray-400" />
-                                <span>{cls.location}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Users className="w-4 h-4 text-gray-400" />
-                                <span>{cls.students.length} Students</span>
-                              </div>
-                              {cls.lecturer && (
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <GraduationCap className="w-4 h-4 text-gray-400" />
-                                  <span>{cls.lecturer}</span>
-                                </div>
-                              )}
-                            </div>
-
-                            {cls.sessions.length > 0 && (
-                              <div className="mb-4 pt-3 border-t">
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-gray-500">Avg Attendance</span>
-                                  <span className={`font-semibold ${avgAttendance >= 80 ? 'text-green-600' : avgAttendance >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                                    {avgAttendance}%
-                                  </span>
-                                </div>
-                                <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${avgAttendance >= 80 ? 'bg-green-500' : avgAttendance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-                                    style={{ width: `${avgAttendance}%` }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="flex gap-2 pt-2">
-                              <button
-                                onClick={() => { setSelectedClass(cls); setViewMode("detail"); }}
-                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                              >
-                                <Eye className="w-4 h-4" />
-                                View
-                              </button>
-                              <button
-                                onClick={() => {/* Navigate to attendance page */ }}
-                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                              >
-                                <Play className="w-4 h-4" />
-                                Start
-                              </button>
-                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -967,7 +1060,7 @@ export default function ClassesPage() {
                 Upload the official Swinburne attendance Excel file with multiple sheets.
               </p>
               <p className="text-xs text-gray-400 mb-6 max-w-md mx-auto">
-                Each sheet represents a different class group (LA1, LA2, TU1, etc.) for the same UNIT. 
+                Each sheet represents a different class group (LA1, LA2, TU1, etc.) for the same UNIT.
                 The system will read ALL sheets and create classes for each group.
               </p>
               <input
