@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     : 'LECTURE') as SessionType;
 
   // Upsert course under this lecturer
-  const course = await prisma.course.upsert({
+  const course = await prisma.unit.upsert({
     where: { code: courseInput.code },
     update: {
       name: courseInput.name,

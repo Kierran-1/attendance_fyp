@@ -51,7 +51,7 @@ export async function POST() {
       create: { userId: devLecturerUser.id, department: 'Dev' },
     });
 
-    const devCourse = await prisma.course.upsert({
+    const devCourse = await prisma.unit.upsert({
       where: { code: 'DEV0001' },
       update: {},
       create: {

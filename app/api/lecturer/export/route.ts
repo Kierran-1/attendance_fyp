@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'courseId is required' }, { status: 400 });
   }
 
-  const course = await prisma.course.findFirst({
+  const course = await prisma.unit.findFirst({
     where: { id: courseId, lecturerId: profile.id },
   });
   if (!course) {

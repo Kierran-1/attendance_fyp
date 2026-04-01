@@ -65,7 +65,7 @@ export async function POST() {
   // Create/upsert courses
   const courseRecords = [];
   for (const c of COURSES_DATA) {
-    const course = await prisma.course.upsert({
+    const course = await prisma.unit.upsert({
       where: { code: c.code },
       update: { lecturer: { connect: { id: lecturerProfile.id } }, name: c.name },
       create: { ...c, lecturer: { connect: { id: lecturerProfile.id } } },

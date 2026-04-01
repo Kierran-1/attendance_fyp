@@ -35,7 +35,7 @@ export async function GET() {
   }
 
   // Courses with today's sessions and enrollment counts
-  const courses = await prisma.course.findMany({
+  const courses = await prisma.unit.findMany({
     where: { lecturerId: lecturerProfile.id },
     include: {
       _count: { select: { enrollments: true } },

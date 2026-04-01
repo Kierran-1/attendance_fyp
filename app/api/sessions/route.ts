@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify the course belongs to this lecturer
-  const course = await prisma.course.findFirst({
+  const course = await prisma.unit.findFirst({
     where: { id: courseId, lecturerId: profile.id },
   });
 

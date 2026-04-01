@@ -89,13 +89,13 @@ model LecturerProfile {
   updatedAt  DateTime @updatedAt
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courses            Course[]
+  courses            Unit[]
   attendanceSessions AttendanceSession[]
 }
 
 // ── Courses ───────────────────────────────────────────────────────
 
-model Course {
+model Unit {
   id           String      @id @default(cuid())
   code         String      @unique
   name         String
@@ -125,7 +125,7 @@ model CourseEnrollment {
   enrolledAt DateTime @default(now())
 
   student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  course  Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course  Unit           @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, courseId])
   @@index([courseId])
@@ -145,7 +145,7 @@ model AttendanceSession {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  course            Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course            Unit               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   lecturer          LecturerProfile    @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
   attendanceRecords AttendanceRecord[]
 
