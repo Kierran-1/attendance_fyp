@@ -97,7 +97,7 @@ model LecturerProfile {
 
 model Unit {
   id           String      @id @default(cuid())
-  code         String      @unique
+  code         String                           // ✅ removed @unique
   name         String
   lecturerId   String
   semester     String
@@ -115,6 +115,7 @@ model Unit {
   enrollments        CourseEnrollment[]
   attendanceSessions AttendanceSession[]
 
+  @@unique([code, classGroup, lecturerId])     
   @@index([lecturerId])
 }
 

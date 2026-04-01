@@ -6,8 +6,8 @@ import { UserRole } from '@prisma/client';
 
 /**
  * Determine role from Swinburne email domain:
- *   @students.swinburne.edu.my → STUDENT
- *   @swinburne.edu.my          → LECTURER (staff; promote to ADMIN manually)
+ *   @students.swinburne.edu.my -> STUDENT
+ *   @swinburne.edu.my          -> LECTURER (staff; promote to ADMIN manually)
  */
 function getRoleFromEmail(email: string): UserRole {
   if (email.endsWith('@students.swinburne.edu.my')) return UserRole.STUDENT;
@@ -38,13 +38,14 @@ export const authOptions: AuthOptions = {
     async signIn({ user, account }) {
       if (account?.provider !== 'azure-ad' || !user.email) return true;
 
-      // Look up by email — user.id from the OAuth callback may be the provider's
+      // Look up by email, user.id from the OAuth callback may be the provider's
       // external ID, not the database cuid. Email is always the reliable key.
       const dbUser = await prisma.user.findUnique({
         where: { email: user.email },
         include: {
-          studentProfile: true,
-          lecturerProfile: true,
+          // Select only id to avoid selecting stale/removed columns from old generated clients.
+          studentProfile: { select: { id: true } },
+          lecturerProfile: { select: { id: true } },
         },
       });
 

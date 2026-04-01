@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
   Plus,
@@ -24,7 +24,11 @@ import {
   TrendingDown,
   TrendingUp,
   BarChart3,
-  GraduationCap
+  GraduationCap,
+  ChevronDown,
+  ChevronUp,
+  FolderOpen,
+  Loader2
 } from "lucide-react";
 
 // Types
@@ -32,7 +36,6 @@ interface Student {
   id: string;
   studentNumber: string;
   name: string;
-
   program?: string;
   nationality?: string;
   schoolStatus?: string;
@@ -67,44 +70,15 @@ interface ClassData {
 
 type ViewMode = "list" | "create" | "upload" | "detail";
 
-const INITIAL_CLASSES: ClassData[] = [
-  {
-    id: "1",
-    unitCode: "COS40005",
-    unitName: "Final Year Project",
-    day: "Monday",
-    time: "09:00 - 11:00",
-    location: "B201",
-    createdAt: "2026-03-01",
-    students: [
-      { id: "1", studentNumber: "102345678", name: "Ahmad Hakim", program: "Bachelor of Computer Science" },
-      { id: "2", studentNumber: "102345679", name: "Priya Nair", program: "Bachelor of Computer Science" },
-      { id: "3", studentNumber: "102345680", name: "Lee Wei Jian", program: "Bachelor of Data Science" },
-    ],
-    sessions: [
-      { id: "s1", date: "2026-03-10", attendancePercentage: 85, status: "Completed", presentCount: 3, absentCount: 0, lateCount: 0, sickCount: 0 },
-      { id: "s2", date: "2026-03-17", attendancePercentage: 67, status: "Completed", presentCount: 2, absentCount: 1, lateCount: 0, sickCount: 0 },
-    ]
-  },
-  {
-    id: "2",
-    unitCode: "COS20031",
-    unitName: "Database Design Project",
-    day: "Tuesday",
-    time: "13:00 - 15:00",
-    location: "G603",
-    createdAt: "2026-03-01",
-    students: [],
-    sessions: []
-  }
-];
-
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassData[]>(INITIAL_CLASSES);
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
   const [activeTab, setActiveTab] = useState<"students" | "sessions" | "summary">("students");
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
 
   const [createForm, setCreateForm] = useState({
     unitCode: "",
@@ -124,57 +98,292 @@ export default function ClassesPage() {
   });
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
+  const [parsedSheets, setParsedSheets] = useState<Array<{
+    sheetName: string;
+    metadata: {
+      term?: string;
+      unitCode?: string;
+      unitName?: string;
+      classType?: string;
+      group?: string;
+      day?: string;
+      time?: string;
+      room?: string;
+      lecturer?: string;
+    };
+    students: any[];
+    columns: string[];
+  }>>([]);
 
-  const [parsedMetadata, setParsedMetadata] = useState<{
-    term?: string;
-    unitCode?: string;
-    unitName?: string;
-    classType?: string;
-    group?: string;
-    day?: string;
-    time?: string;
-    room?: string;
-    lecturer?: string;
-  }>({});
+  // Fetch data from API
+  useEffect(() => {
+    async function fetchCourses() {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/lecturer/courses');
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch courses');
+        }
+
+        const data = await response.json();
+        setClasses(data);
+
+        // Auto-expand all units on initial load
+        const unitCodes = new Set<string>(data.map((c: ClassData) => c.unitCode));
+        setExpandedUnits(unitCodes);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCourses();
+  }, []);
+
+  // Group classes by Unit Code
+  const groupedClasses = useMemo(() => {
+    const groups: { [key: string]: ClassData[] } = {};
+
+    classes.forEach(cls => {
+      const key = cls.unitCode;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(cls);
+    });
+
+    return groups;
+  }, [classes]);
+
+  // Get unique students across all sheets for a unit (UNION)
+  const getUniqueStudentsForUnit = (unitClasses: ClassData[]) => {
+    const uniqueStudents = new Map<string, Student>();
+
+    unitClasses.forEach(cls => {
+      cls.students.forEach(student => {
+        // Use studentNumber as the key for deduplication
+        if (!uniqueStudents.has(student.studentNumber)) {
+          uniqueStudents.set(student.studentNumber, student);
+        }
+      });
+    });
+
+    return uniqueStudents;
+  };
+
+  // Get unique students across ALL classes (global union)
+  const allUniqueStudents = useMemo(() => {
+    const uniqueStudents = new Map<string, Student>();
+
+    classes.forEach(cls => {
+      cls.students.forEach(student => {
+        if (!uniqueStudents.has(student.studentNumber)) {
+          uniqueStudents.set(student.studentNumber, student);
+        }
+      });
+    });
+
+    return uniqueStudents;
+  }, [classes]);
+
+  // Get unique units with their info - using UNION for student count
+  const units = useMemo(() => {
+    return Object.entries(groupedClasses).map(([unitCode, unitClasses]) => {
+      const firstClass = unitClasses[0];
+      const uniqueStudents = getUniqueStudentsForUnit(unitClasses);
+
+      return {
+        unitCode,
+        unitName: firstClass.unitName,
+        classCount: unitClasses.length,
+        totalStudents: uniqueStudents.size, // UNION count, not sum
+        classes: unitClasses
+      };
+    });
+  }, [groupedClasses]);
+
+  const toggleUnit = (unitCode: string) => {
+    setExpandedUnits(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(unitCode)) {
+        newSet.delete(unitCode);
+      } else {
+        newSet.add(unitCode);
+      }
+      return newSet;
+    });
+  };
 
   const filteredClasses = useMemo(() => {
     return classes.filter(c =>
       c.unitCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.unitName.toLowerCase().includes(searchQuery.toLowerCase())
+      c.unitName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.classType?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [classes, searchQuery]);
 
+  // Updated stats using UNION logic for total students
   const stats = useMemo(() => {
-    const totalStudents = classes.reduce((acc, c) => acc + c.students.length, 0);
+    const totalUniqueStudents = allUniqueStudents.size; // UNION across all classes
     const totalSessions = classes.reduce((acc, c) => acc + c.sessions.length, 0);
-    const atRiskStudents = classes.reduce((acc, c) => {
+
+    // At-risk calculation also needs to be by unique student
+    const atRiskStudentNumbers = new Set<string>();
+
+    classes.forEach(c => {
       const avgAttendance = c.sessions.length > 0
         ? c.sessions.reduce((s, sess) => s + sess.attendancePercentage, 0) / c.sessions.length
         : 100;
-      return acc + (avgAttendance < 80 ? c.students.length : 0);
-    }, 0);
 
-    return { totalStudents, totalSessions, atRiskStudents, classCount: classes.length };
-  }, [classes]);
+      if (avgAttendance < 80) {
+        c.students.forEach(s => atRiskStudentNumbers.add(s.studentNumber));
+      }
+    });
 
-  const handleCreateClass = () => {
+    return {
+      totalStudents: totalUniqueStudents, // UNION count
+      totalSessions,
+      atRiskStudents: atRiskStudentNumbers.size, // UNION count
+      classCount: classes.length
+    };
+  }, [classes, allUniqueStudents]);
+
+  const handleCreateClass = async () => {
     if (!createForm.unitCode || !createForm.unitName) return;
 
-    const newClass: ClassData = {
-      id: Date.now().toString(),
-      unitCode: createForm.unitCode,
-      unitName: createForm.unitName,
-      day: createForm.day,
-      time: createForm.time || "TBA",
-      location: createForm.location || "TBA",
-      students: [],
-      sessions: [],
-      createdAt: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const response = await fetch('/api/lecturer/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: createForm.unitCode,
+          name: createForm.unitName,
+          scheduleDay: createForm.day,
+          scheduleTime: createForm.time,
+          venue: createForm.location,
+          sessionType: 'LECTURE',
+          semester: '2026_MAR_S1',
+          year: 2026,
+          capacity: 50,
+        }),
+      });
 
-    setClasses(prev => [...prev, newClass]);
-    setCreateForm({ unitCode: "", unitName: "", day: "Monday", time: "", location: "" });
-    setViewMode("list");
+      if (!response.ok) throw new Error('Failed to create course');
+
+      const newClass = await response.json();
+      setClasses(prev => [...prev, newClass]);
+      setCreateForm({ unitCode: "", unitName: "", day: "Monday", time: "", location: "" });
+      setViewMode("list");
+    } catch (err) {
+      alert('Failed to create class: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const parseSheet = (worksheet: XLSX.WorkSheet, sheetName: string) => {
+    const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
+
+    if (allData.length < 8) {
+      console.warn(`Sheet ${sheetName} does not contain enough rows`);
+      return null;
+    }
+
+    // Extract term from Row 4 (index 3)
+    const row4 = allData[2] || [];
+    const row4Text = row4.join(' ');
+
+    // Extract term
+    const termMatch = row4Text.match(/Term\s*:\s*([^,]+)/i);
+    const term = termMatch ? termMatch[1].trim() : "";
+
+    let unitCode = "";
+    let unitName = "";
+
+    if (row4Text.includes("Unit")) {
+      const unitPart = row4Text.split("Unit")[1];
+      if (unitPart) {
+        const cleaned = unitPart.replace(":", "").trim();
+        const parts = cleaned.split("-");
+        unitCode = parts[0]?.trim() || "";
+        unitName = parts.slice(1).join("-").trim() || "";
+      }
+    }
+
+    // Row 5 - Class details
+    const row5 = allData[3] || [];
+    const row5Text = row5.join(',');
+
+    const classDetails = row5Text
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0);
+
+    const classType = classDetails[0] || "";
+    const group = classDetails[1] || "";
+    const day = classDetails[2] || "";
+    const time = classDetails[3] || "";
+    const room = classDetails[4] || "";
+    const lecturer = classDetails[5] || "";
+
+    // Handle merged headers in rows 6-7 (indices 4-5)
+    const row6 = allData[4] || [];
+    const row7 = allData[5] || [];
+
+    const headers: string[] = [];
+    const maxCols = Math.max(row6.length, row7.length);
+
+    for (let i = 0; i < maxCols; i++) {
+      const row6Val = row6[i]?.toString().trim();
+      const row7Val = row7[i]?.toString().trim();
+
+      if (i < 8) {
+        if (i === 0) headers.push(row6Val || 'Sl.No');
+        else if (i === 1) headers.push(row6Val || 'Student Number');
+        else if (i === 2) headers.push('Empty');
+        else if (i === 3) headers.push(row6Val || 'Student Name');
+        else if (i === 4) headers.push(row6Val || 'Program');
+        else if (i === 5) headers.push(row6Val || 'Registered Course');
+        else if (i === 6) headers.push(row6Val || 'Nationality');
+        else if (i === 7) headers.push(row6Val || 'School Status');
+      } else {
+        if (row6Val && row6Val.includes('/')) {
+          headers.push(`Week_${row6Val.replace(/\//g, '_')}`);
+        } else if (row6Val) {
+          headers.push(row6Val);
+        } else if (row7Val && /^\d+$/.test(row7Val)) {
+          headers.push(`Week_${row7Val}`);
+        } else {
+          headers.push(`Column_${i + 1}`);
+        }
+      }
+    }
+
+    const coreHeaders = headers.slice(0, 8);
+    const studentData = allData.slice(6).map((row: any) => {
+      const paddedRow = [...row];
+      while (paddedRow.length < headers.length) {
+        paddedRow.push('');
+      }
+      return paddedRow.slice(0, 8);
+    });
+
+    return {
+      sheetName,
+      metadata: {
+        term,
+        unitCode,
+        unitName,
+        classType,
+        group,
+        day,
+        time,
+        room,
+        lecturer
+      },
+      students: studentData,
+      columns: coreHeaders
+    };
   };
 
   const handleFileUpload = (file: File) => {
@@ -188,117 +397,57 @@ export default function ClassesPage() {
       try {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
 
-        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
+        const allSheets: any[] = [];
 
-        if (allData.length < 8) {
-          alert('File does not contain enough rows. Expected Swinburne attendance format.');
+        // Parse ALL sheets
+        workbook.SheetNames.forEach(sheetName => {
+          const worksheet = workbook.Sheets[sheetName];
+          const parsed = parseSheet(worksheet, sheetName);
+          if (parsed) {
+            allSheets.push(parsed);
+          }
+        });
+
+        if (allSheets.length === 0) {
+          alert('No valid sheets found in the file');
           return;
         }
 
-        // Extract term from Row 4 (index 3)
-
-        const row4 = allData[2] || [];
-        const row4Text = row4.join(' ');
-
-        // Extract term
-        const termMatch = row4Text.match(/Term\s*:\s*([^,]+)/i);
-        const term = termMatch ? termMatch[1].trim() : "";
-
-        let unitCode = "";
-        let unitName = "";
-
-        if (row4Text.includes("Unit")) {
-          const unitPart = row4Text.split("Unit")[1]; // get everything after "Unit"
-
-          if (unitPart) {
-            const cleaned = unitPart.replace(":", "").trim(); // remove colon
-            const parts = cleaned.split("-");
-
-            unitCode = parts[0]?.trim() || "";
-            unitName = parts.slice(1).join("-").trim() || "";
-          }
-        }
-        // Row 5
-        const row5 = allData[3] || [];
-        const row5Text = row5.join(',');
-
-        const classDetails = row5Text
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter((s: string) => s.length > 0);
-
-        const classType = classDetails[0] || "";
-        const group = classDetails[1] || "";
-        const day = classDetails[2] || "";
-        const time = classDetails[3] || "";
-        const room = classDetails[4] || "";
-        const lecturer = classDetails[5] || "";
-
-        // Handle merged headers in rows 6-7 (indices 5-6)
-        const row6 = allData[4  ] || [];
-        const row7 = allData[5] || [];
-
-        const headers: string[] = [];
-        const maxCols = Math.max(row6.length, row7.length);
-
-        for (let i = 0; i < maxCols; i++) {
-          const row6Val = row6[i]?.toString().trim();
-          const row7Val = row7[i]?.toString().trim();
-
-          if (i < 8) {
-            if (i === 0) headers.push(row6Val || 'Sl.No');
-            else if (i === 1) headers.push(row6Val || 'Student Number');
-            else if (i === 2) headers.push('Empty');
-            else if (i === 3) headers.push(row6Val || 'Student Name');
-            else if (i === 4) headers.push(row6Val || 'Program');
-            else if (i === 5) headers.push(row6Val || 'Registered Course');
-            else if (i === 6) headers.push(row6Val || 'Nationality');
-            else if (i === 7) headers.push(row6Val || 'School Status');
-          } else {
-            if (row6Val && row6Val.includes('/')) {
-              headers.push(`Week_${row6Val.replace(/\//g, '_')}`);
-            } else if (row6Val) {
-              headers.push(row6Val);
-            } else if (row7Val && /^\d+$/.test(row7Val)) {
-              headers.push(`Week_${row7Val}`);
-            } else {
-              headers.push(`Column_${i + 1}`);
-            }
-          }
+        // Check if all sheets belong to same unit
+        const unitCodes = new Set(allSheets.map(s => s.metadata.unitCode).filter(Boolean));
+        if (unitCodes.size > 1) {
+          alert(`Warning: Sheets contain different units: ${Array.from(unitCodes).join(', ')}`);
         }
 
-        const coreHeaders = headers.slice(0, 8);
-        const studentData = allData.slice(6).map((row: any) => {
-          const paddedRow = [...row];
-          while (paddedRow.length < headers.length) {
-            paddedRow.push('');
+        // Calculate UNION of unique students across all sheets
+        const uniqueStudentNumbers = new Set<string>();
+        let totalRawStudents = 0;
+
+        allSheets.forEach(sheet => {
+          const studentNumberCol = sheet.columns.indexOf('Student Number');
+          if (studentNumberCol >= 0) {
+            sheet.students.forEach((row: any) => {
+              const studentNumber = row[studentNumberCol]?.toString().trim();
+              if (studentNumber) {
+                uniqueStudentNumbers.add(studentNumber);
+                totalRawStudents++;
+              }
+            });
           }
-          return paddedRow.slice(0, 8);
         });
 
-        setParsedMetadata({
-          term,           // "2026_MAR_S1"
-          unitCode,       // "COS20031"
-          unitName,       // "Database Design Project"
-          classType,      // "LE1"
-          group,          // "01"
-          day,            // "Mon"
-          time,           // "10:00 - 12:00"
-          room,           // "B006"
-          lecturer        // "Jason Thomas Chew"
-        });
+        console.log(`Sheets: ${allSheets.length}, Total rows: ${totalRawStudents}, Unique students: ${uniqueStudentNumbers.size}`);
 
-        setUploadColumns(coreHeaders);
-        setUploadPreview(studentData);
+        setParsedSheets(allSheets);
+        setUploadColumns(allSheets[0].columns);
+        setUploadPreview(allSheets[0].students);
         setUploadFile(file);
         setUploadStep(2);
 
         // Auto-suggest mappings
         const findColumn = (patterns: string[]) => {
-          return coreHeaders.find(h => patterns.some(p => h?.toLowerCase().includes(p.toLowerCase()))) || "";
+          return allSheets[0].columns.find(h => patterns.some(p => h?.toLowerCase().includes(p.toLowerCase()))) || "";
         };
 
         setColumnMapping({
@@ -330,184 +479,214 @@ export default function ClassesPage() {
     }
   }, []);
 
-  const confirmImport = () => {
+  const confirmImport = async () => {
     if (!columnMapping.studentId || !columnMapping.name) {
       alert('Please map at least Student ID and Name columns');
       return;
     }
 
-    if (!uploadFile) return;
+    if (!uploadFile || parsedSheets.length === 0) return;
 
-    // Debug: Check what metadata we have
-    console.log('ConfirmImport - parsedMetadata:', parsedMetadata);
-    console.log('ConfirmImport - unitCode:', parsedMetadata.unitCode);
-    console.log('ConfirmImport - unitName:', parsedMetadata.unitName);
+    try {
+      // Create a map to track unique students across all sheets
+      const globalStudentMap = new Map<string, Student>();
+      const newClasses: ClassData[] = [];
+      const timestamp = Date.now();
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as any[];
+      parsedSheets.forEach((sheet, sheetIndex) => {
+        const { metadata, students: studentData, columns } = sheet;
 
-        // Re-parse the metadata here to ensure we have it
-        // FIXED HERE SOMEHOW
-        const row4 = allData[2]; // ✅ Term + Unit
-        const row4Text = row4.join(' ');
-        const termMatch = row4Text.match(/Term\s*:\s*([^,\s]+)/i);
-        const term = termMatch ? termMatch[1].trim() : '';
-        const unitMatch = row4Text.match(/Unit\s*:\s*([^-]+)-\s*(.+)/i);
-        const unitCode = unitMatch ? unitMatch[1].trim() : '';
-        const unitName = unitMatch ? unitMatch[2].trim() : '';
-
-        const row5 = allData[3] || [];
-        const row5Text = row5.join(',');
-        const classDetails = row5Text.split(',').map((s: string) => s.trim());
-        const classType = classDetails[0] || '';
-        const group = classDetails[1] || '';
-        const day = classDetails[2] || '';
-        const time = classDetails[3] || '';
-        const room = classDetails[4] || '';
-        const lecturer = classDetails[5] || '';
-
-        // Use the re-parsed metadata or fall back to state
-        const finalMetadata = {
-          term: term || parsedMetadata.term,
-          unitCode: unitCode || parsedMetadata.unitCode,
-          unitName: unitName || parsedMetadata.unitName,
-          classType: classType || parsedMetadata.classType,
-          group: group || parsedMetadata.group,
-          day: day || parsedMetadata.day,
-          time: time || parsedMetadata.time,
-          room: room || parsedMetadata.room,
-          lecturer: lecturer || parsedMetadata.lecturer,
-        };
-
-        console.log('Final metadata for import:', finalMetadata);
-
-        // Rest of the student parsing logic...
-        const studentData = allData.slice(6);
-        const headers = uploadColumns;
-
-        const newStudents: Student[] = studentData
+        // Parse students for this sheet
+        const sheetStudents: Student[] = studentData
           .filter((row: any) => row && row.length > 0 && row[0])
           .map((row: any, idx: number) => {
-            const studentNumberCol = headers.indexOf(columnMapping.studentId);
-            const nameCol = headers.indexOf(columnMapping.name);
-            const programCol = columnMapping.program ? headers.indexOf(columnMapping.program) : -1;
-            const nationalityCol = headers.findIndex((h: string) => h.toLowerCase().includes('nationality'));
-            const schoolStatusCol = headers.findIndex((h: string) => h.toLowerCase().includes('school status'));
+            const studentNumberCol = columns.indexOf(columnMapping.studentId);
+            const nameCol = columns.indexOf(columnMapping.name);
+            const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
+            const nationalityCol = columns.findIndex((h: string) => h.toLowerCase().includes('nationality'));
+            const schoolStatusCol = columns.findIndex((h: string) => h.toLowerCase().includes('school status'));
 
             const studentNumber = row[studentNumberCol]?.toString().trim() || "";
             const name = row[nameCol]?.toString().trim() || "";
 
             if (!studentNumber || !name) return null;
 
-            return {
-              id: Date.now().toString() + idx,
+            const student: Student = {
+              id: `${timestamp}_${sheetIndex}_${idx}`,
               studentNumber,
               name,
               program: programCol >= 0 ? row[programCol]?.toString().trim() || "" : "",
               nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || "" : "",
               schoolStatus: schoolStatusCol >= 0 ? row[schoolStatusCol]?.toString().trim() || "" : ""
             };
+
+            // Add to global map for union tracking
+            if (!globalStudentMap.has(studentNumber)) {
+              globalStudentMap.set(studentNumber, student);
+            }
+
+            return student;
           })
           .filter((s: Student | null): s is Student => s !== null);
 
-        if (newStudents.length === 0) {
-          alert('No valid students found. Please check your column mappings.');
-          return;
-        }
-
-        console.log("ROW 4 TEXT:", row4Text);
-        console.log("ROW 5 TEXT:", row5Text);
-        console.log("UNIT MATCH:", unitMatch);
-        console.log("FINAL METADATA:", finalMetadata);
-
-        // Create the class with the parsed metadata
+        // Create class for this sheet
         const newClass: ClassData = {
-          id: Date.now().toString(),
-          unitCode: finalMetadata.unitCode || "IMPORTED",
-          unitName: finalMetadata.unitName || "Imported Class",
-          day: finalMetadata.day || "TBA",
-          time: finalMetadata.time || "TBA",
-          location: finalMetadata.room || "TBA",
-          lecturer: finalMetadata.lecturer,
-          classType: finalMetadata.classType,
-          group: finalMetadata.group,
-          term: finalMetadata.term,
-          students: newStudents,
+          id: `${timestamp}_${sheetIndex}`,
+          unitCode: metadata.unitCode || "IMPORTED",
+          unitName: metadata.unitName || "Imported Class",
+          day: metadata.day || "TBA",
+          time: metadata.time || "TBA",
+          location: metadata.room || "TBA",
+          lecturer: metadata.lecturer,
+          classType: metadata.classType,
+          group: metadata.group,
+          term: metadata.term,
+          students: sheetStudents,
           sessions: [],
           createdAt: new Date().toISOString().split('T')[0]
         };
 
-        console.log('Creating new class:', newClass);
+        newClasses.push(newClass);
+      });
 
-        setClasses(prev => [...prev, newClass]);
-
-        // Reset state
-        setUploadFile(null);
-        setUploadPreview([]);
-        setUploadColumns([]);
-        setColumnMapping({ studentId: "", name: "", program: "" });
-        setParsedMetadata({});
-        setUploadStep(1);
-        setViewMode("list");
-
-      } catch (error) {
-        console.error('Error importing:', error);
-        alert('Error importing students: ' + (error as Error).message);
+      if (newClasses.length === 0) {
+        alert('No valid classes to import');
+        return;
       }
-    };
-    reader.readAsBinaryString(uploadFile);
+
+      // TODO: Send to API to persist in database
+      // For now, just add to local state
+      console.log(`Importing ${newClasses.length} classes with ${globalStudentMap.size} unique students`);
+
+      // Add all new classes
+      setClasses(prev => [...prev, ...newClasses]);
+
+      // Auto-expand the newly added unit
+      const unitCode = newClasses[0].unitCode;
+      setExpandedUnits(prev => new Set([...prev, unitCode]));
+
+      // Reset state
+      setUploadFile(null);
+      setUploadPreview([]);
+      setUploadColumns([]);
+      setColumnMapping({ studentId: "", name: "", program: "" });
+      setParsedSheets([]);
+      setUploadStep(1);
+      setViewMode("list");
+    } catch (error) {
+      alert('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
   };
 
-  const removeStudent = (studentId: string) => {
+  const removeStudent = async (studentId: string) => {
     if (!selectedClass) return;
-    setClasses(prev => prev.map(c =>
-      c.id === selectedClass.id
-        ? { ...c, students: c.students.filter(s => s.id !== studentId) }
-        : c
-    ));
-    setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
+
+    try {
+      // TODO: API call to remove enrollment
+      // await fetch(`/api/lecturer/courses/${selectedClass.id}/students/${studentId}`, {
+      //   method: 'DELETE'
+      // });
+
+      setClasses(prev => prev.map(c =>
+        c.id === selectedClass.id
+          ? { ...c, students: c.students.filter(s => s.id !== studentId) }
+          : c
+      ));
+      setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
+    } catch (err) {
+      alert('Failed to remove student');
+    }
   };
 
-  const createSession = () => {
+  const createSession = async () => {
     if (!selectedClass) return;
-    const newSession: Session = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
-      attendancePercentage: 0,
-      status: "Scheduled",
-      presentCount: 0,
-      absentCount: selectedClass.students.length,
-      lateCount: 0,
-      sickCount: 0
-    };
 
-    setClasses(prev => prev.map(c =>
-      c.id === selectedClass.id
-        ? { ...c, sessions: [...c.sessions, newSession] }
-        : c
-    ));
-    setSelectedClass(prev => prev ? { ...prev, sessions: [...prev.sessions, newSession] } : null);
+    try {
+      // TODO: API call to create session
+      // const response = await fetch(`/api/lecturer/courses/${selectedClass.id}/sessions`, {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ startTime: new Date(), endTime: new Date(Date.now() + 2 * 60 * 60 * 1000) })
+      // });
+
+      const newSession: Session = {
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0],
+        attendancePercentage: 0,
+        status: "Scheduled",
+        presentCount: 0,
+        absentCount: selectedClass.students.length,
+        lateCount: 0,
+        sickCount: 0
+      };
+
+      setClasses(prev => prev.map(c =>
+        c.id === selectedClass.id
+          ? { ...c, sessions: [...c.sessions, newSession] }
+          : c
+      ));
+      setSelectedClass(prev => prev ? { ...prev, sessions: [...prev.sessions, newSession] } : null);
+    } catch (err) {
+      alert('Failed to create session');
+    }
   };
 
-  const deleteClass = (classId: string) => {
-    if (confirm("Are you sure you want to delete this class?")) {
+  const deleteClass = async (classId: string) => {
+    if (!confirm("Are you sure you want to delete this class?")) return;
+
+    try {
+      // TODO: API call to delete course
+      // await fetch(`/api/lecturer/courses/${classId}`, { method: 'DELETE' });
+
       setClasses(prev => prev.filter(c => c.id !== classId));
       if (selectedClass?.id === classId) {
         setSelectedClass(null);
         setViewMode("list");
       }
+    } catch (err) {
+      alert('Failed to delete class');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-gray-500">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-lg">Loading classes...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-xl border shadow-sm text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Classes</h3>
+          <p className="text-gray-500 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const renderListView = () => (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500 uppercase tracking-wide">Total Units</span>
+            <span className="p-2 bg-blue-50 rounded-lg"><FolderOpen className="w-4 h-4 text-blue-600" /></span>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{units.length}</p>
+        </div>
         <div className="bg-white p-4 rounded-xl border shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-gray-500 uppercase tracking-wide">Total Classes</span>
@@ -521,13 +700,7 @@ export default function ClassesPage() {
             <span className="p-2 bg-green-50 rounded-lg"><Users className="w-4 h-4 text-green-600" /></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.totalStudents}</p>
-        </div>
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wide">Sessions Held</span>
-            <span className="p-2 bg-purple-50 rounded-lg"><Calendar className="w-4 h-4 text-purple-600" /></span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.totalSessions}</p>
+          <p className="text-xs text-gray-400 mt-1">Unique across all units</p>
         </div>
         <div className="bg-white p-4 rounded-xl border shadow-sm">
           <div className="flex items-center justify-between mb-2">
@@ -543,7 +716,7 @@ export default function ClassesPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search classes..."
+            placeholder="Search units or classes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-sm"
@@ -555,7 +728,7 @@ export default function ClassesPage() {
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
           >
             <Upload className="w-4 h-4" />
-            Upload Excel
+            Upload Master List
           </button>
           <button
             onClick={() => setViewMode("create")}
@@ -567,99 +740,178 @@ export default function ClassesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredClasses.map((cls) => {
-          const avgAttendance = cls.sessions.length > 0
-            ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
-            : 0;
+      {/* Units Accordion */}
+      <div className="space-y-4">
+        {units.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border shadow-sm">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FolderOpen className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Classes Found</h3>
+            <p className="text-gray-500 mb-4">Upload a master attendance list or create a new class to get started.</p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => setViewMode("upload")}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Upload List
+              </button>
+              <button
+                onClick={() => setViewMode("create")}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Create Class
+              </button>
+            </div>
+          </div>
+        ) : (
+          units.map((unit) => {
+            const isExpanded = expandedUnits.has(unit.unitCode);
+            const filteredUnitClasses = unit.classes.filter(c =>
+              c.unitCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              c.unitName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              c.classType?.toLowerCase().includes(searchQuery.toLowerCase())
+            );
 
-          return (
-            <div
-              key={cls.id}
-              className="group bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
-            >
-              <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">{cls.unitCode}</p>
-                      {cls.classType && (
-                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                          {cls.classType}
+            if (filteredUnitClasses.length === 0) return null;
+
+            return (
+              <div key={unit.unitCode} className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                {/* Unit Header */}
+                <button
+                  onClick={() => toggleUnit(unit.unitCode)}
+                  className="w-full p-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                      {unit.unitCode.slice(0, 2)}
+                    </div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-gray-900 text-lg">{unit.unitCode}</h3>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          {filteredUnitClasses.length} class{filteredUnitClasses.length !== 1 ? 'es' : ''}
                         </span>
-                      )}
+                      </div>
+                      <p className="text-sm text-gray-500">{unit.unitName}</p>
                     </div>
-                    <h3 className="font-bold text-gray-900 line-clamp-1">{cls.unitName}</h3>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => deleteClass(cls.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Clock className="w-4 h-4 text-gray-400" />
-                    <span>{cls.day}, {cls.time}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MapPin className="w-4 h-4 text-gray-400" />
-                    <span>{cls.location}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Users className="w-4 h-4 text-gray-400" />
-                    <span>{cls.students.length} Students</span>
-                  </div>
-                  {cls.lecturer && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <GraduationCap className="w-4 h-4 text-gray-400" />
-                      <span>{cls.lecturer}</span>
-                    </div>
-                  )}
-                </div>
-
-                {cls.sessions.length > 0 && (
-                  <div className="mb-4 pt-3 border-t">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Avg Attendance</span>
-                      <span className={`font-semibold ${avgAttendance >= 80 ? 'text-green-600' : avgAttendance >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                        {avgAttendance}%
+                  <div className="flex items-center gap-4">
+                    <div className="hidden sm:flex flex-col items-end text-sm text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-4 h-4" />
+                        {unit.totalStudents} total students
                       </span>
+                      <span className="text-xs text-gray-400">across all groups</span>
                     </div>
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${avgAttendance >= 80 ? 'bg-green-500' : avgAttendance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-                        style={{ width: `${avgAttendance}%` }}
-                      />
+                    {isExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Classes Grid */}
+                {isExpanded && (
+                  <div className="border-t bg-gray-50 p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredUnitClasses.map((cls) => {
+                        const avgAttendance = cls.sessions.length > 0
+                          ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
+                          : 0;
+
+                        return (
+                          <div
+                            key={cls.id}
+                            className="group bg-white rounded-xl border shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+                          >
+                            <div className="h-1 bg-gradient-to-r from-red-500 to-orange-500" />
+                            <div className="p-5">
+                              <div className="flex items-start justify-between mb-4">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">
+                                      {cls.classType || 'Class'} {cls.group ? `• Group ${cls.group}` : ''}
+                                    </p>
+                                  </div>
+                                  <h3 className="font-bold text-gray-900 line-clamp-1">{cls.unitName}</h3>
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => deleteClass(cls.id)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-2 mb-4">
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Clock className="w-4 h-4 text-gray-400" />
+                                  <span>{cls.day}, {cls.time}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <MapPin className="w-4 h-4 text-gray-400" />
+                                  <span>{cls.location}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Users className="w-4 h-4 text-gray-400" />
+                                  <span>{cls.students.length} Students</span>
+                                </div>
+                                {cls.lecturer && (
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <GraduationCap className="w-4 h-4 text-gray-400" />
+                                    <span>{cls.lecturer}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {cls.sessions.length > 0 && (
+                                <div className="mb-4 pt-3 border-t">
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-500">Avg Attendance</span>
+                                    <span className={`font-semibold ${avgAttendance >= 80 ? 'text-green-600' : avgAttendance >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                                      {avgAttendance}%
+                                    </span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-500 ${avgAttendance >= 80 ? 'bg-green-500' : avgAttendance >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                      style={{ width: `${avgAttendance}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex gap-2 pt-2">
+                                <button
+                                  onClick={() => { setSelectedClass(cls); setViewMode("detail"); }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => {/* Navigate to attendance page */ }}
+                                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                                >
+                                  <Play className="w-4 h-4" />
+                                  Start
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={() => { setSelectedClass(cls); setViewMode("detail"); }}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <Eye className="w-4 h-4" />
-                    View
-                  </button>
-                  <button
-                    onClick={() => {/* Navigate to attendance page */ }}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                  >
-                    <Play className="w-4 h-4" />
-                    Start
-                  </button>
-                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -769,7 +1021,7 @@ export default function ClassesPage() {
               setUploadStep(1);
               setUploadFile(null);
               setUploadPreview([]);
-              setParsedMetadata({});
+              setParsedSheets([]);
             }}
             className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
           >
@@ -803,12 +1055,13 @@ export default function ClassesPage() {
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FileSpreadsheet className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Swinburne Attendance Form</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload Master Attendance Form</h3>
               <p className="text-sm text-gray-500 mb-2 max-w-md mx-auto">
-                Upload the official Swinburne attendance Excel file.
+                Upload the official Swinburne attendance Excel file with multiple sheets.
               </p>
               <p className="text-xs text-gray-400 mb-6 max-w-md mx-auto">
-                The system will automatically extract class information from rows 4-5 and student data from row 8 onwards.
+                Each sheet represents a different class group (LA1, LA2, TU1, etc.) for the same UNIT.
+                The system will read ALL sheets and create classes for each group.
               </p>
               <input
                 type="file"
@@ -824,73 +1077,60 @@ export default function ClassesPage() {
                 <Upload className="w-4 h-4" />
                 Choose File
               </label>
-              <p className="text-xs text-gray-400 mt-4">Supports .xlsx, .xls • Max 10MB</p>
+              <p className="text-xs text-gray-400 mt-4">Supports .xlsx, .xls • Max 10MB • Multiple sheets</p>
             </div>
           </div>
         ) : (
           <div className="p-6">
-            {Object.keys(parsedMetadata).length > 0 && (
+            {/* Detected Sheets Summary */}
+            {parsedSheets.length > 0 && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
-                  Detected Class Information
+                  Detected {parsedSheets.length} Sheets for Unit: {parsedSheets[0].metadata.unitCode}
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  {parsedMetadata.unitCode && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Unit Code</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.unitCode}</p>
+                <div className="space-y-2">
+                  {parsedSheets.map((sheet, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-sm bg-white p-3 rounded-lg border border-blue-100">
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium text-blue-900">{sheet.sheetName}</span>
+                        <span className="text-blue-600">
+                          {sheet.metadata.classType} {sheet.metadata.group && `• Group ${sheet.metadata.group}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-gray-500">
+                        <span>{sheet.metadata.day}, {sheet.metadata.time}</span>
+                        <span>{sheet.metadata.room}</span>
+                        <span>{sheet.students.length} students</span>
+                      </div>
                     </div>
-                  )}
-                  {parsedMetadata.unitName && (
-                    <div className="col-span-2">
-                      <span className="text-blue-600 text-xs uppercase">Unit Name</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.unitName}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.classType && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Type</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.classType}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.group && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Group</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.group}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.day && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Day</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.day}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.time && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Time</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.time}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.room && (
-                    <div>
-                      <span className="text-blue-600 text-xs uppercase">Room</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.room}</p>
-                    </div>
-                  )}
-                  {parsedMetadata.lecturer && (
-                    <div className="col-span-2">
-                      <span className="text-blue-600 text-xs uppercase">Lecturer</span>
-                      <p className="font-semibold text-blue-900">{parsedMetadata.lecturer}</p>
-                    </div>
-                  )}
+                  ))}
+                </div>
+                {/* UNION count display */}
+                <div className="mt-3 pt-3 border-t border-blue-200 flex items-center justify-between text-sm">
+                  <span className="text-blue-700 font-medium">Unique students across all sheets:</span>
+                  <span className="text-blue-900 font-bold text-lg">
+                    {(() => {
+                      const uniqueNumbers = new Set<string>();
+                      parsedSheets.forEach(sheet => {
+                        const studentNumberCol = sheet.columns.indexOf('Student Number');
+                        if (studentNumberCol >= 0) {
+                          sheet.students.forEach((row: any) => {
+                            const num = row[studentNumberCol]?.toString().trim();
+                            if (num) uniqueNumbers.add(num);
+                          });
+                        }
+                      });
+                      return uniqueNumbers.size;
+                    })()}
+                  </span>
                 </div>
               </div>
             )}
 
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Map Excel Columns</h3>
-              <p className="text-sm text-gray-500">Verify the column mappings for student data. The system has auto-detected based on the Swinburne format.</p>
+              <p className="text-sm text-gray-500">Verify the column mappings for student data. These settings will apply to ALL sheets.</p>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -954,7 +1194,7 @@ export default function ClassesPage() {
             </div>
 
             <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Student Data Preview </h4>
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">Student Data Preview (First Sheet)</h4>
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
@@ -967,7 +1207,7 @@ export default function ClassesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {uploadPreview.map((row, idx) => (
+                    {uploadPreview.slice(0, 5).map((row, idx) => (
                       <tr key={idx} className="hover:bg-gray-50">
                         {uploadColumns.slice(0, 7).map((_, colIdx) => (
                           <td key={colIdx} className="px-4 py-2 text-gray-600 whitespace-nowrap">
@@ -994,7 +1234,7 @@ export default function ClassesPage() {
                 className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Confirm Import
+                Import All {parsedSheets.length} Classes
               </button>
             </div>
           </div>
