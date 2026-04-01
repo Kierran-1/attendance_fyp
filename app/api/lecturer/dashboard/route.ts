@@ -34,7 +34,7 @@ export async function GET() {
     });
   }
 
-  // Courses with today's sessions and enrollment counts
+  // Units with today's sessions and enrollment counts
   const courses = await prisma.unit.findMany({
     where: { lecturerId: lecturerProfile.id },
     include: {
@@ -51,21 +51,21 @@ export async function GET() {
   const totalStudents = courses.reduce((sum, c) => sum + c._count.enrollments, 0);
   const todaysClasses = courses.filter((c) => c.attendanceSessions.length > 0).length;
 
-  // All sessions for this lecturer's courses
+  // All sessions for this lecturer's units
   const allSessions = await prisma.attendanceSession.findMany({
     where: { lecturerId: lecturerProfile.id },
-    select: { id: true, courseId: true, _count: { select: { attendanceRecords: true } } },
+    select: { id: true, unitId: true, _count: { select: { attendanceRecords: true } } },
   });
 
-  // Build sessions per course and total records per course
+  // Build sessions per unit and total records per unit
   const sessionsPerCourse: Record<string, number> = {};
   const recordsPerCourse: Record<string, number> = {};
   for (const s of allSessions) {
-    sessionsPerCourse[s.courseId] = (sessionsPerCourse[s.courseId] ?? 0) + 1;
-    recordsPerCourse[s.courseId] = (recordsPerCourse[s.courseId] ?? 0) + s._count.attendanceRecords;
+    sessionsPerCourse[s.unitId] = (sessionsPerCourse[s.unitId] ?? 0) + 1;
+    recordsPerCourse[s.unitId] = (recordsPerCourse[s.unitId] ?? 0) + s._count.attendanceRecords;
   }
 
-  // Average attendance % across all courses
+  // Average attendance % across all units
   let avgNumerator = 0;
   let avgDenominator = 0;
   for (const c of courses) {
@@ -79,43 +79,43 @@ export async function GET() {
   const avgAttendancePct =
     avgDenominator > 0 ? Math.round((avgNumerator / avgDenominator) * 100) : null;
 
-  // At-risk students: enrolled students with < 80% attendance per course
+  // At-risk students: enrolled students with < 80% attendance per unit
   const enrollments =
     courseIds.length > 0
-      ? await prisma.courseEnrollment.findMany({
-          where: { courseId: { in: courseIds } },
+      ? await prisma.unitEnrollment.findMany({
+          where: { unitId: { in: courseIds } },
           include: {
             student: {
               include: { user: { select: { name: true } } },
             },
-            course: { select: { id: true, code: true } },
+            unit: { select: { id: true, code: true } },
           },
         })
       : [];
 
-  // Attendance records per student per course
+  // Attendance records per student per unit
   const studentCourseRecords = await prisma.attendanceRecord.groupBy({
     by: ['userId'],
     where: {
-      session: { courseId: { in: courseIds } },
+      session: { unitId: { in: courseIds } },
     },
     _count: { id: true },
   });
 
-  // We need per-student per-course counts — groupBy can't do multi-field join
+  // We need per-student per-unit counts — groupBy can't do multi-field join
   // So fetch records individually per at-risk check
   const allRecords =
     courseIds.length > 0
       ? await prisma.attendanceRecord.findMany({
-          where: { session: { courseId: { in: courseIds } } },
-          select: { userId: true, session: { select: { courseId: true } } },
+          where: { session: { unitId: { in: courseIds } } },
+          select: { userId: true, session: { select: { unitId: true } } },
         })
       : [];
 
   const attendanceMap: Record<string, Record<string, number>> = {};
   for (const r of allRecords) {
     if (!attendanceMap[r.userId]) attendanceMap[r.userId] = {};
-    const cid = r.session.courseId;
+    const cid = r.session.unitId;
     attendanceMap[r.userId][cid] = (attendanceMap[r.userId][cid] ?? 0) + 1;
   }
 
@@ -129,17 +129,17 @@ export async function GET() {
 
   const seenPairs = new Set<string>();
   for (const e of enrollments) {
-    const totalForCourse = sessionsPerCourse[e.courseId] ?? 0;
+    const totalForCourse = sessionsPerCourse[e.unitId] ?? 0;
     if (totalForCourse === 0) continue;
-    const attended = attendanceMap[e.student.userId]?.[e.courseId] ?? 0;
+    const attended = attendanceMap[e.student.userId]?.[e.unitId] ?? 0;
     const pct = Math.round((attended / totalForCourse) * 100);
-    const key = `${e.student.userId}-${e.courseId}`;
+    const key = `${e.student.userId}-${e.unitId}`;
     if (pct < 80 && !seenPairs.has(key)) {
       seenPairs.add(key);
       atRiskStudents.push({
         name: e.student.user.name ?? '—',
         studentId: e.student.studentId,
-        courseCode: e.course.code,
+        courseCode: e.unit.code,
         attendancePct: pct,
         status: pct < 60 ? 'High Risk' : 'Medium',
       });
@@ -164,14 +164,14 @@ export async function GET() {
         },
         include: {
           _count: { select: { attendanceRecords: true } },
-          course: { select: { _count: { select: { enrollments: true } } } },
+          unit: { select: { _count: { select: { enrollments: true } } } },
         },
       });
 
       let sessionTotal = 0;
       let sessionAttended = 0;
       for (const s of daySessions) {
-        sessionTotal += s.course._count.enrollments;
+        sessionTotal += s.unit._count.enrollments;
         sessionAttended += s._count.attendanceRecords;
       }
 
@@ -185,13 +185,13 @@ export async function GET() {
   const activeSession = await prisma.attendanceSession.findFirst({
     where: { lecturerId: lecturerProfile.id, isActive: true },
     include: {
-      course: { select: { code: true, name: true, venue: true, sessionType: true } },
+      unit: { select: { code: true, name: true, venue: true, classType: true } },
       _count: { select: { attendanceRecords: true } },
     },
   });
 
-  const activeSessionCourseEnrollments = activeSession
-    ? await prisma.courseEnrollment.count({ where: { courseId: activeSession.courseId } })
+  const activeSessionUnitEnrollments = activeSession
+    ? await prisma.unitEnrollment.count({ where: { unitId: activeSession.unitId } })
     : 0;
 
   return NextResponse.json({
@@ -205,13 +205,13 @@ export async function GET() {
     activeSession: activeSession
       ? {
           id: activeSession.id,
-          courseCode: activeSession.course.code,
-          courseName: activeSession.course.name,
-          sessionType: activeSession.course.sessionType,
-          venue: activeSession.course.venue ?? '—',
+          courseCode: activeSession.unit.code,
+          courseName: activeSession.unit.name,
+          sessionType: activeSession.unit.classType,
+          venue: activeSession.unit.venue ?? '—',
           startTime: activeSession.startTime,
           checkedInCount: activeSession._count.attendanceRecords,
-          totalStudents: activeSessionCourseEnrollments,
+          totalStudents: activeSessionUnitEnrollments,
         }
       : null,
     todaysCourses: courses.map((c) => {
@@ -224,7 +224,7 @@ export async function GET() {
         todaySession: todaySession
           ? {
               id: todaySession.id,
-              sessionType: todaySession.sessionType,
+              sessionType: todaySession.classType,
               startTime: todaySession.startTime,
               attendanceCount: todaySession._count.attendanceRecords,
             }

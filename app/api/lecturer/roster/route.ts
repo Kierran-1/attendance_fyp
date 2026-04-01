@@ -30,19 +30,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
   }
 
-  const courseId = formData.get('courseId') as string | null;
+  const unitId = formData.get('courseId') as string | null;
   const file = formData.get('file') as File | null;
 
-  if (!courseId || !file) {
+  if (!unitId || !file) {
     return NextResponse.json({ error: 'courseId and file are required' }, { status: 400 });
   }
 
-  const course = await prisma.unit.findFirst({
-    where: { id: courseId, lecturerId: profile.id },
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId, lecturerId: profile.id },
   });
 
-  if (!course) {
-    return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+  if (!unit) {
+    return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
   }
 
   const text = await file.text();
@@ -134,14 +134,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Enroll in course
-      const existingEnrollment = await prisma.courseEnrollment.findUnique({
-        where: { studentId_courseId: { studentId: studentProfile.id, courseId } },
+      // Enroll in unit
+      const existingEnrollment = await prisma.unitEnrollment.findUnique({
+        where: { studentId_unitId: { studentId: studentProfile.id, unitId } },
       });
 
       if (!existingEnrollment) {
-        await prisma.courseEnrollment.create({
-          data: { studentId: studentProfile.id, courseId },
+        await prisma.unitEnrollment.create({
+          data: { studentId: studentProfile.id, unitId },
         });
         enrolled++;
       } else {

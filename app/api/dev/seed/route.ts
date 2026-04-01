@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { SessionType } from '@prisma/client';
 import crypto from 'crypto';
 
-// DEV ONLY — seeds 3 courses, 15 students, 8 weeks of sessions, and varied attendance records.
+// DEV ONLY — seeds 3 units, 15 students, 8 weeks of sessions, and varied attendance records.
 // Idempotent: re-running will skip session creation if sessions already exist.
 
 const STUDENTS = [
@@ -30,12 +30,12 @@ const STUDENTS = [
 const ATTENDANCE_RATES = [0.92, 0.88, 0.95, 0.85, 0.90, 0.88, 0.92, 0.85, 0.90, 0.88, 0.62, 0.55, 0.68, 0.40, 0.35];
 
 const COURSES_DATA = [
-  { code: 'COS40005', name: 'Computing Technology Project',    semester: 'Sem 1', year: 2026, capacity: 40, sessionType: SessionType.LECTURE, classGroup: '01', scheduleDay: 'Tue', scheduleTime: '13:00 - 15:00', venue: 'G603' },
-  { code: 'COS20019', name: 'Web Technology',                  semester: 'Sem 1', year: 2026, capacity: 60, sessionType: SessionType.LECTURE, classGroup: '01', scheduleDay: 'Mon', scheduleTime: '09:00 - 11:00', venue: 'G501' },
-  { code: 'COS30049', name: 'Computing Technology Innovation', semester: 'Sem 1', year: 2026, capacity: 50, sessionType: SessionType.LECTURE, classGroup: '02', scheduleDay: 'Wed', scheduleTime: '11:00 - 13:00', venue: 'G602' },
+  { code: 'COS40005', name: 'Computing Technology Project',    semester: 'Sem 1', year: 2026, capacity: 40, classType: SessionType.LECTURE, classGroup: '01', scheduleDay: 'Tue', scheduleTime: '13:00 - 15:00', venue: 'G603' },
+  { code: 'COS20019', name: 'Web Technology',                  semester: 'Sem 1', year: 2026, capacity: 60, classType: SessionType.LECTURE, classGroup: '01', scheduleDay: 'Mon', scheduleTime: '09:00 - 11:00', venue: 'G501' },
+  { code: 'COS30049', name: 'Computing Technology Innovation', semester: 'Sem 1', year: 2026, capacity: 50, classType: SessionType.LECTURE, classGroup: '02', scheduleDay: 'Wed', scheduleTime: '11:00 - 13:00', venue: 'G602' },
 ];
 
-// Which student indices are enrolled per course
+// Which student indices are enrolled per unit
 const COURSE_ENROLLMENTS = [
   Array.from({ length: 15 }, (_, i) => i),     // All 15
   Array.from({ length: 12 }, (_, i) => i),     // First 12
@@ -62,11 +62,11 @@ export async function POST() {
     create: { userId, department: 'Computing' },
   });
 
-  // Create/upsert courses
+  // Create/upsert units
   const courseRecords = [];
   for (const c of COURSES_DATA) {
     const course = await prisma.unit.upsert({
-      where: { code: c.code },
+      where: { code_classGroup_lecturerId: { code: c.code, classGroup: c.classGroup, lecturerId: lecturerProfile.id } },
       update: { lecturer: { connect: { id: lecturerProfile.id } }, name: c.name },
       create: { ...c, lecturer: { connect: { id: lecturerProfile.id } } },
     });
@@ -89,14 +89,14 @@ export async function POST() {
     studentProfiles.push({ id: profile.id, userId: user.id });
   }
 
-  // Enroll students in courses
+  // Enroll students in units
   for (let ci = 0; ci < courseRecords.length; ci++) {
     const course = courseRecords[ci];
     for (const idx of COURSE_ENROLLMENTS[ci]) {
-      await prisma.courseEnrollment.upsert({
-        where: { studentId_courseId: { studentId: studentProfiles[idx].id, courseId: course.id } },
+      await prisma.unitEnrollment.upsert({
+        where: { studentId_unitId: { studentId: studentProfiles[idx].id, unitId: course.id } },
         update: {},
-        create: { studentId: studentProfiles[idx].id, courseId: course.id },
+        create: { studentId: studentProfiles[idx].id, unitId: course.id },
       });
     }
   }
@@ -117,15 +117,15 @@ export async function POST() {
 
       for (let w = WEEKS; w >= 1; w--) {
         const sessionStart = new Date();
-        sessionStart.setDate(sessionStart.getDate() - w * 7 + ci); // Stagger by course
+        sessionStart.setDate(sessionStart.getDate() - w * 7 + ci); // Stagger by unit
         sessionStart.setHours(9 + ci * 2, 0, 0, 0);
         const sessionEnd = new Date(sessionStart.getTime() + 2 * 60 * 60 * 1000);
 
         const attendanceSession = await prisma.attendanceSession.create({
           data: {
-            courseId: course.id,
+            unitId: course.id,
             lecturerId: lecturerProfile.id,
-            sessionType: 'LECTURE',
+            classType: 'LECTURE',
             qrCode: crypto.randomUUID(),
             startTime: sessionStart,
             endTime: sessionEnd,
@@ -157,6 +157,6 @@ export async function POST() {
 
   return NextResponse.json({
     success: true,
-    message: `Done — ${courseRecords.length} courses, ${studentProfiles.length} students, ${sessionsCreated} sessions created (${existingCount > 0 ? 'sessions already existed, skipped' : 'fresh seed'})`,
+    message: `Done — ${courseRecords.length} units, ${studentProfiles.length} students, ${sessionsCreated} sessions created (${existingCount > 0 ? 'sessions already existed, skipped' : 'fresh seed'})`,
   });
 }

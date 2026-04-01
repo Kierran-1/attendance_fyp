@@ -41,18 +41,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Lecturer profile not found' }, { status: 404 });
   }
 
-  // Verify the course belongs to this lecturer
-  const course = await prisma.unit.findFirst({
+  // Verify the unit belongs to this lecturer
+  const unit = await prisma.unit.findFirst({
     where: { id: courseId, lecturerId: profile.id },
   });
 
-  if (!course) {
-    return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+  if (!unit) {
+    return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
   }
 
-  // End any existing active sessions for this course
+  // End any existing active sessions for this unit
   await prisma.attendanceSession.updateMany({
-    where: { courseId, isActive: true },
+    where: { unitId: courseId, isActive: true },
     data: { isActive: false, endTime: new Date() },
   });
 
@@ -61,16 +61,16 @@ export async function POST(request: NextRequest) {
 
   const attendanceSession = await prisma.attendanceSession.create({
     data: {
-      courseId,
+      unitId: courseId,
       lecturerId: profile.id,
-      sessionType: sessionType as SessionType,
+      classType: sessionType as SessionType,
       qrCode: crypto.randomUUID(),
       startTime: now,
       endTime,
       isActive: true,
     },
     include: {
-      course: { select: { code: true, name: true } },
+      unit: { select: { code: true, name: true } },
     },
   });
 

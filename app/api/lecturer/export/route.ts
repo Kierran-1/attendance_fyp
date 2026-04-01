@@ -23,21 +23,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Lecturer profile not found' }, { status: 404 });
   }
 
-  const courseId = request.nextUrl.searchParams.get('courseId');
-  if (!courseId) {
+  const unitId = request.nextUrl.searchParams.get('courseId');
+  if (!unitId) {
     return NextResponse.json({ error: 'courseId is required' }, { status: 400 });
   }
 
-  const course = await prisma.unit.findFirst({
-    where: { id: courseId, lecturerId: profile.id },
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId, lecturerId: profile.id },
   });
-  if (!course) {
-    return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+  if (!unit) {
+    return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
   }
 
   // Fetch all enrollments with student profiles
-  const enrollments = await prisma.courseEnrollment.findMany({
-    where: { courseId },
+  const enrollments = await prisma.unitEnrollment.findMany({
+    where: { unitId },
     include: {
       student: {
         include: {
@@ -48,9 +48,9 @@ export async function GET(request: NextRequest) {
     orderBy: { enrolledAt: 'asc' },
   });
 
-  // Fetch all past sessions for this course (ordered by startTime)
+  // Fetch all past sessions for this unit (ordered by startTime)
   const sessions = await prisma.attendanceSession.findMany({
-    where: { courseId, isActive: false },
+    where: { unitId, isActive: false },
     orderBy: { startTime: 'asc' },
     include: {
       attendanceRecords: { select: { userId: true, status: true } },
@@ -71,13 +71,13 @@ export async function GET(request: NextRequest) {
   const ws: XLSX.WorkSheet = {};
 
   const lecturerName = profile.user.name ?? 'Lecturer';
-  const termString = `Term : ${course.year}_MAR_S1 - ${course.year} March Semester 1, Unit : ${course.code} - ${course.name}`;
+  const termString = `Term : ${unit.year}_MAR_S1 - ${unit.year} March Semester 1, Unit : ${unit.code} - ${unit.name}`;
   const classInfo = [
-    course.sessionType ?? '',
-    course.classGroup ?? '',
-    course.scheduleDay ?? '',
-    course.scheduleTime ?? '',
-    course.venue ?? '',
+    unit.classType ?? '',
+    unit.classGroup ?? '',
+    unit.scheduleDay ?? '',
+    unit.scheduleTime ?? '',
+    unit.venue ?? '',
     lecturerName,
   ]
     .filter(Boolean)
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
     ws[`B${row}`] = { v: student.studentId };
     ws[`D${row}`] = { v: student.user.name ?? '' };
     ws[`E${row}`] = { v: student.major ?? '' };
-    ws[`F${row}`] = { v: course.code };
+    ws[`F${row}`] = { v: unit.code };
     ws[`G${row}`] = { v: '' };
     ws[`H${row}`] = { v: 'Active' };
 
@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  const filename = `Attendance_${course.code}_${course.semester}${course.year}.xlsx`;
+  const filename = `Attendance_${unit.code}_${unit.semester}${unit.year}.xlsx`;
 
   return new NextResponse(buffer, {
     headers: {

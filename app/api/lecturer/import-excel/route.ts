@@ -54,17 +54,17 @@ export async function POST(request: NextRequest) {
   }
 
   const rawType = (courseInput.sessionType || '').toUpperCase();
-  const sessionType: SessionType = (['LECTURE', 'TUTORIAL', 'LAB', 'PRACTICAL'].includes(rawType)
+  const classType: SessionType = (['LECTURE', 'TUTORIAL', 'LAB', 'PRACTICAL'].includes(rawType)
     ? rawType
     : 'LECTURE') as SessionType;
 
-  // Upsert course under this lecturer
+  // Upsert unit under this lecturer
   const course = await prisma.unit.upsert({
-    where: { code: courseInput.code },
+    where: { code_classGroup_lecturerId: { code: courseInput.code, classGroup: courseInput.classGroup ?? '', lecturerId: lecturerProfile.id } },
     update: {
       name: courseInput.name,
       semester: courseInput.semester,
-      sessionType,
+      classType,
       classGroup: courseInput.classGroup ?? null,
       scheduleDay: courseInput.scheduleDay ?? null,
       scheduleTime: courseInput.scheduleTime ?? null,
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       semester: courseInput.semester,
       year: new Date().getFullYear(),
       capacity: 999,
-      sessionType,
+      classType,
       classGroup: courseInput.classGroup ?? null,
       scheduleDay: courseInput.scheduleDay ?? null,
       scheduleTime: courseInput.scheduleTime ?? null,
@@ -133,13 +133,13 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const existingEnrollment = await prisma.courseEnrollment.findUnique({
-        where: { studentId_courseId: { studentId: studentProfile.id, courseId: course.id } },
+      const existingEnrollment = await prisma.unitEnrollment.findUnique({
+        where: { studentId_unitId: { studentId: studentProfile.id, unitId: course.id } },
       });
 
       if (!existingEnrollment) {
-        await prisma.courseEnrollment.create({
-          data: { studentId: studentProfile.id, courseId: course.id },
+        await prisma.unitEnrollment.create({
+          data: { studentId: studentProfile.id, unitId: course.id },
         });
         enrolled++;
       } else {
@@ -150,5 +150,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ courseId: course.id, created, enrolled, skipped, errors });
+  return NextResponse.json({ unitId: course.id, created, enrolled, skipped, errors });
 }
