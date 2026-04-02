@@ -71,6 +71,10 @@ model StudentProfile {
   studentId      String   @unique
   major          String?
   enrollmentYear Int?
+  phone          String?
+  program        String?
+  faculty        String?
+  intake         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -102,7 +106,7 @@ model Course {
   semester     String
   year         Int
   capacity     Int
-  sessionType  SessionType
+  sessionType  SessionType @map("classType")
   classGroup   String?
   scheduleDay  String?
   scheduleTime String?
@@ -116,12 +120,13 @@ model Course {
 
   @@unique([code, classGroup, lecturerId])     
   @@index([lecturerId])
+  @@map("Unit")
 }
 
 model CourseEnrollment {
   id         String   @id @default(cuid())
   studentId  String
-  courseId   String
+  courseId   String   @map("unitId")
   enrolledAt DateTime @default(now())
 
   student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -129,15 +134,16 @@ model CourseEnrollment {
 
   @@unique([studentId, courseId])
   @@index([courseId])
+  @@map("UnitEnrollment")
 }
 
 // ── Attendance ────────────────────────────────────────────────────
 
 model AttendanceSession {
   id          String      @id @default(cuid())
-  courseId    String
+  courseId    String      @map("unitId")
   lecturerId  String
-  sessionType SessionType
+  sessionType SessionType @map("classType")
   qrCode      String      @unique
   startTime   DateTime
   endTime     DateTime
@@ -151,6 +157,7 @@ model AttendanceSession {
 
   @@index([courseId])
   @@index([lecturerId])
+  @@map("AttendanceSession")
 }
 
 model AttendanceRecord {

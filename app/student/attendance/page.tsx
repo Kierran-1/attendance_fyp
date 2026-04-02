@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   CalendarDays,
@@ -12,99 +12,44 @@ import {
   XCircle,
 } from 'lucide-react';
 
-/**
- * Later integration:
- * - replace hardcoded data with backend attendance records
- * - filter by logged-in student only
- * - connect export button to real CSV / Excel generation
- */
-
-type AttendanceStatus = 'Present' | 'Absent';
+type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'Excused';
 
 type AttendanceRecord = {
   id: string;
   date: string;
   unitCode: string;
   unitName: string;
-  sessionType: 'Lecture' | 'Tutorial' | 'Lab';
+  sessionType: 'Lecture' | 'Tutorial' | 'Lab' | 'Practical';
   time: string;
   venue: string;
   status: AttendanceStatus;
   recordedAt: string | null;
 };
 
-const attendanceRecords: AttendanceRecord[] = [
-  {
-    id: 'att-1',
-    date: '18 Mar 2026',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    sessionType: 'Tutorial',
-    time: '9:00 AM - 11:00 AM',
-    venue: 'A304',
-    status: 'Present',
-    recordedAt: '9:03 AM',
-  },
-  {
-    id: 'att-2',
-    date: '17 Mar 2026',
-    unitCode: 'SWE30003',
-    unitName: 'Software Architecture and Design',
-    sessionType: 'Lecture',
-    time: '10:00 AM - 12:00 PM',
-    venue: 'C102',
-    status: 'Present',
-    recordedAt: '10:01 AM',
-  },
-  {
-    id: 'att-3',
-    date: '16 Mar 2026',
-    unitCode: 'COS30049',
-    unitName: 'Computing Technology Innovation Project',
-    sessionType: 'Lecture',
-    time: '2:00 PM - 4:00 PM',
-    venue: 'B203',
-    status: 'Absent',
-    recordedAt: null,
-  },
-  {
-    id: 'att-4',
-    date: '13 Mar 2026',
-    unitCode: 'COS30015',
-    unitName: 'IT Security',
-    sessionType: 'Lab',
-    time: '4:00 PM - 6:00 PM',
-    venue: 'D204',
-    status: 'Present',
-    recordedAt: '4:05 PM',
-  },
-  {
-    id: 'att-5',
-    date: '12 Mar 2026',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    sessionType: 'Tutorial',
-    time: '9:00 AM - 11:00 AM',
-    venue: 'A304',
-    status: 'Absent',
-    recordedAt: null,
-  },
-  {
-    id: 'att-6',
-    date: '11 Mar 2026',
-    unitCode: 'SWE30003',
-    unitName: 'Software Architecture and Design',
-    sessionType: 'Lecture',
-    time: '10:00 AM - 12:00 PM',
-    venue: 'C102',
-    status: 'Present',
-    recordedAt: '10:00 AM',
-  },
-];
+type ApiAttendanceRecord = {
+  sessionId: string;
+  date: string;
+  courseCode: string;
+  courseName: string;
+  sessionType: 'LECTURE' | 'TUTORIAL' | 'LAB' | 'PRACTICAL';
+  checkInTime: string | null;
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+  venue?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+};
 
 function getStatusClasses(status: AttendanceStatus) {
   if (status === 'Present') {
     return 'border-green-100 bg-green-50 text-green-700';
+  }
+
+  if (status === 'Late') {
+    return 'border-amber-100 bg-amber-50 text-amber-700';
+  }
+
+  if (status === 'Excused') {
+    return 'border-blue-100 bg-blue-50 text-blue-700';
   }
 
   return 'border-red-100 bg-red-50 text-red-600';
@@ -119,14 +64,82 @@ function getSessionClasses(sessionType: AttendanceRecord['sessionType']) {
     return 'border-rose-100 bg-rose-50 text-[#E4002B]';
   }
 
+  if (sessionType === 'Practical') {
+    return 'border-amber-100 bg-amber-50 text-amber-700';
+  }
+
   return 'border-purple-100 bg-purple-50 text-purple-700';
 }
 
 export default function StudentAttendancePage() {
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Absent'>(
-    'All'
-  );
+  const [statusFilter, setStatusFilter] = useState<
+    'All' | 'Present' | 'Absent' | 'Late' | 'Excused'
+  >('All');
+
+  useEffect(() => {
+    const loadAttendance = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/student/attendance', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to fetch attendance');
+        const data = await res.json();
+
+        const mapped: AttendanceRecord[] = (data.records ?? []).map((record: ApiAttendanceRecord) => {
+          const start = record.startTime ? new Date(record.startTime) : null;
+          const end = record.endTime ? new Date(record.endTime) : null;
+          const checkIn = record.checkInTime ? new Date(record.checkInTime) : null;
+
+          const sessionType =
+            record.sessionType === 'LECTURE'
+              ? 'Lecture'
+              : record.sessionType === 'TUTORIAL'
+                ? 'Tutorial'
+                : record.sessionType === 'LAB'
+                  ? 'Lab'
+                  : 'Practical';
+
+          const status =
+            record.status === 'PRESENT'
+              ? 'Present'
+              : record.status === 'LATE'
+                ? 'Late'
+                : record.status === 'EXCUSED'
+                  ? 'Excused'
+                  : 'Absent';
+
+          return {
+            id: record.sessionId,
+            date: new Date(record.date).toLocaleDateString(),
+            unitCode: record.courseCode,
+            unitName: record.courseName,
+            sessionType,
+            time:
+              start && end
+                ? `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : 'TBD',
+            venue: record.venue || 'TBD',
+            status,
+            recordedAt: checkIn
+              ? checkIn.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : null,
+          };
+        });
+
+        setAttendanceRecords(mapped);
+      } catch (err) {
+        console.error('Failed to load attendance:', err);
+        setError('Unable to load attendance records at the moment.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAttendance();
+  }, []);
 
   const filteredRecords = useMemo(() => {
     return attendanceRecords.filter((item) => {
@@ -140,18 +153,18 @@ export default function StudentAttendancePage() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [searchTerm, statusFilter]);
+  }, [attendanceRecords, searchTerm, statusFilter]);
 
   const presentCount = attendanceRecords.filter(
     (item) => item.status === 'Present'
   ).length;
 
-  const absentCount = attendanceRecords.filter(
-    (item) => item.status === 'Absent'
-  ).length;
+  const absentCount = attendanceRecords.filter((item) => item.status === 'Absent').length;
+
+  const attendedCount = attendanceRecords.filter((item) => item.status !== 'Absent').length;
 
   const attendanceRate = Math.round(
-    (presentCount / attendanceRecords.length) * 100
+    attendanceRecords.length > 0 ? (attendedCount / attendanceRecords.length) * 100 : 0
   );
 
   return (
@@ -189,6 +202,12 @@ export default function StudentAttendancePage() {
           </button>
         </div>
       </section>
+
+      {error && (
+        <section className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </section>
+      )}
 
       {/* Summary cards */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -241,7 +260,7 @@ export default function StudentAttendancePage() {
           <p className="text-4xl font-black tracking-tight text-[#E4002B]">
             {attendanceRate}%
           </p>
-          <p className="mt-2 text-xs text-gray-500">Sample student overview</p>
+          <p className="mt-2 text-xs text-gray-500">Based on your account records</p>
         </div>
       </section>
 
@@ -284,13 +303,17 @@ export default function StudentAttendancePage() {
               id="status-filter"
               value={statusFilter}
               onChange={(e) =>
-                setStatusFilter(e.target.value as 'All' | 'Present' | 'Absent')
+                setStatusFilter(
+                  e.target.value as 'All' | 'Present' | 'Absent' | 'Late' | 'Excused'
+                )
               }
               className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
             >
               <option value="All">All</option>
               <option value="Present">Present</option>
               <option value="Absent">Absent</option>
+              <option value="Late">Late</option>
+              <option value="Excused">Excused</option>
             </select>
           </div>
         </div>
@@ -298,7 +321,11 @@ export default function StudentAttendancePage() {
 
       {/* Attendance list */}
       <section className="space-y-4">
-        {filteredRecords.length > 0 ? (
+        {loading ? (
+          <div className="rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900">Loading attendance records...</h2>
+          </div>
+        ) : filteredRecords.length > 0 ? (
           filteredRecords.map((item) => (
             <article
               key={item.id}
@@ -373,7 +400,7 @@ export default function StudentAttendancePage() {
                     </div>
 
                     <p className="mt-4 text-xs leading-6 text-gray-500">
-                      {item.status === 'Present'
+                      {item.status === 'Present' || item.status === 'Late' || item.status === 'Excused'
                         ? 'Attendance successfully captured for this session.'
                         : 'No attendance record was captured for this session.'}
                     </p>

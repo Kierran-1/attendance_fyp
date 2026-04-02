@@ -1,39 +1,69 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
-  Check,
-  Copy,
+  ShieldCheck,
   IdCard,
   Mail,
-  Phone,
-  Save,
   School,
-  ShieldCheck,
   UserCircle2,
+  AlertCircle,
+  Phone,
+  BookOpen,
+  Building2,
+  Calendar,
 } from 'lucide-react';
 
-/**
- * Later integration:
- * - load real student data from backend / Supabase
- * - save changes through server-side update logic
- */
-
 export default function StudentProfilePage() {
+  const { data: session, status } = useSession();
   const [formData, setFormData] = useState({
-    fullName: 'John Doe',
-    studentId: '102788856',
-    email: '102788856@students.swinburne.edu.my',
-    phone: '+60 12-345 6789',
-    program: 'Bachelor of Computer Science',
-    faculty: 'Faculty of Engineering, Computing and Science',
-    intake: '2023',
+    fullName: '', // From Microsoft
+    studentId: '', // From Microsoft
+    email: '', // From Microsoft
+    phone: '',
+    program: '',
+    faculty: '',
+    intake: '',
   });
 
-  const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Load ALL student data from Microsoft Authenticator
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user) {
+      loadStudentDataFromMicrosoft();
+    }
+  }, [status, session]);
+
+  const loadStudentDataFromMicrosoft = async () => {
+    try {
+      // Fetch all student data from database (synced with Microsoft account)
+      const res = await fetch('/api/student/profile');
+      if (res.ok) {
+        const data = await res.json();
+        setFormData((prev) => ({
+          ...prev,
+          fullName: session?.user?.name || '',
+          studentId: session?.user?.email?.split('@')[0] || '', // From Microsoft email
+          email: session?.user?.email || '',
+          phone: data.phone || '',
+          program: data.program || '',
+          faculty: data.faculty || '',
+          intake: data.intake || '',
+        }));
+      }
+      setLoading(false);
+    } catch (err) {
+      console.error('Error loading profile:', err);
+      setError('Failed to load profile');
+      setLoading(false);
+    }
+  };
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({
@@ -41,25 +71,6 @@ export default function StudentProfilePage() {
       [field]: value,
     }));
     setSaved(false);
-  };
-
-  const handleCopyStudentId = async () => {
-    try {
-      await navigator.clipboard.writeText(formData.studentId);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  };
-
-  const handleSave = () => {
-    /**
-     * Frontend-first save action only.
-     * Later replace with real API / server action.
-     */
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2000);
   };
 
   return (
@@ -86,15 +97,6 @@ export default function StudentProfilePage() {
             <ArrowLeft size={16} />
             Back to Dashboard
           </Link>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026]"
-          >
-            <Save size={16} />
-            Save Changes
-          </button>
         </div>
       </section>
 
@@ -120,20 +122,10 @@ export default function StudentProfilePage() {
             </p>
             <IdCard size={18} className="text-gray-300" />
           </div>
-          <div className="flex items-center gap-2">
-            <p className="text-2xl font-black tracking-tight text-gray-900">
-              {formData.studentId}
-            </p>
-            <button
-              type="button"
-              onClick={handleCopyStudentId}
-              className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-            >
-              <Copy size={12} />
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-gray-500">University student account</p>
+          <p className="text-2xl font-black tracking-tight text-gray-900">
+            {formData.studentId}
+          </p>
+          <p className="mt-2 text-xs text-gray-500">From Microsoft Authenticator</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -217,10 +209,9 @@ export default function StudentProfilePage() {
           </div>
 
           <div className="rounded-3xl border border-rose-100 bg-rose-50 p-6 shadow-sm">
-            <p className="text-sm font-bold text-[#E4002B]">Student Note</p>
+            <p className="text-sm font-bold text-[#E4002B]">🔒 Microsoft Authenticator Data</p>
             <p className="mt-2 text-sm leading-7 text-gray-700">
-              This page is currently frontend-first. The save button is only a UI
-              action for now. Later, connect it to real database update logic.
+              All student information is fetched from <strong>Microsoft Authenticator</strong>. Your <strong>Student ID</strong>, <strong>Full Name</strong>, and <strong>Email Address</strong> are synchronized and protected. Other fields can be edited for your profile.
             </p>
           </div>
         </div>
@@ -245,15 +236,16 @@ export default function StudentProfilePage() {
                 htmlFor="fullName"
                 className="mb-2 block text-sm font-semibold text-gray-700"
               >
-                Full Name
+                Full Name <span className="text-xs text-gray-400">(from Microsoft)</span>
               </label>
               <input
                 id="fullName"
                 type="text"
                 value={formData.fullName}
-                onChange={(e) => handleChange('fullName', e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                disabled
+                className="w-full rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm text-gray-600 outline-none cursor-not-allowed"
               />
+              <p className="text-xs text-gray-500 mt-1">This field is synced from Microsoft Authenticator and cannot be changed.</p>
             </div>
 
             <div>
@@ -261,15 +253,16 @@ export default function StudentProfilePage() {
                 htmlFor="studentId"
                 className="mb-2 block text-sm font-semibold text-gray-700"
               >
-                Student ID
+                Student ID <span className="text-xs text-gray-400">(from Microsoft)</span>
               </label>
               <input
                 id="studentId"
                 type="text"
                 value={formData.studentId}
-                onChange={(e) => handleChange('studentId', e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                disabled
+                className="w-full rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm text-gray-600 outline-none cursor-not-allowed"
               />
+              <p className="text-xs text-gray-500 mt-1">This field is synced from Microsoft Authenticator and cannot be changed.</p>
             </div>
 
             <div>
@@ -293,31 +286,16 @@ export default function StudentProfilePage() {
                 htmlFor="email"
                 className="mb-2 block text-sm font-semibold text-gray-700"
               >
-                Email Address
+                Email Address <span className="text-xs text-gray-400">(from Microsoft)</span>
               </label>
               <input
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                disabled
+                className="w-full rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm text-gray-600 outline-none cursor-not-allowed"
               />
-            </div>
-
-            <div>
-              <label
-                htmlFor="phone"
-                className="mb-2 block text-sm font-semibold text-gray-700"
-              >
-                Phone Number
-              </label>
-              <input
-                id="phone"
-                type="text"
-                value={formData.phone}
-                onChange={(e) => handleChange('phone', e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-              />
+              <p className="text-xs text-gray-500 mt-1">This field is synced from Microsoft Authenticator and cannot be changed.</p>
             </div>
 
             <div>
@@ -325,50 +303,82 @@ export default function StudentProfilePage() {
                 htmlFor="program"
                 className="mb-2 block text-sm font-semibold text-gray-700"
               >
-                Program
+                Program <span className="text-xs text-gray-400">(from Authenticator)</span>
               </label>
               <input
                 id="program"
                 type="text"
                 value={formData.program}
-                onChange={(e) => handleChange('program', e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                disabled
+                className="w-full rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm text-gray-600 outline-none cursor-not-allowed"
               />
+              <p className="text-xs text-gray-500 mt-1">Synced from Microsoft Authenticator and database.</p>
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label
                 htmlFor="faculty"
                 className="mb-2 block text-sm font-semibold text-gray-700"
               >
-                Faculty
+                Faculty <span className="text-xs text-gray-400">(from Authenticator)</span>
               </label>
               <input
                 id="faculty"
                 type="text"
                 value={formData.faculty}
-                onChange={(e) => handleChange('faculty', e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                disabled
+                className="w-full rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm text-gray-600 outline-none cursor-not-allowed"
               />
+              <p className="text-xs text-gray-500 mt-1">Synced from Microsoft Authenticator and database.</p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="phone"
+                className="mb-2 block text-sm font-semibold text-gray-700"
+              >
+                Phone Number <span className="text-xs text-gray-400">(from Authenticator)</span>
+              </label>
+              <input
+                id="phone"
+                type="text"
+                value={formData.phone}
+                disabled
+                className="w-full rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm text-gray-600 outline-none cursor-not-allowed"
+              />
+              <p className="text-xs text-gray-500 mt-1">Synced from Microsoft Authenticator and database.</p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="intake"
+                className="mb-2 block text-sm font-semibold text-gray-700"
+              >
+                Intake Year <span className="text-xs text-gray-400">(from Authenticator)</span>
+              </label>
+              <input
+                id="intake"
+                type="text"
+                value={formData.intake}
+                disabled
+                className="w-full rounded-2xl border border-gray-200 bg-gray-100 px-4 py-3 text-sm text-gray-600 outline-none cursor-not-allowed"
+              />
+              <p className="text-xs text-gray-500 mt-1">Synced from Microsoft Authenticator and database.</p>
             </div>
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleSave}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
-            >
-              <Save size={16} />
-              Save Changes
-            </button>
-
-            {saved && (
-              <div className="inline-flex items-center gap-2 rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">
-                <Check size={16} />
-                Changes saved
+            {error && (
+              <div className="w-full inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 mb-4">
+                <AlertCircle size={16} />
+                {error}
               </div>
             )}
+            
+            <div className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700">
+              <ShieldCheck size={16} />
+              All fields are synced from Microsoft Authenticator
+            </div>
           </div>
         </div>
       </section>

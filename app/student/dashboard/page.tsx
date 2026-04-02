@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 import {
   BookOpen,
   CalendarDays,
@@ -36,75 +37,6 @@ type TodayAttendanceItem = {
   recordedAt: string | null;
 };
 
-const studentInfo = {
-  studentId: '102788856',
-  program: 'Bachelor of Computer Science',
-};
-
-const upcomingClasses: StudentClass[] = [
-  {
-    id: 'cls-1',
-    code: 'COS40005',
-    name: 'COMPUTING TECHNOLOGY PROJECT A',
-    lecturer: 'Jason Thomas Chew',
-    day: 'Monday',
-    time: '9:00 AM - 11:00 AM',
-    location: 'A304',
-  },
-  {
-    id: 'cls-2',
-    code: 'COS30049',
-    name: 'COMPUTING TECHNOLOGY INNOVATION PROJECT',
-    lecturer: 'Elaine Yeu Yee Lee',
-    day: 'Tuesday',
-    time: '2:00 PM - 4:00 PM',
-    location: 'B203',
-  },
-  {
-    id: 'cls-3',
-    code: 'SWE30003',
-    name: 'SOFTWARE ARCHITECTURE AND DESIGN',
-    lecturer: 'Siti Khatijah Bolhassan',
-    day: 'Thursday',
-    time: '10:00 AM - 12:00 PM',
-    location: 'C102',
-  },
-  {
-    id: 'cls-4',
-    code: 'COS30015',
-    name: 'IT SECURITY',
-    lecturer: 'Ahmad Rahman',
-    day: 'Friday',
-    time: '4:00 PM - 6:00 PM',
-    location: 'D204',
-  },
-];
-
-const activeSession = {
-  isAvailable: true,
-  code: 'COS40005',
-  name: 'COMPUTING TECHNOLOGY PROJECT A',
-  sessionLabel: 'Tutorial Session',
-  attendanceWindow: 'Open now until 10:10 AM',
-};
-
-const todayAttendance: TodayAttendanceItem[] = [
-  {
-    id: 'att-1',
-    code: 'COS40005',
-    session: 'Tutorial',
-    status: 'Present',
-    recordedAt: '9:03 AM',
-  },
-  {
-    id: 'att-2',
-    code: 'SWE30003',
-    session: 'Lecture',
-    status: 'Absent',
-    recordedAt: null,
-  },
-];
-
 function getStatusBadgeClasses(status: AttendanceStatus) {
   if (status === 'Present') {
     return 'bg-green-50 text-green-700 border-green-100';
@@ -115,6 +47,49 @@ function getStatusBadgeClasses(status: AttendanceStatus) {
 
 export default function StudentDashboardPage() {
   const { data: session } = useSession();
+  const [studentId, setStudentId] = useState('');
+  const [studentProgram, setStudentProgram] = useState('');
+  const [upcomingClasses, setUpcomingClasses] = useState<StudentClass[]>([]);
+  const [todayAttendance, setTodayAttendance] = useState<TodayAttendanceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch student ID and profile
+  useEffect(() => {
+    if (session?.user?.id) {
+      loadAllData();
+    }
+  }, [session?.user?.id]);
+
+  const loadAllData = async () => {
+    try {
+      setLoading(true);
+      const [profileRes, classesRes, attendanceRes] = await Promise.all([
+        fetch('/api/student/profile?basic=1', { cache: 'no-store' }),
+        fetch('/api/student/classes', { cache: 'no-store' }),
+        fetch('/api/student/attendance?date=today', { cache: 'no-store' }),
+      ]);
+
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        setStudentId(profileData.studentId || '');
+        setStudentProgram(profileData.program || '');
+      }
+
+      if (classesRes.ok) {
+        const classesData = await classesRes.json();
+        setUpcomingClasses(classesData.classes || []);
+      }
+
+      if (attendanceRes.ok) {
+        const attendanceData = await attendanceRes.json();
+        setTodayAttendance(attendanceData.attendance || []);
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const firstName = session?.user?.name?.split(' ')[0] ?? 'Student';
 
@@ -153,7 +128,10 @@ export default function StudentDashboardPage() {
               {session?.user?.name ?? 'Student'}
             </p>
             <p className="text-xs text-gray-500">
-              {studentInfo.studentId} · {studentInfo.program}
+              {studentId || 'Loading...'} · {studentProgram}
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Synced from Microsoft Authenticator
             </p>
           </div>
         </div>
@@ -286,19 +264,19 @@ export default function StudentDashboardPage() {
               <ScanLine size={18} className="text-white/80" />
             </div>
 
-            {activeSession.isAvailable ? (
+            {todayAttendance.length > 0 ? (
               <>
                 <p className="text-lg font-black tracking-tight">
-                  {activeSession.code}
+                  {todayAttendance[0]?.code || 'Session Active'}
                 </p>
                 <p className="mt-1 text-sm text-white/85">
-                  {activeSession.name}
+                  Attendance session in progress
                 </p>
                 <p className="mt-4 text-sm font-semibold">
-                  {activeSession.sessionLabel}
+                  {todayAttendance[0]?.session || 'Lecture'}
                 </p>
                 <p className="mt-1 text-sm text-white/75">
-                  {activeSession.attendanceWindow}
+                  Open now to mark attendance
                 </p>
 
                 <Link

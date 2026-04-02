@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
   CalendarDays,
@@ -23,60 +23,9 @@ type ClassSchedule = {
   day: string;
   time: string;
   venue: string;
-  sessionType: 'Lecture' | 'Tutorial' | 'Lab';
+  sessionType: 'Lecture' | 'Tutorial' | 'Lab' | 'Practical';
   attendanceRate: number;
 };
-
-const enrolledClasses: ClassSchedule[] = [
-  {
-    id: 'cls-1',
-    code: 'COS40005',
-    name: 'Computing Technology Project A',
-    lecturer: 'Jason Thomas Chew',
-    faculty: 'Faculty of Engineering, Computing and Science',
-    day: 'Monday',
-    time: '9:00 AM - 11:00 AM',
-    venue: 'A304',
-    sessionType: 'Tutorial',
-    attendanceRate: 92,
-  },
-  {
-    id: 'cls-2',
-    code: 'COS30049',
-    name: 'Computing Technology Innovation Project',
-    lecturer: 'Elaine Yeu Yee Lee',
-    faculty: 'Faculty of Engineering, Computing and Science',
-    day: 'Tuesday',
-    time: '2:00 PM - 4:00 PM',
-    venue: 'B203',
-    sessionType: 'Lecture',
-    attendanceRate: 88,
-  },
-  {
-    id: 'cls-3',
-    code: 'SWE30003',
-    name: 'Software Architecture and Design',
-    lecturer: 'Siti Khatijah Bolhassan',
-    faculty: 'Faculty of Engineering, Computing and Science',
-    day: 'Thursday',
-    time: '10:00 AM - 12:00 PM',
-    venue: 'C102',
-    sessionType: 'Lecture',
-    attendanceRate: 80,
-  },
-  {
-    id: 'cls-4',
-    code: 'COS30015',
-    name: 'IT Security',
-    lecturer: 'Ahmad Rahman',
-    faculty: 'Faculty of Engineering, Computing and Science',
-    day: 'Friday',
-    time: '4:00 PM - 6:00 PM',
-    venue: 'D204',
-    sessionType: 'Lab',
-    attendanceRate: 95,
-  },
-];
 
 function getSessionTypeClasses(type: ClassSchedule['sessionType']) {
   switch (type) {
@@ -86,6 +35,8 @@ function getSessionTypeClasses(type: ClassSchedule['sessionType']) {
       return 'bg-rose-50 text-[#E4002B] border-rose-100';
     case 'Lab':
       return 'bg-purple-50 text-purple-700 border-purple-100';
+    case 'Practical':
+      return 'bg-amber-50 text-amber-700 border-amber-100';
     default:
       return 'bg-gray-50 text-gray-700 border-gray-100';
   }
@@ -98,10 +49,32 @@ function getAttendanceClasses(rate: number) {
 }
 
 export default function StudentClassesPage() {
+  const [enrolledClasses, setEnrolledClasses] = useState<ClassSchedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<
-    'All' | 'Lecture' | 'Tutorial' | 'Lab'
+    'All' | 'Lecture' | 'Tutorial' | 'Lab' | 'Practical'
   >('All');
+
+  useEffect(() => {
+    const loadClasses = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/student/classes', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to fetch classes');
+        const data = await res.json();
+        setEnrolledClasses(data.classes ?? []);
+      } catch (err) {
+        console.error('Failed to load classes:', err);
+        setError('Unable to load your classes at the moment.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadClasses();
+  }, []);
 
   const filteredClasses = useMemo(() => {
     return enrolledClasses.filter((item) => {
@@ -115,7 +88,7 @@ export default function StudentClassesPage() {
 
       return matchesSearch && matchesType;
     });
-  }, [searchTerm, selectedType]);
+  }, [enrolledClasses, searchTerm, selectedType]);
 
   return (
     <div className="space-y-6">
@@ -195,13 +168,15 @@ export default function StudentClassesPage() {
             <Clock3 size={18} className="text-gray-300" />
           </div>
           <p className="text-4xl font-black tracking-tight text-[#E4002B]">
-            {Math.round(
-              enrolledClasses.reduce((sum, item) => sum + item.attendanceRate, 0) /
-                enrolledClasses.length
-            )}
+            {enrolledClasses.length > 0
+              ? Math.round(
+                  enrolledClasses.reduce((sum, item) => sum + item.attendanceRate, 0) /
+                    enrolledClasses.length
+                )
+              : 0}
             %
           </p>
-          <p className="mt-2 text-xs text-gray-500">Based on sample records</p>
+          <p className="mt-2 text-xs text-gray-500">Based on your account records</p>
         </div>
       </section>
 
@@ -250,7 +225,7 @@ export default function StudentClassesPage() {
                 value={selectedType}
                 onChange={(e) =>
                   setSelectedType(
-                    e.target.value as 'All' | 'Lecture' | 'Tutorial' | 'Lab'
+                    e.target.value as 'All' | 'Lecture' | 'Tutorial' | 'Lab' | 'Practical'
                   )
                 }
                 className="w-full appearance-none rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
@@ -259,15 +234,26 @@ export default function StudentClassesPage() {
                 <option value="Lecture">Lecture</option>
                 <option value="Tutorial">Tutorial</option>
                 <option value="Lab">Lab</option>
+                <option value="Practical">Practical</option>
               </select>
             </div>
           </div>
         </div>
       </section>
 
+      {error && (
+        <section className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </section>
+      )}
+
       {/* Classes list */}
       <section className="space-y-4">
-        {filteredClasses.length > 0 ? (
+        {loading ? (
+          <div className="rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900">Loading classes...</h2>
+          </div>
+        ) : filteredClasses.length > 0 ? (
           filteredClasses.map((item) => (
             <article
               key={item.id}
@@ -294,7 +280,7 @@ export default function StudentClassesPage() {
                   </h2>
 
                   <p className="mt-2 text-sm leading-7 text-gray-500">
-                    {item.faculty}
+                    {item.faculty || 'Faculty not available'}
                   </p>
 
                   <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -363,7 +349,7 @@ export default function StudentClassesPage() {
                     </div>
 
                     <p className="mt-3 text-xs leading-6 text-gray-500">
-                      Sample UI percentage. Connect this to real attendance data later.
+                      Calculated from your actual attendance records.
                     </p>
 
                     <div className="mt-5 space-y-3">

@@ -20,16 +20,11 @@ export async function GET() {
 
   const studentProfile = await prisma.studentProfile.findUnique({
     where: { userId },
-    include: {
-      courseEnrollments: {
-        include: {
-          course: {
-            include: {
-              _count: { select: { attendanceSessions: true } },
-            },
-          },
-        },
-      },
+    select: {
+      id: true,
+      studentId: true,
+      major: true,
+      enrollmentYear: true,
     },
   });
 
@@ -37,7 +32,18 @@ export async function GET() {
     return NextResponse.json({ error: 'Student profile not found' }, { status: 404 });
   }
 
-  const courseIds = studentProfile.courseEnrollments.map((e) => e.courseId);
+  const enrollments = await prisma.courseEnrollment.findMany({
+    where: { studentId: studentProfile.id },
+    include: {
+      course: {
+        include: {
+          _count: { select: { attendanceSessions: true } },
+        },
+      },
+    },
+  });
+
+  const courseIds = enrollments.map((e) => e.courseId);
 
   // Count attended sessions per course for this student
   const records = await prisma.attendanceRecord.findMany({
@@ -51,7 +57,7 @@ export async function GET() {
     attendedByCourse[cid] = (attendedByCourse[cid] ?? 0) + 1;
   }
 
-  const courses = studentProfile.courseEnrollments.map((e) => ({
+  const courses = enrollments.map((e) => ({
     id: e.course.id,
     code: e.course.code,
     name: e.course.name,
