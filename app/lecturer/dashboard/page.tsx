@@ -14,12 +14,6 @@ import {
   Users,
 } from 'lucide-react';
 
-/**
- * Later integration:
- * - replace sample data with real Supabase / server-side data
- * - connect quick actions to actual session and roster workflows
- * - connect charts and analytics to attendance records
- */
 
 type LecturerClass = {
   id: string;

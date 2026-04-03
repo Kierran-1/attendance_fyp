@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import { SessionType } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,9 +39,9 @@ export async function GET(request: NextRequest) {
     }
 
     const classTypeMap: Record<string, string> = {
-      LECTURE: 'LE',
-      TUTORIAL: 'TU',
-      LAB: 'LA',
+      LECTURE:   'LE',
+      TUTORIAL:  'TU',
+      LAB:       'LA',
       PRACTICAL: 'PR',
     };
 
@@ -51,18 +52,18 @@ export async function GET(request: NextRequest) {
         const student = enrollment.student;
         if (!uniqueStudents.has(student.studentId)) {
           uniqueStudents.set(student.studentId, {
-            id: student.id,
+            id:            student.id,
             studentNumber: student.studentId,
-            name: student.user.name ?? 'Unknown',
-            program: student.major ?? 'Unknown',
-            nationality: '',
-            schoolStatus: 'Active',
+            name:          student.user.name    ?? 'Unknown',
+            program:       student.major        ?? '',
+            nationality:   student.nationality  ?? '',       // ← read from DB
+            schoolStatus:  student.schoolStatus ?? 'Active', // ← read from DB
           });
         }
       });
 
       const sessions = unit.attendanceSessions.map(s => {
-        const records = s.attendanceRecords;
+        const records      = s.attendanceRecords;
         const presentCount = records.filter(r => r.status === 'PRESENT').length;
         const absentCount  = records.filter(r => r.status === 'ABSENT').length;
         const lateCount    = records.filter(r => r.status === 'LATE').length;
@@ -70,10 +71,10 @@ export async function GET(request: NextRequest) {
         const total        = records.length;
 
         return {
-          id: s.id,
-          date: s.startTime.toISOString().split('T')[0],
+          id:                   s.id,
+          date:                 s.startTime.toISOString().split('T')[0],
           attendancePercentage: total > 0 ? Math.round((presentCount / total) * 100) : 0,
-          status: s.isActive ? 'Ongoing' : 'Completed',
+          status:               s.isActive ? 'Ongoing' : 'Completed',
           presentCount,
           absentCount,
           lateCount,
@@ -82,17 +83,17 @@ export async function GET(request: NextRequest) {
       });
 
       return {
-        id: unit.id,
-        unitCode: unit.code,
-        unitName: unit.name,
-        day: unit.scheduleDay ?? 'TBA',
-        time: unit.scheduleTime ?? 'TBA',
-        location: unit.venue ?? 'TBA',
-        lecturer: lecturer.user.name ?? '',
+        id:        unit.id,
+        unitCode:  unit.code,
+        unitName:  unit.name,
+        day:       unit.scheduleDay  ?? 'TBA',
+        time:      unit.scheduleTime ?? 'TBA',
+        location:  unit.venue        ?? 'TBA',
+        lecturer:  lecturer.user.name ?? '',
         classType: classTypeMap[unit.classType] ?? unit.classType,
-        group: unit.classGroup ?? '01',
-        term: unit.semester,
-        students: Array.from(uniqueStudents.values()),
+        group:     unit.classGroup ?? '01',
+        term:      unit.semester,
+        students:  Array.from(uniqueStudents.values()),
         sessions,
         createdAt: unit.createdAt.toISOString().split('T')[0],
       };
@@ -123,18 +124,24 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    const VALID_TYPES = ['LECTURE', 'TUTORIAL', 'LAB', 'PRACTICAL'] as const;
+    const rawType = (body.classType ?? body.sessionType ?? '').toUpperCase();
+    const classType: SessionType = (
+      VALID_TYPES.includes(rawType as (typeof VALID_TYPES)[number]) ? rawType : 'LECTURE'
+    ) as SessionType;
+
     const unit = await prisma.unit.create({
       data: {
         code:         body.code,
         name:         body.name,
         semester:     body.semester,
-        year:         body.year,
-        capacity:     body.capacity,
-        classType:    body.classType,
-        classGroup:   body.classGroup,
-        scheduleDay:  body.scheduleDay,
-        scheduleTime: body.scheduleTime,
-        venue:        body.venue,
+        year:         body.year         ?? new Date().getFullYear(),
+        capacity:     body.capacity     ?? 999,
+        classType,
+        classGroup:   body.classGroup   ?? null,
+        scheduleDay:  body.scheduleDay  ?? null,
+        scheduleTime: body.scheduleTime ?? null,
+        venue:        body.venue        ?? null,
         lecturerId:   lecturer.id,
       },
     });

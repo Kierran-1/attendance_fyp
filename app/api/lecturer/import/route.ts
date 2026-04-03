@@ -9,6 +9,8 @@ type StudentInput = {
   studentId: string;
   name: string;
   major?: string | null;
+  nationality?: string | null;   // ← added
+  schoolStatus?: string | null;  // ← added
 };
 
 type CourseInput = {
@@ -21,12 +23,6 @@ type CourseInput = {
   scheduleTime?: string | null;
   venue?: string | null;
 };
-
-// Define proper return types
-type StudentResult = 
-  | { status: 'enrolled'; createdNew: boolean }
-  | { status: 'skipped' }
-  | { status: 'error'; error: string };
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -75,7 +71,7 @@ export async function POST(request: NextRequest) {
   const semester = (courseInput.semester || '').split(/\s*[-,]\s*/)[0].trim() || courseInput.semester;
   const classGroup = courseInput.classGroup ?? null;
 
-  // ── Upsert Unit (single query) ─────────────────────────────────────────────
+  // ── Upsert Unit ─────────────────────────────────────────────────────────────
   let unit;
   try {
     unit = await prisma.unit.upsert({
@@ -87,25 +83,25 @@ export async function POST(request: NextRequest) {
         },
       },
       update: {
-        name: courseInput.name,
+        name:         courseInput.name,
         semester,
         classType,
-        scheduleDay: courseInput.scheduleDay ?? null,
+        scheduleDay:  courseInput.scheduleDay  ?? null,
         scheduleTime: courseInput.scheduleTime ?? null,
-        venue: courseInput.venue ?? null,
+        venue:        courseInput.venue        ?? null,
       },
       create: {
-        code: courseInput.code,
-        name: courseInput.name,
+        code:         courseInput.code,
+        name:         courseInput.name,
         semester,
-        year: new Date().getFullYear(),
-        capacity: 999,
+        year:         new Date().getFullYear(),
+        capacity:     999,
         classType,
         classGroup,
-        scheduleDay: courseInput.scheduleDay ?? null,
+        scheduleDay:  courseInput.scheduleDay  ?? null,
         scheduleTime: courseInput.scheduleTime ?? null,
-        venue: courseInput.venue ?? null,
-        lecturerId: lecturerProfile.id,
+        venue:        courseInput.venue        ?? null,
+        lecturerId:   lecturerProfile.id,
       },
     });
   } catch (err) {
@@ -118,73 +114,88 @@ export async function POST(request: NextRequest) {
 
   console.log(`[Import] Unit ready: ${unit.id}, processing ${students.length} students...`);
 
- // 1. Prepare all user data
-  const userData = students
-    .filter(s => s.studentId && s.name)
-    .map(s => ({
-      email: `${s.studentId}@students.swinburne.edu.my`,
-      name: s.name,
-      role: 'STUDENT' as const,
-    }));
+  // ── 1. Filter valid students ────────────────────────────────────────────────
+  const validStudents = students.filter(s => s.studentId && s.name);
 
-  // 2. Bulk upsert users using createMany + individual updates for existing
-  // First, create any missing users
+  // ── 2. Bulk create User rows (skip duplicates) ──────────────────────────────
+  const userData = validStudents.map(s => ({
+    email: `${s.studentId}@students.swinburne.edu.my`,
+    name:  s.name,
+    role:  'STUDENT' as const,
+  }));
+
   try {
-    await prisma.user.createMany({
-      data: userData,
-      skipDuplicates: true,
-    });
+    await prisma.user.createMany({ data: userData, skipDuplicates: true });
   } catch (err) {
     console.error('User bulk create failed:', err);
   }
 
-  // 3. Fetch all users to get their IDs
-  const emails = userData.map(u => u.email);
-  const users = await prisma.user.findMany({
-    where: { email: { in: emails } },
+  // ── 3. Fetch all User IDs ───────────────────────────────────────────────────
+  const emails  = userData.map(u => u.email);
+  const users   = await prisma.user.findMany({
+    where:  { email: { in: emails } },
     select: { id: true, email: true },
   });
   const userMap = new Map(users.map(u => [u.email, u.id]));
 
-  // 4. Prepare student profiles
-  const profileData = students
-    .filter(s => s.studentId && s.name)
+  // ── 4. Bulk create StudentProfile rows — now includes nationality + schoolStatus
+  const profileData = validStudents
     .map(s => {
-      const email = `${s.studentId}@students.swinburne.edu.my`;
-      const userId = userMap.get(email);
+      const userId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
       if (!userId) return null;
       return {
         userId,
-        studentId: s.studentId,
-        major: s.major || null,
+        studentId:      s.studentId,
+        major:          s.major        || null,
+        nationality:    s.nationality  || null,  // ← saved to DB
+        schoolStatus:   s.schoolStatus || null,  // ← saved to DB
         enrollmentYear: new Date().getFullYear(),
       };
     })
     .filter(Boolean);
 
-  // 5. Bulk create student profiles
   let createdProfiles = 0;
   try {
     const result = await prisma.studentProfile.createMany({
       data: profileData as any,
-      skipDuplicates: true,
+      skipDuplicates: true,  // won't update existing rows
     });
     createdProfiles = result.count;
   } catch (err) {
     console.error('Profile bulk create failed:', err);
   }
 
-  // 6. Fetch all student profiles for this unit's students
-  const studentIds = students.map(s => s.studentId);
-  const profiles = await prisma.studentProfile.findMany({
-    where: { studentId: { in: studentIds } },
+  // ── 5. Fetch all profiles (new + existing) for this batch ──────────────────
+  const allProfiles = await prisma.studentProfile.findMany({
+    where:  { studentId: { in: validStudents.map(s => s.studentId) } },
     select: { id: true, studentId: true },
   });
 
-  // 7. Bulk create enrollments
-  const enrollmentData = profiles.map(p => ({
+  // ── 6. Update existing profiles with latest nationality/schoolStatus ────────
+  // createMany skipDuplicates silently ignores existing rows, so we update them
+  if (createdProfiles < validStudents.length) {
+    const studentInputMap = new Map(validStudents.map(s => [s.studentId, s]));
+
+    await Promise.all(
+      allProfiles.map(profile => {
+        const input = studentInputMap.get(profile.studentId);
+        if (!input) return Promise.resolve();
+        return prisma.studentProfile.update({
+          where: { id: profile.id },
+          data: {
+            ...(input.major        !== undefined && { major:        input.major        || null }),
+            ...(input.nationality  !== undefined && { nationality:  input.nationality  || null }),
+            ...(input.schoolStatus !== undefined && { schoolStatus: input.schoolStatus || null }),
+          },
+        });
+      })
+    );
+  }
+
+  // ── 7. Bulk create UnitEnrollment rows (skip duplicates) ───────────────────
+  const enrollmentData = allProfiles.map(p => ({
     studentId: p.id,
-    unitId: unit.id,
+    unitId:    unit.id,
   }));
 
   let enrolled = 0;
@@ -200,18 +211,18 @@ export async function POST(request: NextRequest) {
 
   const duration = Date.now() - startTime;
   console.log(`[Bulk Import] Completed in ${duration}ms:`, {
-    course: courseInput.code,
-    users: userData.length,
+    course:   courseInput.code,
+    users:    userData.length,
     profiles: createdProfiles,
     enrolled,
   });
 
   return NextResponse.json({
     courseId: unit.id,
-    created: createdProfiles,
+    created:  createdProfiles,
     enrolled,
-    skipped: students.length - enrolled,
-    errors: [],
+    skipped:  validStudents.length - enrolled,
+    errors:   [],
     duration: `${duration}ms`,
   });
 }

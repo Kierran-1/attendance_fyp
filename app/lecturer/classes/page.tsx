@@ -7,7 +7,6 @@ import {
   Upload,
   Search,
   Eye,
-  Play,
   Edit2,
   X,
   ChevronLeft,
@@ -86,7 +85,7 @@ interface ParsedSheet {
   columns: string[];
 }
 
-type ViewMode = "list" | "create" | "upload" | "detail";
+type ViewMode = "list" | "upload" | "detail";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -96,17 +95,9 @@ export default function ClassesPage() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
-  const [activeTab, setActiveTab] = useState<"students" | "sessions" | "summary">("students");
+  const [activeTab, setActiveTab] = useState<"students" | "sessions">("students");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
-
-  const [createForm, setCreateForm] = useState({
-    unitCode: "",
-    unitName: "",
-    day: "Monday",
-    time: "",
-    location: "",
-  });
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreview, setUploadPreview] = useState<any[]>([]);
@@ -115,6 +106,20 @@ export default function ClassesPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
   const [parsedSheets, setParsedSheets] = useState<ParsedSheet[]>([]);
+
+  // Add student modal state
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [newStudent, setNewStudent] = useState({
+    studentNumber: "",
+    name: "",
+    program: "",
+    nationality: "",
+    schoolStatus: "Active",
+  });
+
+  // Edit student modal state
+  const [showEditStudentModal, setShowEditStudentModal] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
   // ── Fetch classes from API ──────────────────────────────────────────────────
 
@@ -196,48 +201,180 @@ export default function ClassesPage() {
     });
   };
 
-  // ── Create class ────────────────────────────────────────────────────────────
+  // ── Delete ALL classes for a unit ───────────────────────────────────────────
 
-  const handleCreateClass = async () => {
-    if (!createForm.unitCode || !createForm.unitName) return;
+  const deleteAllClassesForUnit = async (unitCode: string, unitClasses: ClassData[]) => {
+    if (!confirm(`Are you sure you want to delete ALL ${unitClasses.length} classes for ${unitCode}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setLoading(true);
+    let deleted = 0;
+    let failed = 0;
+
     try {
-      const response = await fetch('/api/lecturer/unit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: createForm.unitCode,
-          name: createForm.unitName,
-          scheduleDay: createForm.day,
-          scheduleTime: createForm.time,
-          venue: createForm.location,
-          sessionType: 'LECTURE',
-          semester: '2026_MAR_S1',
-          year: 2026,
-          capacity: 50,
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to create course');
-      const newClass = await response.json();
-      setClasses(prev => [...prev, newClass]);
-      setCreateForm({ unitCode: "", unitName: "", day: "Monday", time: "", location: "" });
-      setViewMode("list");
+      for (const cls of unitClasses) {
+        try {
+          const response = await fetch(`/api/lecturer/unit/${cls.id}`, { 
+            method: 'DELETE' 
+          });
+          if (response.ok) {
+            deleted++;
+          } else {
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+      }
+
+      const refreshed = await fetch('/api/lecturer/unit');
+      const data = await refreshed.json();
+      setClasses(data);
+      setExpandedUnits(new Set(data.map((c: ClassData) => c.unitCode)));
+
+      alert(`Deleted ${deleted} classes${failed > 0 ? `, ${failed} failed` : ''}`);
     } catch (err) {
-      alert('Failed to create class: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      alert('Failed to delete classes: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ── Excel parsing (from File 1 — proven working logic) ─────────────────────
-  //
-  // Swinburne attendance sheet layout (1-based row numbers):
-  //   Row 1-2 : Logo / title rows  → allData[0], allData[1]
-  //   Row 3   : "Term : …  Unit : CODE - Name"  → allData[2]  ← KEY FIX vs old code
-  //   Row 4   : "ClassType , Group , Day , Time , Room , Lecturer"  → allData[3]
-  //   Row 5   : Column header row (Sl.No, Student No, …)  → allData[4]
-  //   Row 6   : Week-number sub-header row  → allData[5]
-  //   Row 7+  : Student data  → allData.slice(6)
+  // ── Student operations ─────────────────────────────────────────────────────
+
+  const addStudent = async () => {
+    if (!selectedClass) return;
+    if (!newStudent.studentNumber || !newStudent.name) {
+      alert('Student ID and Name are required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/lecturer/unit/${selectedClass.id}/students`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newStudent),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to add student');
+      }
+
+      const addedStudent = await response.json();
+
+      setClasses(prev => prev.map(c =>
+        c.id === selectedClass.id 
+          ? { ...c, students: [...c.students, addedStudent] } 
+          : c
+      ));
+      setSelectedClass(prev => prev 
+        ? { ...prev, students: [...prev.students, addedStudent] } 
+        : null
+      );
+
+      setNewStudent({
+        studentNumber: "",
+        name: "",
+        program: "",
+        nationality: "",
+        schoolStatus: "Active",
+      });
+      setShowAddStudentModal(false);
+
+    } catch (err) {
+      alert('Failed to add student: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const editStudent = async () => {
+    if (!selectedClass || !editingStudent) return;
+    
+    // CHECK: Verify student ID is valid
+    if (!editingStudent.id) {
+      console.error('Student ID is undefined:', editingStudent);
+      alert('Error: Student ID is missing. Please refresh the page and try again.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/lecturer/unit/${selectedClass.id}/students/${editingStudent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingStudent.name,
+          program: editingStudent.program,
+          nationality: editingStudent.nationality,
+          schoolStatus: editingStudent.schoolStatus,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to update student');
+      }
+
+      const updatedStudent = await response.json();
+
+      setClasses(prev => prev.map(c =>
+        c.id === selectedClass.id 
+          ? { ...c, students: c.students.map(s => s.id === updatedStudent.id ? updatedStudent : s) } 
+          : c
+      ));
+      setSelectedClass(prev => prev 
+        ? { ...prev, students: prev.students.map(s => s.id === updatedStudent.id ? updatedStudent : s) } 
+        : null
+      );
+
+      setShowEditStudentModal(false);
+      setEditingStudent(null);
+
+    } catch (err) {
+      alert('Failed to update student: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const deleteStudent = async (studentId: string) => {
+    if (!selectedClass) return;
+    
+    // CHECK: Verify student ID is valid
+    if (!studentId) {
+      console.error('Student ID is undefined');
+      alert('Error: Student ID is missing.');
+      return;
+    }
+    
+    if (!confirm('Are you sure you want to remove this student from the class?')) return;
+
+    try {
+      const response = await fetch(`/api/lecturer/unit/${selectedClass.id}/students/${studentId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to remove student');
+      }
+
+      setClasses(prev => prev.map(c =>
+        c.id === selectedClass.id 
+          ? { ...c, students: c.students.filter(s => s.id !== studentId) } 
+          : c
+      ));
+      setSelectedClass(prev => prev 
+        ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } 
+        : null
+      );
+
+    } catch (err) {
+      alert('Failed to remove student: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  // ── Excel parsing ───────────────────────────────────────────────────────────
 
   const parseSheet = (worksheet: XLSX.WorkSheet, sheetName: string): ParsedSheet | null => {
-    // Use blankrows:false so empty rows are dropped and indices stay compact
     const allData = XLSX.utils.sheet_to_json(worksheet, {
       header: 1,
       blankrows: false,
@@ -248,9 +385,6 @@ export default function ClassesPage() {
       return null;
     }
 
-    // ── Row 3 (index 2): Term + Unit ──────────────────────────────────────────
-    // The Swinburne template merges this across many columns; join them all
-    // so the regex works regardless of which column cell the text lands in.
     const row4: any[] = allData[2] || [];
     const row4Text = row4.join(' ');
 
@@ -259,14 +393,11 @@ export default function ClassesPage() {
 
     let unitCode = "";
     let unitName = "";
-    // Try a direct regex first (most reliable)
     const unitRegex = row4Text.match(/Unit\s*:\s*([A-Z]{2,4}\d{4,6})\s*-\s*(.+)/i);
     if (unitRegex) {
       unitCode = unitRegex[1].trim();
-      // The unit name may be followed by more comma-separated metadata; take only up to the first comma
       unitName = unitRegex[2].split(',')[0].trim();
     } else if (row4Text.includes("Unit")) {
-      // Fallback: split on the word "Unit" and parse manually (mirrors File 1 logic)
       const unitPart = row4Text.split("Unit")[1] || "";
       const cleaned = unitPart.replace(":", "").trim();
       const parts = cleaned.split("-");
@@ -274,8 +405,6 @@ export default function ClassesPage() {
       unitName = parts.slice(1).join("-").split(',')[0].trim() || "";
     }
 
-    // ── Row 4 (index 3): Class details ────────────────────────────────────────
-    // Same merge situation — join all columns then split on commas
     const row5: any[] = allData[3] || [];
     const row5Text = row5.join(',');
     const classDetails = row5Text
@@ -283,14 +412,13 @@ export default function ClassesPage() {
       .map((s: string) => s.trim())
       .filter((s: string) => s.length > 0);
 
-    const classType = classDetails[0] || "";  // e.g. "LA1"
-    const group = classDetails[1] || "";  // e.g. "01"
-    const day = classDetails[2] || "";  // e.g. "Mon"
-    const time = classDetails[3] || "";  // e.g. "13:00 - 15:00"
-    const room = classDetails[4] || "";  // e.g. "G603"
-    const lecturer = classDetails[5] || "";  // e.g. "Jason Thomas Chew"
+    const classType = classDetails[0] || "";
+    const group = classDetails[1] || "";
+    const day = classDetails[2] || "";
+    const time = classDetails[3] || "";
+    const room = classDetails[4] || "";
+    const lecturer = classDetails[5] || "";
 
-    // ── Rows 5-6 (indices 4-5): Column headers ────────────────────────────────
     const row6: any[] = allData[4] || [];
     const row7: any[] = allData[5] || [];
     const maxCols = Math.max(row6.length, row7.length);
@@ -301,8 +429,6 @@ export default function ClassesPage() {
       const r7 = row7[i]?.toString().trim() || "";
 
       if (i < 8) {
-        // Fixed positional columns — use hardcoded names so column mapping
-        // auto-detection always finds "Student Number" and "Student Name"
         switch (i) {
           case 0: headers.push("Sl.No"); break;
           case 1: headers.push("Student Number"); break;
@@ -314,7 +440,6 @@ export default function ClassesPage() {
           case 7: headers.push("School Status"); break;
         }
       } else {
-        // Attendance week columns
         if (r6.includes('/')) {
           headers.push(`Week_${r6.replace(/\//g, '_')}`);
         } else if (r6) {
@@ -329,7 +454,6 @@ export default function ClassesPage() {
 
     const coreHeaders = headers.slice(0, 8);
 
-    // ── Rows 7+ (index 6+): Student data ─────────────────────────────────────
     const studentData = allData
       .slice(6)
       .map((row: any[]) => {
@@ -338,12 +462,9 @@ export default function ClassesPage() {
         return padded.slice(0, 8);
       })
       .filter((row: any[]) => {
-        // Keep only rows that have a non-empty value in the Student Number column (index 1)
         const num = row[1];
         return num != null && String(num).trim() !== '';
       });
-
-    console.log(`[parseSheet] "${sheetName}" → unitCode="${unitCode}" unitName="${unitName}" classType="${classType}" group="${group}" students=${studentData.length}`);
 
     return {
       sheetName,
@@ -377,25 +498,10 @@ export default function ClassesPage() {
           return;
         }
 
-        // Warn if multiple unit codes detected (shouldn't normally happen)
         const unitCodes = new Set(allSheets.map(s => s.metadata.unitCode).filter(Boolean));
         if (unitCodes.size > 1) {
           alert(`Warning: sheets belong to different units: ${[...unitCodes].join(', ')}`);
         }
-
-        // Log UNION student count for debugging
-        const uniqueNums = new Set<string>();
-        let totalRows = 0;
-        allSheets.forEach(sheet => {
-          const col = sheet.columns.indexOf('Student Number');
-          if (col >= 0) {
-            sheet.students.forEach((row: any[]) => {
-              const n = row[col]?.toString().trim();
-              if (n) { uniqueNums.add(n); totalRows++; }
-            });
-          }
-        });
-        console.log(`Sheets: ${allSheets.length} | Total student rows: ${totalRows} | Unique students: ${uniqueNums.size}`);
 
         setParsedSheets(allSheets);
         setUploadColumns(allSheets[0].columns);
@@ -403,7 +509,6 @@ export default function ClassesPage() {
         setUploadFile(file);
         setUploadStep(2);
 
-        // Auto-map columns
         const find = (patterns: string[]) =>
           allSheets[0].columns.find(h => patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))) || "";
 
@@ -433,18 +538,15 @@ export default function ClassesPage() {
     if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]);
   }, []);
 
-  // ── Confirm import → POST to /api/lecturer/import ──────────────────────────
+  // ── Confirm import ─────────────────────────────────────────────────────────
 
   const confirmImport = async () => {
-    console.log('confirmImport started', { parsedSheets: parsedSheets.length, columnMapping });
-    
     if (!columnMapping.studentId || !columnMapping.name) {
       alert('Please map at least Student ID and Name columns');
       return;
     }
     if (!uploadFile || parsedSheets.length === 0) return;
 
-    // Show loading state
     setLoading(true);
 
     try {
@@ -457,6 +559,8 @@ export default function ClassesPage() {
         const studentNumberCol = columns.indexOf(columnMapping.studentId);
         const nameCol = columns.indexOf(columnMapping.name);
         const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
+        const nationalityCol = columns.indexOf('Nationality');
+        const statusCol = columns.indexOf('School Status');
 
         const students = studentData
           .filter((row: any[]) => {
@@ -471,17 +575,17 @@ export default function ClassesPage() {
               studentId,
               name,
               major: programCol >= 0 ? row[programCol]?.toString().trim() || null : null,
+              nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || null : null,
+              schoolStatus: statusCol >= 0 ? row[statusCol]?.toString().trim() || null : null,
             };
           })
           .filter(Boolean);
 
-        // Map classType prefix → SessionType enum
         const typePrefix = (metadata.classType || '').slice(0, 2).toUpperCase();
         const sessionTypeMap: Record<string, string> = {
           LA: 'LAB', LE: 'LECTURE', TU: 'TUTORIAL', PR: 'PRACTICAL',
         };
 
-        // Unique class key: e.g. "LA1_01"
         const classGroup = metadata.classType && metadata.group
           ? `${metadata.classType}_${metadata.group}`
           : metadata.classType || metadata.group || null;
@@ -506,7 +610,7 @@ export default function ClassesPage() {
 
         if (!response.ok) {
           const err = await response.json();
-          throw new Error(err.error || `Failed to import sheet "${sheet.sheetName}": ${err.detail || 'Unknown error'}`);
+          throw new Error(err.error || `Failed to import sheet "${sheet.sheetName}"`);
         }
 
         const result = await response.json();
@@ -514,26 +618,19 @@ export default function ClassesPage() {
         totalEnrolled += result.enrolled || 0;
       }
 
-      // Refresh class list from DB
       const refreshed = await fetch('/api/lecturer/unit');
-      if (!refreshed.ok) {
-        throw new Error('Failed to refresh class list after import');
-      }
+      if (!refreshed.ok) throw new Error('Failed to refresh class list');
       const data = await refreshed.json();
 
-      // Reset all upload state BEFORE changing view
       setClasses(data);
       setExpandedUnits(new Set<string>(data.map((c: ClassData) => c.unitCode)));
 
-      // Clear upload state
       setUploadFile(null);
       setUploadPreview([]);
       setUploadColumns([]);
       setColumnMapping({ studentId: '', name: '', program: '' });
       setParsedSheets([]);
       setUploadStep(1);
-
-      // Navigate to list view - THIS MUST HAPPEN
       setViewMode('list');
 
       alert(`✅ Import complete!\n${totalCreated} new students created\n${totalEnrolled} enrollments added`);
@@ -541,63 +638,14 @@ export default function ClassesPage() {
     } catch (err) {
       console.error('Import error:', err);
       alert('Import failed: ' + (err instanceof Error ? err.message : JSON.stringify(err)));
-      // Stay on upload screen so user can retry or go back manually
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Student / session / class mutations ────────────────────────────────────
-
-  const removeStudent = async (studentId: string) => {
-    if (!selectedClass) return;
-    try {
-      // TODO: await fetch(`/api/lecturer/courses/${selectedClass.id}/students/${studentId}`, { method: 'DELETE' });
-      setClasses(prev => prev.map(c =>
-        c.id === selectedClass.id ? { ...c, students: c.students.filter(s => s.id !== studentId) } : c
-      ));
-      setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
-    } catch {
-      alert('Failed to remove student');
-    }
-  };
-
-  const createSession = async () => {
-    if (!selectedClass) return;
-    try {
-      const newSession: Session = {
-        id: Date.now().toString(),
-        date: new Date().toISOString().split('T')[0],
-        attendancePercentage: 0,
-        status: "Scheduled",
-        presentCount: 0,
-        absentCount: selectedClass.students.length,
-        lateCount: 0,
-        sickCount: 0,
-      };
-      setClasses(prev => prev.map(c =>
-        c.id === selectedClass.id ? { ...c, sessions: [...c.sessions, newSession] } : c
-      ));
-      setSelectedClass(prev => prev ? { ...prev, sessions: [...prev.sessions, newSession] } : null);
-    } catch {
-      alert('Failed to create session');
-    }
-  };
-
-  const deleteClass = async (classId: string) => {
-    if (!confirm("Are you sure you want to delete this class?")) return;
-    try {
-      await fetch(`/api/lecturer/unit/${classId}`, { method: 'DELETE' });
-      setClasses(prev => prev.filter(c => c.id !== classId));
-      if (selectedClass?.id === classId) { setSelectedClass(null); setViewMode("list"); }
-    } catch {
-      alert('Failed to delete class');
-    }
-  };
-
   // ── Loading / error states ─────────────────────────────────────────────────
 
-  if (loading) return (
+  if (loading && viewMode === 'list') return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="flex items-center gap-3 text-gray-500">
         <Loader2 className="w-6 h-6 animate-spin" />
@@ -656,10 +704,6 @@ export default function ClassesPage() {
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
             <Upload className="w-4 h-4" /> Upload Master List
           </button>
-          <button onClick={() => setViewMode("create")}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm">
-            <Plus className="w-4 h-4" /> Create Class
-          </button>
         </div>
       </div>
 
@@ -671,11 +715,8 @@ export default function ClassesPage() {
               <FolderOpen className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Classes Found</h3>
-            <p className="text-gray-500 mb-4">Upload a master attendance list or create a new class to get started.</p>
-            <div className="flex gap-3 justify-center">
-              <button onClick={() => setViewMode("upload")} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">Upload List</button>
-              <button onClick={() => setViewMode("create")} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Create Class</button>
-            </div>
+            <p className="text-gray-500 mb-4">Upload a master attendance list to get started.</p>
+            <button onClick={() => setViewMode("upload")} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">Upload List</button>
           </div>
         ) : (
           units.map(unit => {
@@ -714,8 +755,7 @@ export default function ClassesPage() {
                     <button
                       onClick={e => {
                         e.stopPropagation();
-                        if (confirm(`Delete all classes for ${unit.unitCode}?`))
-                          unit.classes.forEach(cls => deleteClass(cls.id));
+                        deleteAllClassesForUnit(unit.unitCode, unit.classes);
                       }}
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete all classes in this unit">
@@ -746,10 +786,6 @@ export default function ClassesPage() {
                                   </p>
                                   <h3 className="font-bold text-gray-900 line-clamp-1">{cls.unitName}</h3>
                                 </div>
-                                <button onClick={() => deleteClass(cls.id)}
-                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
 
                               <div className="space-y-2 mb-4">
@@ -778,9 +814,6 @@ export default function ClassesPage() {
                                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition-colors">
                                   <Eye className="w-4 h-4" /> View
                                 </button>
-                                <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm">
-                                  <Play className="w-4 h-4" /> Start
-                                </button>
                               </div>
                             </div>
                           </div>
@@ -797,64 +830,6 @@ export default function ClassesPage() {
     </div>
   );
 
-  const renderCreateView = () => (
-    <div className="max-w-2xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
-      <div className="bg-white rounded-xl border shadow-sm">
-        <div className="p-6 border-b">
-          <button onClick={() => setViewMode("list")} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4">
-            <ChevronLeft className="w-4 h-4" /> Back to Classes
-          </button>
-          <h2 className="text-xl font-bold text-gray-900">Create New Class</h2>
-          <p className="text-sm text-gray-500 mt-1">Set up a new class for attendance tracking</p>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Unit Code <span className="text-red-500">*</span></label>
-              <input type="text" placeholder="e.g., COS40005" value={createForm.unitCode}
-                onChange={e => setCreateForm(p => ({ ...p, unitCode: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm uppercase" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Unit Name <span className="text-red-500">*</span></label>
-              <input type="text" placeholder="e.g., Final Year Project" value={createForm.unitName}
-                onChange={e => setCreateForm(p => ({ ...p, unitName: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Day</label>
-              <select value={createForm.day} onChange={e => setCreateForm(p => ({ ...p, day: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white">
-                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(d => <option key={d}>{d}</option>)}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Time</label>
-              <input type="text" placeholder="e.g., 09:00 - 11:00" value={createForm.time}
-                onChange={e => setCreateForm(p => ({ ...p, time: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Location (Optional)</label>
-            <input type="text" placeholder="e.g., B201" value={createForm.location}
-              onChange={e => setCreateForm(p => ({ ...p, location: e.target.value }))}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm" />
-          </div>
-        </div>
-        <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
-          <button onClick={() => setViewMode("list")} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
-          <button onClick={handleCreateClass} disabled={!createForm.unitCode || !createForm.unitName}
-            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm">
-            Create Class
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   const renderUploadView = () => (
     <div className="max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-300">
       <div className="bg-white rounded-xl border shadow-sm">
@@ -863,7 +838,6 @@ export default function ClassesPage() {
             className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4">
             <ChevronLeft className="w-4 h-4" /> Back to Classes
           </button>
-          {/* Step indicator */}
           <div className="flex items-center gap-3">
             {[1, 2].map((step, i) => (
               <React.Fragment key={step}>
@@ -902,7 +876,6 @@ export default function ClassesPage() {
           </div>
         ) : (
           <div className="p-6">
-            {/* Detected sheets summary */}
             {parsedSheets.length > 0 && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
@@ -923,19 +896,6 @@ export default function ClassesPage() {
                       </div>
                     </div>
                   ))}
-                </div>
-                <div className="mt-3 pt-3 border-t border-blue-200 flex items-center justify-between text-sm">
-                  <span className="text-blue-700 font-medium">Unique students across all sheets:</span>
-                  <span className="text-blue-900 font-bold text-lg">
-                    {(() => {
-                      const s = new Set<string>();
-                      parsedSheets.forEach(sheet => {
-                        const col = sheet.columns.indexOf('Student Number');
-                        if (col >= 0) sheet.students.forEach((row: any[]) => { const n = row[col]?.toString().trim(); if (n) s.add(n); });
-                      });
-                      return s.size;
-                    })()}
-                  </span>
                 </div>
               </div>
             )}
@@ -970,7 +930,6 @@ export default function ClassesPage() {
               ))}
             </div>
 
-            {/* Preview table */}
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-gray-900 mb-3">Student Data Preview (first sheet)</h4>
               <div className="border rounded-lg overflow-x-auto">
@@ -1051,14 +1010,6 @@ export default function ClassesPage() {
                   {selectedClass.lecturer && <span className="flex items-center gap-1.5"><GraduationCap className="w-4 h-4" />{selectedClass.lecturer}</span>}
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setViewMode("upload")} className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
-                  <Upload className="w-4 h-4" /> Upload Students
-                </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm">
-                  <Play className="w-4 h-4" /> Start Attendance
-                </button>
-              </div>
             </div>
           </div>
 
@@ -1067,7 +1018,7 @@ export default function ClassesPage() {
             {[
               { id: "students", label: "Students", icon: Users, count: selectedClass.students.length },
               { id: "sessions", label: "Sessions", icon: Calendar, count: selectedClass.sessions.length },
-              { id: "summary", label: "Summary", icon: BarChart3 },
+             
             ].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors relative ${activeTab === tab.id ? 'text-red-600' : 'text-gray-600 hover:text-gray-900'}`}>
@@ -1088,7 +1039,10 @@ export default function ClassesPage() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-900">Student List</h3>
-                <button className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                <button 
+                  onClick={() => setShowAddStudentModal(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
                   <Plus className="w-4 h-4" /> Add Student
                 </button>
               </div>
@@ -1097,7 +1051,7 @@ export default function ClassesPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        {["Student ID", "Name", "Program", "Nationality", "Actions"].map(h => (
+                        {["Student ID", "Name", "Program", "Nationality", "Status", "Actions"].map(h => (
                           <th key={h} className={`px-4 py-3 text-${h === 'Actions' ? 'right' : 'left'} font-medium text-gray-700`}>{h}</th>
                         ))}
                       </tr>
@@ -1109,10 +1063,33 @@ export default function ClassesPage() {
                           <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
                           <td className="px-4 py-3 text-gray-600 text-sm">{student.program || "-"}</td>
                           <td className="px-4 py-3 text-gray-600 text-sm">{student.nationality || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600 text-sm">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
+                              student.schoolStatus === 'Active' ? 'bg-green-100 text-green-700' : 
+                              student.schoolStatus === 'Inactive' ? 'bg-gray-100 text-gray-700' : 
+                              'bg-amber-100 text-amber-700'
+                            }`}>
+                              {student.schoolStatus || "Active"}
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-4 h-4" /></button>
-                              <button onClick={() => removeStudent(student.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                              <button 
+                                onClick={() => {
+                                  console.log('Setting editing student:', student);
+                                  setEditingStudent(student);
+                                  setShowEditStudentModal(true);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => deleteStudent(student.id)} 
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1124,9 +1101,12 @@ export default function ClassesPage() {
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4"><Users className="w-8 h-8 text-gray-400" /></div>
                   <h4 className="text-gray-900 font-medium mb-1">No students yet</h4>
-                  <p className="text-sm text-gray-500 mb-4">Upload a Swinburne attendance form to import students</p>
-                  <button onClick={() => setViewMode("upload")} className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                    <Upload className="w-4 h-4" /> Upload Students
+                  <p className="text-sm text-gray-500 mb-4">Add students manually or upload an Excel file</p>
+                  <button 
+                    onClick={() => setShowAddStudentModal(true)} 
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Add Student
                   </button>
                 </div>
               )}
@@ -1138,9 +1118,6 @@ export default function ClassesPage() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-900">Attendance Sessions</h3>
-                <button onClick={createSession} className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                  <Plus className="w-4 h-4" /> Create Session
-                </button>
               </div>
               {selectedClass.sessions.length > 0 ? (
                 <div className="space-y-3">
@@ -1168,9 +1145,6 @@ export default function ClassesPage() {
                             {session.status}
                           </span>
                         </div>
-                        <button className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
-                          <ArrowRight className="w-5 h-5" />
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -1178,55 +1152,170 @@ export default function ClassesPage() {
               ) : (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4"><Calendar className="w-8 h-8 text-gray-400" /></div>
-                  <h4 className="text-gray-900 font-medium mb-1">No sessions yet</h4>
-                  <p className="text-sm text-gray-500 mb-4">Create your first attendance session</p>
-                  <button onClick={createSession} className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                    <Plus className="w-4 h-4" /> Create Session
-                  </button>
+                  <h4 className="text-gray-900 font-medium mb-1">No sessions yet STILL WAITING FOR ATTENDANCE PAGE</h4>
+                  <p className="text-sm text-gray-500 mb-4">Attendance sessions will appear here when recorded</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Summary tab */}
-          {activeTab === "summary" && (
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
-                  <div className="flex items-center justify-between mb-2"><span className="text-sm font-medium text-blue-900">Average Attendance</span><TrendingUp className="w-5 h-5 text-blue-600" /></div>
-                  <p className="text-3xl font-bold text-blue-900">{avg}%</p>
-                  <p className="text-xs text-blue-700 mt-1">Across all sessions</p>
+        
+        </div>
+
+        {/* Add Student Modal */}
+        {showAddStudentModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Student</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Student ID <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={newStudent.studentNumber}
+                    onChange={e => setNewStudent(p => ({ ...p, studentNumber: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                    placeholder="e.g., 102345678"
+                  />
                 </div>
-                <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl border border-red-200">
-                  <div className="flex items-center justify-between mb-2"><span className="text-sm font-medium text-red-900">At Risk Students</span><TrendingDown className="w-5 h-5 text-red-600" /></div>
-                  <p className="text-3xl font-bold text-red-900">{atRiskCount}</p>
-                  <p className="text-xs text-red-700 mt-1">Below 80% attendance</p>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={newStudent.name}
+                    onChange={e => setNewStudent(p => ({ ...p, name: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                    placeholder="e.g., John Doe"
+                  />
                 </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
-                  <div className="flex items-center justify-between mb-2"><span className="text-sm font-medium text-green-900">Total Sessions</span><CheckCircle2 className="w-5 h-5 text-green-600" /></div>
-                  <p className="text-3xl font-bold text-green-900">{selectedClass.sessions.length}</p>
-                  <p className="text-xs text-green-700 mt-1">Completed sessions</p>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Program</label>
+                  <input
+                    type="text"
+                    value={newStudent.program}
+                    onChange={e => setNewStudent(p => ({ ...p, program: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                    placeholder="e.g., Computer Science"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Nationality</label>
+                  <input
+                    type="text"
+                    value={newStudent.nationality}
+                    onChange={e => setNewStudent(p => ({ ...p, nationality: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                    placeholder="e.g., Malaysian"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Status</label>
+                  <select
+                    value={newStudent.schoolStatus}
+                    onChange={e => setNewStudent(p => ({ ...p, schoolStatus: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="Suspended">Suspended</option>
+                  </select>
                 </div>
               </div>
-              <div className="border rounded-xl p-4">
-                <h4 className="font-semibold text-gray-900 mb-4">Attendance Trend</h4>
-                {selectedClass.sessions.length > 0 ? (
-                  <div className="h-64 flex items-end justify-between gap-2">
-                    {selectedClass.sessions.map(session => (
-                      <div key={session.id} className="flex-1 flex flex-col items-center gap-2">
-                        <div className={`w-full rounded-t-lg transition-all duration-500 ${session.attendancePercentage >= 80 ? 'bg-green-500' : session.attendancePercentage >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
-                          style={{ height: `${session.attendancePercentage * 2}px` }} />
-                        <span className="text-xs text-gray-500 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">{session.date.slice(5)}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="h-64 flex items-center justify-center text-gray-400">No session data available</div>
-                )}
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowAddStudentModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addStudent}
+                  disabled={!newStudent.studentNumber || !newStudent.name}
+                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Add Student
+                </button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Edit Student Modal */}
+        {showEditStudentModal && editingStudent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Student</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Student ID</label>
+                  <input
+                    type="text"
+                    value={editingStudent.studentNumber}
+                    disabled
+                    className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={editingStudent.name}
+                    onChange={e => setEditingStudent(p => p ? { ...p, name: e.target.value } : null)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Program</label>
+                  <input
+                    type="text"
+                    value={editingStudent.program || ''}
+                    onChange={e => setEditingStudent(p => p ? { ...p, program: e.target.value } : null)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Nationality</label>
+                  <input
+                    type="text"
+                    value={editingStudent.nationality || ''}
+                    onChange={e => setEditingStudent(p => p ? { ...p, nationality: e.target.value } : null)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Status</label>
+                  <select
+                    value={editingStudent.schoolStatus || 'Active'}
+                    onChange={e => setEditingStudent(p => p ? { ...p, schoolStatus: e.target.value } : null)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-sm"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="Suspended">Suspended</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowEditStudentModal(false);
+                    setEditingStudent(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={editStudent}
+                  disabled={!editingStudent.name}
+                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1235,7 +1324,6 @@ export default function ClassesPage() {
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto">
         {viewMode === "list" && renderListView()}
-        {viewMode === "create" && renderCreateView()}
         {viewMode === "upload" && renderUploadView()}
         {viewMode === "detail" && renderDetailView()}
       </div>

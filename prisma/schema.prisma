@@ -71,6 +71,8 @@ model StudentProfile {
   userId         String   @unique
   studentId      String   @unique
   major          String?
+  nationality    String?  
+  schoolStatus   String?  
   enrollmentYear Int?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
