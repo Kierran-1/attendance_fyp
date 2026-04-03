@@ -54,79 +54,113 @@ type LecturerSentAlert = {
   source?: 'system' | 'lecturer';
 };
 
-const systemStudentAlerts: StudentAlert[] = [
-  {
-    id: 'alt-1',
-    title: 'Attendance session is active',
-    message:
-      'Your lecturer has opened the attendance session for COS40005. Please show your QR code during class.',
-    type: 'Attendance',
-    date: '26 Mar 2026',
-    time: '9:02 AM',
-    status: 'Unread',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    actionHref: '/student/qrcode',
-    actionLabel: 'Open My QR',
-    source: 'system',
-  },
-  {
-    id: 'alt-2',
-    title: 'Upcoming class reminder',
-    message:
-      'SWE30003 Software Architecture and Design starts later today. Check your class details before the session.',
-    type: 'Reminder',
-    date: '26 Mar 2026',
-    time: '8:15 AM',
-    status: 'Unread',
-    unitCode: 'SWE30003',
-    unitName: 'Software Architecture and Design',
-    actionHref: '/student/classes',
-    actionLabel: 'View Classes',
-    source: 'system',
-  },
-  {
-    id: 'alt-3',
-    title: 'Attendance record updated',
-    message:
-      'Your attendance for COS30015 IT Security has been recorded successfully.',
-    type: 'Attendance',
-    date: '25 Mar 2026',
-    time: '4:08 PM',
-    status: 'Read',
-    unitCode: 'COS30015',
-    unitName: 'IT Security',
-    actionHref: '/student/attendance',
-    actionLabel: 'View Attendance',
-    source: 'system',
-  },
-  {
-    id: 'alt-4',
-    title: 'Venue update',
-    message:
-      'The next COS30049 session will be held in B203. Please check your class page for the latest schedule information.',
-    type: 'Schedule',
-    date: '25 Mar 2026',
-    time: '1:10 PM',
-    status: 'Read',
-    unitCode: 'COS30049',
-    unitName: 'Computing Technology Innovation Project',
-    actionHref: '/student/classes',
-    actionLabel: 'Open Class Page',
-    source: 'system',
-  },
-  {
-    id: 'alt-5',
-    title: 'System notice',
-    message:
-      'AttendSync student pages are available across supported browser devices for your convenience.',
-    type: 'General',
-    date: '24 Mar 2026',
-    time: '10:30 AM',
-    status: 'Read',
-    source: 'system',
-  },
-];
+type StudentClass = {
+  id: string;
+  code: string;
+  name: string;
+  day: string;
+  time: string;
+  venue?: string;
+};
+
+type TodayAttendance = {
+  id: string;
+  code: string;
+  session: string;
+  status: 'Present' | 'Absent';
+  recordedAt: string | null;
+};
+
+type ActiveSession = {
+  session?: {
+    id: string;
+    course: { code: string; name: string };
+  } | null;
+};
+
+function formatNowDateTime() {
+  const now = new Date();
+  return {
+    date: now.toLocaleDateString(),
+    time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+function buildSystemAlerts(
+  classes: StudentClass[],
+  todayAttendance: TodayAttendance[],
+  activeSession: ActiveSession['session']
+): StudentAlert[] {
+  const alerts: StudentAlert[] = [];
+  const stamp = formatNowDateTime();
+
+  if (activeSession) {
+    alerts.push({
+      id: `sys-active-${activeSession.id}`,
+      title: 'Attendance session is active',
+      message: `Your lecturer has opened attendance for ${activeSession.course.code}. Please show your QR code during class.`,
+      type: 'Attendance',
+      date: stamp.date,
+      time: stamp.time,
+      status: 'Unread',
+      unitCode: activeSession.course.code,
+      unitName: activeSession.course.name,
+      actionHref: '/student/qrcode',
+      actionLabel: 'Open My QR',
+      source: 'system',
+    });
+  }
+
+  const nextClass = classes[0];
+  if (nextClass) {
+    alerts.push({
+      id: `sys-next-${nextClass.id}`,
+      title: 'Upcoming class reminder',
+      message: `${nextClass.code} ${nextClass.name} is on ${nextClass.day} at ${nextClass.time}.`,
+      type: 'Reminder',
+      date: stamp.date,
+      time: stamp.time,
+      status: 'Unread',
+      unitCode: nextClass.code,
+      unitName: nextClass.name,
+      actionHref: '/student/classes',
+      actionLabel: 'View Classes',
+      source: 'system',
+    });
+  }
+
+  const presentToday = todayAttendance.find((a) => a.status === 'Present');
+  if (presentToday) {
+    alerts.push({
+      id: `sys-attended-${presentToday.id}`,
+      title: 'Attendance recorded',
+      message: `Your attendance for ${presentToday.code} has been recorded successfully.`,
+      type: 'Attendance',
+      date: stamp.date,
+      time: presentToday.recordedAt ?? stamp.time,
+      status: 'Read',
+      unitCode: presentToday.code,
+      actionHref: '/student/attendance',
+      actionLabel: 'View Attendance',
+      source: 'system',
+    });
+  }
+
+  if (alerts.length === 0) {
+    alerts.push({
+      id: 'sys-empty',
+      title: 'No unit alerts yet',
+      message: 'You have no active attendance session or attendance updates right now.',
+      type: 'General',
+      date: stamp.date,
+      time: stamp.time,
+      status: 'Read',
+      source: 'system',
+    });
+  }
+
+  return alerts;
+}
 
 function getTypeClasses(type: AlertType) {
   switch (type) {
@@ -153,39 +187,64 @@ export default function StudentAlertsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | AlertType>('All');
   const [lecturerAlerts, setLecturerAlerts] = useState<StudentAlert[]>([]);
+  const [systemAlerts, setSystemAlerts] = useState<StudentAlert[]>([]);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('lecturerSentAlerts');
-      if (!saved) return;
+    async function loadAlerts() {
+      try {
+        const saved = localStorage.getItem('lecturerSentAlerts');
+        if (saved) {
+          const parsed: LecturerSentAlert[] = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const mappedAlerts: StudentAlert[] = parsed.map((item) => ({
+              id: `student-copy-${item.id}`,
+              title: item.title,
+              message: item.message,
+              type: 'Lecturer Message',
+              date: item.date,
+              time: item.time,
+              status: 'Unread',
+              unitCode: item.unitCode,
+              unitName: item.unitName,
+              actionHref: '/student/alerts',
+              actionLabel: 'View Alert',
+              source: 'lecturer',
+            }));
+            setLecturerAlerts(mappedAlerts);
+          }
+        }
 
-      const parsed: LecturerSentAlert[] = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return;
+        const [classesRes, attendanceRes, activeRes] = await Promise.all([
+          fetch('/api/student/classes', { cache: 'no-store' }),
+          fetch('/api/student/attendance?date=today', { cache: 'no-store' }),
+          fetch('/api/attendance/active-session', { cache: 'no-store' }),
+        ]);
 
-      const mappedAlerts: StudentAlert[] = parsed.map((item) => ({
-        id: `student-copy-${item.id}`,
-        title: item.title,
-        message: item.message,
-        type: 'Lecturer Message',
-        date: item.date,
-        time: item.time,
-        status: 'Unread',
-        unitCode: item.unitCode,
-        unitName: item.unitName,
-        actionHref: '/student/alerts',
-        actionLabel: 'View Alert',
-        source: 'lecturer',
-      }));
+        const classesJson = classesRes.ok ? await classesRes.json() : { classes: [] };
+        const attendanceJson = attendanceRes.ok
+          ? await attendanceRes.json()
+          : { attendance: [] };
+        const activeJson = activeRes.ok ? await activeRes.json() : { session: null };
 
-      setLecturerAlerts(mappedAlerts);
-    } catch (error) {
-      console.error('Failed to load lecturer alerts for student page:', error);
+        setSystemAlerts(
+          buildSystemAlerts(
+            classesJson.classes ?? [],
+            attendanceJson.attendance ?? [],
+            activeJson.session ?? null
+          )
+        );
+      } catch (error) {
+        console.error('Failed to load student alerts:', error);
+        setSystemAlerts(buildSystemAlerts([], [], null));
+      }
     }
+
+    loadAlerts();
   }, []);
 
   const allAlerts = useMemo(() => {
-    return [...lecturerAlerts, ...systemStudentAlerts];
-  }, [lecturerAlerts]);
+    return [...lecturerAlerts, ...systemAlerts];
+  }, [lecturerAlerts, systemAlerts]);
 
   const filteredAlerts = useMemo(() => {
     return allAlerts.filter((item) => {

@@ -74,6 +74,10 @@ model StudentProfile {
   nationality    String?  
   schoolStatus   String?  
   enrollmentYear Int?
+  phone          String?
+  program        String?
+  faculty        String?
+  intake         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -105,7 +109,7 @@ model Unit {
   semester     String
   year         Int
   capacity     Int
-  classType    SessionType
+  sessionType  SessionType
   classGroup   String?
   scheduleDay  String?
   scheduleTime String?
@@ -119,34 +123,35 @@ model Unit {
 
   @@unique([code, classGroup, lecturerId])
   @@index([lecturerId])
+  @@map("Unit")
 }
 
 model UnitEnrollment {
   id         String   @id @default(cuid())
   studentId  String
-  unitId     String
+  courseId   String
   enrolledAt DateTime @default(now())
 
   student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   unit    Unit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, unitId])
-  @@index([unitId])
+  @@unique([studentId, courseId])
+  @@index([courseId])
 }
 
 // ── Attendance ────────────────────────────────────────────────────
 
 model AttendanceSession {
-  id         String      @id @default(cuid())
-  unitId     String
-  lecturerId String
-  classType  SessionType
-  qrCode     String      @unique
-  startTime  DateTime
-  endTime    DateTime
-  isActive   Boolean     @default(true)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id          String      @id @default(cuid())
+  courseId    String
+  lecturerId  String
+  sessionType SessionType
+  qrCode      String      @unique
+  startTime   DateTime
+  endTime     DateTime
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   unit              Unit               @relation(fields: [unitId], references: [id], onDelete: Cascade)
   lecturer          LecturerProfile    @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
@@ -154,6 +159,7 @@ model AttendanceSession {
 
   @@index([unitId])
   @@index([lecturerId])
+  @@map("AttendanceSession")
 }
 
 model AttendanceRecord {
