@@ -581,28 +581,14 @@ export default function ClassesPage() {
           })
           .filter(Boolean);
 
-        const typePrefix = (metadata.classType || '').slice(0, 2).toUpperCase();
-        const sessionTypeMap: Record<string, string> = {
-          LA: 'LAB', LE: 'LECTURE', TU: 'TUTORIAL', PR: 'PRACTICAL',
-        };
-
-        const classGroup = metadata.classType && metadata.group
-          ? `${metadata.classType}_${metadata.group}`
-          : metadata.classType || metadata.group || null;
-
         const response = await fetch('/api/lecturer/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            course: {
+            unit: {
               code: metadata.unitCode || 'UNKNOWN',
               name: metadata.unitName || 'Imported Unit',
               semester: metadata.term || '2026_MAR_S1',
-              sessionType: sessionTypeMap[typePrefix] || 'LECTURE',
-              classGroup,
-              scheduleDay: metadata.day || null,
-              scheduleTime: metadata.time || null,
-              venue: metadata.room || null,
             },
             students,
           }),
