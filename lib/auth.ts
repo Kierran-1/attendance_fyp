@@ -9,6 +9,7 @@ import { UserRole } from '@prisma/client';
  */
 const LECTURER_EMAIL_OVERRIDES = new Set([
   '102785480@students.swinburne.edu.my',
+  '102789880@students.swinburne.edu.my',
   // add more here as needed
 ]);
 
@@ -78,16 +79,6 @@ export const authOptions: AuthOptions = {
         if (!dbUser) {
           console.log('[AUTH] New user — NextAuth will create the record');
           return true;
-        }
-
-        const role = getRoleFromEmail(user.email);
-
-        if (dbUser.role !== role) {
-          await prisma.user.update({
-            where: { id: dbUser.id },
-            data: { role },
-          });
-          console.log('[AUTH] Updated user role to:', role);
         }
 
         console.log('[AUTH] Sign-in successful for:', user.email);
