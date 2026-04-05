@@ -140,6 +140,7 @@ model UnitEnrollment {
   @@index([unitId])
 }
 
+
 // ── Weekly Attendance Tracking (For Excel Import) ─────────────────
 
 model ClassSession {
@@ -215,7 +216,7 @@ model AttendanceSession {
   @@index([unitId])
   @@index([lecturerId])
   @@map("AttendanceSession")
-} 
+}
 
 model AttendanceRecord {
   id          String           @id @default(cuid())

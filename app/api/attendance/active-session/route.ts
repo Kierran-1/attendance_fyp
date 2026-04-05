@@ -15,12 +15,13 @@ export async function GET() {
   const role = session.user.role;
   const now = new Date();
 
+  // ── Student: find an active session for any unit they are enrolled in ────────
   if (role === UserRole.STUDENT) {
     const studentProfile = await prisma.studentProfile.findUnique({
       where: { userId },
       include: {
-        courseEnrollments: {
-          select: { courseId: true },
+        unitEnrollments: {
+          select: { unitId: true },   // ← was courseId
         },
       },
     });
@@ -29,21 +30,21 @@ export async function GET() {
       return NextResponse.json({ session: null });
     }
 
-    const courseIds = studentProfile.courseEnrollments.map((e) => e.courseId);
+    const unitIds = studentProfile.unitEnrollments.map((e) => e.unitId);
 
-    if (courseIds.length === 0) {
+    if (unitIds.length === 0) {
       return NextResponse.json({ session: null });
     }
 
     const activeSession = await prisma.attendanceSession.findFirst({
       where: {
-        courseId: { in: courseIds },
+        unitId: { in: unitIds },      // ← was courseId
         isActive: true,
         startTime: { lte: now },
-        endTime: { gte: now },
+        endTime:   { gte: now },
       },
       include: {
-        course: {
+        unit: {                        // ← was "course" relation
           select: { code: true, name: true, venue: true },
         },
       },
@@ -55,16 +56,17 @@ export async function GET() {
 
     return NextResponse.json({
       session: {
-        id: activeSession.id,
-        courseId: activeSession.courseId,
-        course: activeSession.course,
-        sessionType: activeSession.sessionType,
-        startTime: activeSession.startTime,
-        endTime: activeSession.endTime,
+        id:          activeSession.id,
+        unitId:      activeSession.unitId,        // ← was courseId
+        unit:        activeSession.unit,          // ← was course
+        classType:   activeSession.classType,     // ← was sessionType
+        startTime:   activeSession.startTime,
+        endTime:     activeSession.endTime,
       },
     });
   }
 
+  // ── Lecturer: return all their active sessions ────────────────────────────────
   if (role === UserRole.LECTURER) {
     const lecturerProfile = await prisma.lecturerProfile.findUnique({
       where: { userId },
@@ -77,12 +79,12 @@ export async function GET() {
     const activeSessions = await prisma.attendanceSession.findMany({
       where: {
         lecturerId: lecturerProfile.id,
-        isActive: true,
-        startTime: { lte: now },
-        endTime: { gte: now },
+        isActive:   true,
+        startTime:  { lte: now },
+        endTime:    { gte: now },
       },
       include: {
-        course: {
+        unit: {
           select: { code: true, name: true },
         },
       },
@@ -90,11 +92,12 @@ export async function GET() {
 
     return NextResponse.json({
       sessions: activeSessions.map((s) => ({
-        id: s.id,
-        courseId: s.courseId,
-        course: s.course,
+        id:        s.id,
+        unitId:    s.unitId,       // ← was courseId
+        unit:      s.unit,
+        classType: s.classType,    // ← was sessionType
         startTime: s.startTime,
-        endTime: s.endTime,
+        endTime:   s.endTime,
       })),
     });
   }
