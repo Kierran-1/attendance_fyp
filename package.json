@@ -13,6 +13,9 @@
     "prisma:migrate": "node -r dotenv/config node_modules/.bin/prisma migrate dev",
     "postinstall": "prisma generate"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "dependencies": {
     "@next-auth/prisma-adapter": "^1.0.0",
     "@prisma/client": "^6.19.3",
