@@ -21,19 +21,26 @@ export async function GET() {
   const role = session.user.role;
 
   if (role === UserRole.STUDENT) {
+    // Get the unit IDs the student is enrolled in
     const registrations = await prisma.unitRegistration.findMany({
       where: { userId, userStatus: UserStatus.STUDENT },
-      select: { id: true },
+      select: { unitId: true },
     });
 
     if (registrations.length === 0) {
       return NextResponse.json({ session: null });
     }
 
-    const regIds = registrations.map((r) => r.id);
+    const unitIds = registrations.map((r) => r.unitId);
 
+    // Find active sessions for any lecturer registration in those units
     const classSessions = await prisma.classSession.findMany({
-      where: { unitRegistrationId: { in: regIds } },
+      where: {
+        unitRegistration: {
+          unitId: { in: unitIds },
+          userStatus: UserStatus.LECTURER,
+        },
+      },
       include: {
         unitRegistration: {
           include: { unit: true },

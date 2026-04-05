@@ -122,7 +122,7 @@ export default function LiveAttendancePage() {
         if (!res.ok) throw new Error('Failed to load units');
         const data: LecturerUnit[] = await res.json();
         setUnits(data);
-        if (data.length > 0) setSelectedUnitId(data[0].id);
+        if (data.length > 0) setSelectedUnitId(data[0].unitId);
       } catch {
         setError('Unable to load your units. Please refresh.');
       } finally {
@@ -346,7 +346,7 @@ export default function LiveAttendancePage() {
 
   // ── Derived stats ──────────────────────────────────────────────────────────
 
-  const selectedUnit    = units.find(u => u.id === selectedUnitId);
+  const selectedUnit    = units.find(u => u.unitId === selectedUnitId);
   const totalStudents   = selectedUnit?.students.length ?? 0;
   const presentCount    = checkIns.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
   const absentCount     = Math.max(0, totalStudents - presentCount);
@@ -417,10 +417,11 @@ export default function LiveAttendancePage() {
                       <select
                         value={selectedUnitId}
                         onChange={e => setSelectedUnitId(e.target.value)}
+                        // selectedUnitId now holds the actual unitId, not the registration id
                         className="w-full appearance-none rounded-2xl border border-gray-200 bg-white py-3 pl-4 pr-10 text-sm font-semibold text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
                       >
                         {units.map(u => (
-                          <option key={u.id} value={u.id}>
+                          <option key={u.id} value={u.unitId}>
                             {u.unitCode} — {u.unitName}
                           </option>
                         ))}
