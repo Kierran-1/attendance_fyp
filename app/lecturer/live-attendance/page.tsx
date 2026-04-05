@@ -1,286 +1,740 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import {
+  Camera,
   CheckCircle2,
+  ChevronDown,
   Clock3,
+  Loader2,
   MapPin,
+  QrCode,
   RadioTower,
+  RefreshCw,
+  ScanLine,
   StopCircle,
   Users,
   XCircle,
 } from 'lucide-react';
 
-/*
- * Later integration:
- * - Replace INITIAL_CLASSES and mock check-ins with real-time data from backend
- * - Open/close attendance window via API
- * - Stream live check-ins via WebSocket or polling
- */
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type SessionType = 'Lecture' | 'Tutorial' | 'Lab';
+type SessionName = 'LECTURE' | 'TUTORIAL' | 'LAB' | 'PRACTICAL';
 
-type LecturerClass = {
+type LecturerUnit = {
   id: string;
+  unitId: string;
   unitCode: string;
   unitName: string;
-  day: string;
-  time: string;
-  location: string;
-  sessionType: SessionType;
-  totalStudents: number;
+  semester: string;
+  year: number;
+  students: { id: string; studentNumber: string; name: string }[];
+  sessions: { id: string; status: string; presentCount: number; absentCount: number }[];
 };
 
-type CheckIn = {
+type CheckInRecord = {
   id: string;
-  studentNumber: string;
-  name: string;
-  checkedInAt: string;
+  studentName: string;
+  studentId: string;
+  checkInTime: string | null;
+  status: string;
 };
 
-const INITIAL_CLASSES: LecturerClass[] = [
-  {
-    id: 'cls-1',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    day: 'Monday',
-    time: '09:00 - 11:00',
-    location: 'A304',
-    sessionType: 'Tutorial',
-    totalStudents: 28,
-  },
-  {
-    id: 'cls-2',
-    unitCode: 'SWE30003',
-    unitName: 'Software Architecture and Design',
-    day: 'Monday',
-    time: '14:00 - 16:00',
-    location: 'C102',
-    sessionType: 'Lecture',
-    totalStudents: 53,
-  },
-  {
-    id: 'cls-3',
-    unitCode: 'COS30049',
-    unitName: 'Computing Technology Innovation Project',
-    day: 'Wednesday',
-    time: '10:00 - 12:00',
-    location: 'B201',
-    sessionType: 'Lab',
-    totalStudents: 20,
-  },
-];
-
-const MOCK_CHECK_INS: CheckIn[] = [
-  { id: 'ci-1', studentNumber: '102788856', name: 'John Doe', checkedInAt: '09:02 AM' },
-  { id: 'ci-2', studentNumber: '102788857', name: 'Nur Aisyah Binti Ahmad', checkedInAt: '09:04 AM' },
-  { id: 'ci-3', studentNumber: '102788858', name: 'Lee Wen Hao', checkedInAt: '09:05 AM' },
-  { id: 'ci-4', studentNumber: '102788859', name: 'Priya Nair', checkedInAt: '09:07 AM' },
-  { id: 'ci-5', studentNumber: '102788860', name: 'Ahmad Faris bin Razak', checkedInAt: '09:09 AM' },
-];
-
-const SESSION_TYPE_COLOURS: Record<SessionType, string> = {
-  Lecture: 'bg-blue-100 text-blue-700',
-  Tutorial: 'bg-purple-100 text-purple-700',
-  Lab: 'bg-green-100 text-green-700',
+type ActiveSession = {
+  id: string;
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+  sessionName: SessionName;
+  sessionTime: string;
+  sessionDuration: number;
 };
+
+const SESSION_TYPES: { value: SessionName; label: string; colour: string }[] = [
+  { value: 'LECTURE',   label: 'Lecture',   colour: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { value: 'TUTORIAL',  label: 'Tutorial',  colour: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { value: 'LAB',       label: 'Lab',       colour: 'bg-green-100 text-green-700 border-green-200' },
+  { value: 'PRACTICAL', label: 'Practical', colour: 'bg-amber-100 text-amber-700 border-amber-200' },
+];
+
+const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
+
+function formatTime(iso: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatElapsed(ms: number) {
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function sessionTypeBadge(name: string) {
+  const found = SESSION_TYPES.find(t => t.value === name);
+  return found?.colour ?? 'bg-gray-100 text-gray-700 border-gray-200';
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function LiveAttendancePage() {
-  const [selectedClassId, setSelectedClassId] = useState<string>(INITIAL_CLASSES[0].id);
-  const [sessionActive, setSessionActive] = useState(false);
-  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
 
-  const selectedClass = useMemo(
-    () => INITIAL_CLASSES.find((c) => c.id === selectedClassId) ?? INITIAL_CLASSES[0],
-    [selectedClassId],
-  );
+  // Units & selection
+  const [units, setUnits]                   = useState<LecturerUnit[]>([]);
+  const [unitsLoading, setUnitsLoading]     = useState(true);
+  const [selectedUnitId, setSelectedUnitId] = useState('');
+  const [sessionType, setSessionType]       = useState<SessionName>('LECTURE');
+  const [duration, setDuration]             = useState(60);
 
-  const absentCount = useMemo(
-    () => Math.max(0, selectedClass.totalStudents - checkIns.length),
-    [selectedClass.totalStudents, checkIns.length],
-  );
+  // Active session
+  const [activeSession, setActiveSession]   = useState<ActiveSession | null>(null);
+  const [starting, setStarting]             = useState(false);
+  const [stopping, setStopping]             = useState(false);
+  const [elapsed, setElapsed]               = useState(0);
 
-  function handleStartSession() {
-    setCheckIns([]);
-    setSessionActive(true);
-    // Simulate a few check-ins arriving after session opens
-    setTimeout(() => setCheckIns(MOCK_CHECK_INS.slice(0, 3)), 800);
-    setTimeout(() => setCheckIns(MOCK_CHECK_INS.slice(0, 5)), 2000);
+  // Check-ins
+  const [checkIns, setCheckIns]             = useState<CheckInRecord[]>([]);
+  const [checkInsLoading, setCheckInsLoading] = useState(false);
+
+  // QR scanner
+  const [scanning, setScanning]             = useState(false);
+  const [scanResult, setScanResult]         = useState<{ ok: boolean; message: string } | null>(null);
+  const [manualToken, setManualToken]       = useState('');
+  const [submittingManual, setSubmittingManual] = useState(false);
+
+  // Errors
+  const [error, setError]                   = useState('');
+
+  // Refs
+  const readerRef     = useRef<BrowserQRCodeReader | null>(null);
+  const controlsRef   = useRef<IScannerControls | null>(null);
+  const elapsedRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionIdRef  = useRef<string | null>(null);
+
+  // ── Load units ─────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    async function loadUnits() {
+      try {
+        const res = await fetch('/api/lecturer/unit');
+        if (!res.ok) throw new Error('Failed to load units');
+        const data: LecturerUnit[] = await res.json();
+        setUnits(data);
+        if (data.length > 0) setSelectedUnitId(data[0].id);
+      } catch {
+        setError('Unable to load your units. Please refresh.');
+      } finally {
+        setUnitsLoading(false);
+      }
+    }
+    loadUnits();
+  }, []);
+
+  // Check if there's already an active session on mount
+  useEffect(() => {
+    async function checkExistingSession() {
+      try {
+        const res = await fetch('/api/attendance/active-session');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.sessions?.length > 0) {
+          const s = data.sessions[0];
+          setActiveSession({
+            id: s.id,
+            unitId: s.unitId,
+            unitCode: s.unit?.code ?? '—',
+            unitName: s.unit?.name ?? '—',
+            sessionName: s.sessionName ?? 'LECTURE',
+            sessionTime: s.sessionTime,
+            sessionDuration: s.sessionDuration,
+          });
+          sessionIdRef.current = s.id;
+          startPolling(s.id);
+          startTimer(new Date(s.sessionTime));
+        }
+      } catch { /* silent */ }
+    }
+    checkExistingSession();
+    return () => {
+      stopPolling();
+      stopTimer();
+    };
+  }, []);
+
+  // ── Timer ──────────────────────────────────────────────────────────────────
+
+  function startTimer(sessionTime: Date) {
+    stopTimer();
+    elapsedRef.current = setInterval(() => {
+      setElapsed(Date.now() - sessionTime.getTime());
+    }, 1000);
   }
 
-  function handleStopSession() {
-    setSessionActive(false);
+  function stopTimer() {
+    if (elapsedRef.current) {
+      clearInterval(elapsedRef.current);
+      elapsedRef.current = null;
+    }
   }
+
+  // ── Check-in polling ───────────────────────────────────────────────────────
+
+  const fetchCheckIns = useCallback(async (sessionId: string) => {
+    try {
+      setCheckInsLoading(true);
+      const res = await fetch(`/api/sessions/${sessionId}/records`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCheckIns(data.records ?? []);
+    } catch { /* silent */ } finally {
+      setCheckInsLoading(false);
+    }
+  }, []);
+
+  function startPolling(sessionId: string) {
+    stopPolling();
+    fetchCheckIns(sessionId);
+    pollRef.current = setInterval(() => fetchCheckIns(sessionId), 3000);
+  }
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  // ── Start session ──────────────────────────────────────────────────────────
+
+  async function handleStartSession() {
+    if (!selectedUnitId) { setError('Please select a unit first.'); return; }
+    setError('');
+    setStarting(true);
+
+    try {
+      const res = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          unitId: selectedUnitId,
+          sessionName: sessionType,
+          durationMinutes: duration,
+        }),
+      });
+
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? 'Failed to start session');
+      }
+
+      const data = await res.json();
+      const s = data.session;
+      const unit = units.find(u => u.id === selectedUnitId);
+
+      const newSession: ActiveSession = {
+        id: s.id,
+        unitId: s.unitRegistrationId,
+        unitCode: unit?.unitCode ?? '—',
+        unitName: unit?.unitName ?? '—',
+        sessionName: s.sessionName,
+        sessionTime: s.sessionTime,
+        sessionDuration: s.sessionDuration,
+      };
+
+      setActiveSession(newSession);
+      sessionIdRef.current = s.id;
+      setCheckIns([]);
+      setElapsed(0);
+      startTimer(new Date(s.sessionTime));
+      startPolling(s.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start session');
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  // ── End session ────────────────────────────────────────────────────────────
+
+  async function handleEndSession() {
+    if (!activeSession) return;
+    setStopping(true);
+
+    try {
+      await fetch(`/api/sessions/${activeSession.id}/end`, { method: 'PATCH' });
+    } catch { /* best effort */ } finally {
+      stopTimer();
+      stopPolling();
+      stopScanner();
+      setActiveSession(null);
+      sessionIdRef.current = null;
+      setElapsed(0);
+      setStopping(false);
+    }
+  }
+
+  // ── QR Camera scanner ──────────────────────────────────────────────────────
+
+  async function startScanner() {
+    if (!activeSession) return;
+    setScanResult(null);
+    readerRef.current = new BrowserQRCodeReader();
+    setScanning(true);
+
+    try {
+      controlsRef.current = await readerRef.current.decodeFromVideoDevice(
+        undefined,
+        'qr-video',
+        async (result) => {
+          if (result) {
+            await submitScan(result.getText());
+          }
+        }
+      );
+    } catch {
+      setScanResult({ ok: false, message: 'Camera not available or permission denied.' });
+      setScanning(false);
+    }
+  }
+
+  function stopScanner() {
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
+    }
+    readerRef.current = null;
+    setScanning(false);
+  }
+
+  // ── Submit scan (camera or manual) ─────────────────────────────────────────
+
+  async function submitScan(token: string) {
+    if (!token.trim()) return;
+
+    try {
+      const res = await fetch('/api/attendance/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setScanResult({ ok: true, message: 'Attendance marked ✓' });
+        // Immediately refresh check-ins
+        if (sessionIdRef.current) fetchCheckIns(sessionIdRef.current);
+      } else {
+        setScanResult({ ok: false, message: data.error ?? 'Scan failed' });
+      }
+    } catch {
+      setScanResult({ ok: false, message: 'Network error — please try again.' });
+    }
+
+    setTimeout(() => setScanResult(null), 3500);
+  }
+
+  async function handleManualSubmit() {
+    if (!manualToken.trim() || !activeSession) return;
+    setSubmittingManual(true);
+    await submitScan(manualToken.trim());
+    setManualToken('');
+    setSubmittingManual(false);
+  }
+
+  // ── Derived stats ──────────────────────────────────────────────────────────
+
+  const selectedUnit    = units.find(u => u.id === selectedUnitId);
+  const totalStudents   = selectedUnit?.students.length ?? 0;
+  const presentCount    = checkIns.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
+  const absentCount     = Math.max(0, totalStudents - presentCount);
+  const attendanceRate  = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+  const timeRemaining   = activeSession
+    ? Math.max(0, activeSession.sessionDuration * 60_000 - elapsed)
+    : 0;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#E4002B]">
-          Live Attendance
-        </p>
-        <h1 className="mt-1 text-2xl font-black text-gray-900">Session Manager</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Open an attendance window and monitor student check-ins in real time.
-        </p>
-      </div>
 
-      {/* Class Selector + Controls */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-sm font-semibold text-gray-700">Select Class</h2>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {INITIAL_CLASSES.map((cls) => {
-            const isSelected = cls.id === selectedClassId;
-            return (
-              <button
-                key={cls.id}
-                type="button"
-                disabled={sessionActive}
-                onClick={() => setSelectedClassId(cls.id)}
-                className={`rounded-xl border-2 p-4 text-left transition-colors ${
-                  isSelected
-                    ? 'border-[#E4002B] bg-[#E4002B]/5'
-                    : 'border-gray-200 hover:border-gray-300'
-                } disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-bold text-[#E4002B]">{cls.unitCode}</p>
-                    <p className="mt-0.5 text-sm font-semibold text-gray-800 leading-tight">
-                      {cls.unitName}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${SESSION_TYPE_COLOURS[cls.sessionType]}`}
-                  >
-                    {cls.sessionType}
-                  </span>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <Clock3 size={12} />
-                    {cls.time}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <MapPin size={12} />
-                    {cls.location}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Users size={12} />
-                    {cls.totalStudents} students
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-6 flex items-center gap-3">
-          {sessionActive ? (
-            <button
-              type="button"
-              onClick={handleStopSession}
-              className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
-            >
-              <StopCircle size={16} />
-              Stop Session
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleStartSession}
-              className="flex items-center gap-2 rounded-xl bg-[#E4002B] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
-            >
-              <RadioTower size={16} />
-              Start Session
-            </button>
-          )}
-
-          {sessionActive && (
-            <span className="flex items-center gap-2 text-sm font-medium text-green-600">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-green-500" />
-              Session open — {selectedClass.unitCode} · {selectedClass.location}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Stats Row */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Checked In</p>
-          <p className="mt-2 text-3xl font-black text-[#E4002B]">{checkIns.length}</p>
-          <p className="mt-0.5 text-xs text-gray-500">of {selectedClass.totalStudents} students</p>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Absent</p>
-          <p className="mt-2 text-3xl font-black text-gray-700">{absentCount}</p>
-          <p className="mt-0.5 text-xs text-gray-500">not yet checked in</p>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Rate</p>
-          <p className="mt-2 text-3xl font-black text-gray-700">
-            {selectedClass.totalStudents > 0
-              ? Math.round((checkIns.length / selectedClass.totalStudents) * 100)
-              : 0}
-            %
+      {/* Header */}
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
+            Lecturer Panel
           </p>
-          <p className="mt-0.5 text-xs text-gray-500">attendance so far</p>
-        </div>
-      </div>
-
-      {/* Check-in List */}
-      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-sm font-semibold text-gray-700">Check-in Log</h2>
-          <span className="text-xs text-gray-400">
-            {sessionActive ? 'Live' : checkIns.length > 0 ? 'Session ended' : 'No active session'}
-          </span>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
+            Live Attendance
+          </h1>
+          <p className="mt-2 text-sm leading-7 text-gray-500">
+            Start a session, scan student QR codes, and monitor check-ins in real time.
+          </p>
         </div>
 
-        {checkIns.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            {sessionActive ? (
-              <>
-                <span className="mb-3 inline-block h-3 w-3 animate-pulse rounded-full bg-green-500" />
-                <p className="text-sm font-medium text-gray-500">Waiting for students to check in…</p>
-              </>
-            ) : (
-              <>
-                <RadioTower size={32} className="mb-3 text-gray-300" />
-                <p className="text-sm font-medium text-gray-400">
-                  Start a session to begin recording attendance.
-                </p>
-              </>
+        {activeSession && (
+          <div className="flex items-center gap-2 rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-bold text-green-700 self-start">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+            Session Active — {formatElapsed(elapsed)}
+          </div>
+        )}
+      </section>
+
+      {/* Error banner */}
+      {error && (
+        <section className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </section>
+      )}
+
+      {/* Main grid */}
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+
+        {/* ── LEFT: Session setup OR active session info ── */}
+        <div className="space-y-5">
+
+          {!activeSession ? (
+            /* Setup panel */
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-5 text-base font-bold text-gray-900">Start a Session</h2>
+
+              {unitsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <Loader2 size={16} className="animate-spin" /> Loading your units…
+                </div>
+              ) : units.length === 0 ? (
+                <p className="text-sm text-gray-400">No units found. Upload a roster first.</p>
+              ) : (
+                <div className="space-y-5">
+                  {/* Unit selector */}
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">
+                      Select Unit
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedUnitId}
+                        onChange={e => setSelectedUnitId(e.target.value)}
+                        className="w-full appearance-none rounded-2xl border border-gray-200 bg-white py-3 pl-4 pr-10 text-sm font-semibold text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                      >
+                        {units.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.unitCode} — {u.unitName}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    </div>
+                    {selectedUnit && (
+                      <p className="mt-1.5 text-xs text-gray-400">
+                        {selectedUnit.students.length} enrolled students · {selectedUnit.semester} {selectedUnit.year}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Session type */}
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">
+                      Session Type
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {SESSION_TYPES.map(t => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setSessionType(t.value)}
+                          className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                            sessionType === t.value
+                              ? t.colour + ' ring-2 ring-offset-1 ring-[#E4002B]/30'
+                              : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Duration */}
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">
+                      Duration (minutes)
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {DURATION_OPTIONS.map(d => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setDuration(d)}
+                          className={`rounded-xl border px-4 py-2 text-xs font-bold transition ${
+                            duration === d
+                              ? 'border-[#E4002B] bg-[#E4002B] text-white'
+                              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          {d} min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleStartSession}
+                    disabled={starting || !selectedUnitId}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3.5 text-sm font-bold text-white transition hover:bg-[#C70026] disabled:opacity-60"
+                  >
+                    {starting
+                      ? <><Loader2 size={16} className="animate-spin" /> Starting…</>
+                      : <><RadioTower size={16} /> Start Session</>
+                    }
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Active session info */
+            <div className="rounded-3xl bg-[#E4002B] p-6 text-white shadow-lg shadow-rose-100">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-white/70" />
+                <p className="text-xs font-bold uppercase tracking-widest text-white/70">Live Session</p>
+              </div>
+              <p className="mt-2 text-2xl font-black tracking-tight">{activeSession.unitCode}</p>
+              <p className="mt-0.5 text-sm text-white/80">{activeSession.unitName}</p>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-white/10 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-white/60">Type</p>
+                  <p className="mt-1 text-sm font-bold">
+                    {SESSION_TYPES.find(t => t.value === activeSession.sessionName)?.label ?? activeSession.sessionName}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-white/10 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-white/60">Duration</p>
+                  <p className="mt-1 text-sm font-bold">{activeSession.sessionDuration} min</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-white/60">Elapsed</p>
+                  <p className="mt-1 font-mono text-lg font-black">{formatElapsed(elapsed)}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-white/60">Remaining</p>
+                  <p className="mt-1 font-mono text-lg font-black">{formatElapsed(timeRemaining)}</p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mt-5">
+                <div className="mb-1.5 flex justify-between text-xs text-white/60">
+                  <span>Attendance progress</span>
+                  <span>{presentCount} / {totalStudents}</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                  <div
+                    className="h-full rounded-full bg-white transition-all duration-500"
+                    style={{ width: `${attendanceRate}%` }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleEndSession}
+                disabled={stopping}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 text-sm font-bold text-white transition hover:bg-white/25 disabled:opacity-60"
+              >
+                {stopping
+                  ? <><Loader2 size={16} className="animate-spin" /> Ending…</>
+                  : <><StopCircle size={16} /> End Session</>
+                }
+              </button>
+            </div>
+          )}
+
+          {/* Stats cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Present</p>
+              <p className="mt-2 text-3xl font-black text-green-600">{presentCount}</p>
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Absent</p>
+              <p className="mt-2 text-3xl font-black text-gray-700">{absentCount}</p>
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Rate</p>
+              <p className="mt-2 text-3xl font-black text-[#E4002B]">{attendanceRate}%</p>
+            </div>
+          </div>
+
+          {/* QR scanner panel — only when session is active */}
+          {activeSession && (
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-base font-bold text-gray-900 flex items-center gap-2">
+                <ScanLine size={18} className="text-[#E4002B]" />
+                Scan Student QR
+              </h2>
+
+              {/* Camera */}
+              <div className="space-y-3">
+                <div className={`relative overflow-hidden rounded-2xl bg-black ${scanning ? 'block' : 'hidden'}`} style={{ aspectRatio: '4/3' }}>
+                  <video id="qr-video" className="h-full w-full object-cover" />
+                  {/* Targeting overlay */}
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="h-48 w-48 rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+                  </div>
+                </div>
+
+                {!scanning ? (
+                  <button
+                    type="button"
+                    onClick={startScanner}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:bg-rose-50 hover:text-[#E4002B]"
+                  >
+                    <Camera size={16} /> Open Camera Scanner
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={stopScanner}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-800 py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
+                  >
+                    <StopCircle size={16} /> Stop Camera
+                  </button>
+                )}
+
+                {/* Scan result */}
+                {scanResult && (
+                  <div className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
+                    scanResult.ok
+                      ? 'border border-green-100 bg-green-50 text-green-700'
+                      : 'border border-red-100 bg-red-50 text-red-700'
+                  }`}>
+                    {scanResult.ok
+                      ? <CheckCircle2 size={16} />
+                      : <XCircle size={16} />
+                    }
+                    {scanResult.message}
+                  </div>
+                )}
+
+                {/* Manual token entry */}
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+                    Or enter QR token manually
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={manualToken}
+                      onChange={e => setManualToken(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleManualSubmit()}
+                      placeholder="Paste QR token here…"
+                      className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 font-mono text-xs outline-none transition focus:border-[#E4002B] focus:bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleManualSubmit}
+                      disabled={!manualToken.trim() || submittingManual}
+                      className="rounded-xl bg-[#E4002B] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#C70026] disabled:opacity-50"
+                    >
+                      {submittingManual ? <Loader2 size={14} className="animate-spin" /> : 'Submit'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT: Live check-in log ── */}
+        <div className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Check-in Log</h2>
+              <p className="mt-0.5 text-xs text-gray-400">
+                {activeSession
+                  ? `Polling every 3 seconds · ${checkIns.length} recorded`
+                  : 'Start a session to see check-ins'}
+              </p>
+            </div>
+            {activeSession && (
+              <button
+                type="button"
+                onClick={() => sessionIdRef.current && fetchCheckIns(sessionIdRef.current)}
+                className="rounded-xl border border-gray-200 p-2 text-gray-400 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                title="Refresh"
+              >
+                <RefreshCw size={14} className={checkInsLoading ? 'animate-spin' : ''} />
+              </button>
             )}
           </div>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {checkIns.map((ci) => (
-              <li key={ci.id} className="flex items-center justify-between px-6 py-3">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 size={16} className="shrink-0 text-green-500" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{ci.name}</p>
-                    <p className="text-xs text-gray-400">{ci.studentNumber}</p>
-                  </div>
-                </div>
-                <span className="text-xs text-gray-400">{ci.checkedInAt}</span>
-              </li>
-            ))}
-          </ul>
-        )}
 
-        {checkIns.length > 0 && absentCount > 0 && (
-          <div className="border-t border-gray-100 px-6 py-3">
-            <p className="flex items-center gap-2 text-xs text-gray-400">
-              <XCircle size={14} className="text-gray-300" />
-              {absentCount} student{absentCount !== 1 ? 's' : ''} not yet checked in
-            </p>
-          </div>
-        )}
-      </div>
+          {/* No session state */}
+          {!activeSession && (
+            <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-50 mb-4">
+                <RadioTower size={28} className="text-gray-300" />
+              </div>
+              <p className="text-base font-bold text-gray-900">No active session</p>
+              <p className="mt-2 text-sm text-gray-400 max-w-xs">
+                Select a unit and start a session on the left to begin recording attendance.
+              </p>
+            </div>
+          )}
+
+          {/* Session active, no check-ins yet */}
+          {activeSession && checkIns.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+              <span className="mb-4 h-3 w-3 animate-pulse rounded-full bg-green-500" />
+              <p className="text-sm font-semibold text-gray-600">Waiting for students to check in…</p>
+              <p className="mt-1 text-xs text-gray-400">QR codes refresh every 60 seconds</p>
+            </div>
+          )}
+
+          {/* Check-in list */}
+          {checkIns.length > 0 && (
+            <ul className="divide-y divide-gray-50 max-h-[600px] overflow-y-auto">
+              {checkIns.map((record, index) => (
+                <li key={record.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors">
+                  <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-green-50 text-xs font-black text-green-600">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{record.studentName}</p>
+                    <p className="text-xs text-gray-400">{record.studentId}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold ${
+                      record.status === 'PRESENT'
+                        ? 'border-green-100 bg-green-50 text-green-700'
+                        : record.status === 'LATE'
+                          ? 'border-amber-100 bg-amber-50 text-amber-700'
+                          : 'border-red-100 bg-red-50 text-red-600'
+                    }`}>
+                      {record.status === 'PRESENT' && <CheckCircle2 size={11} />}
+                      {record.status}
+                    </span>
+                    <p className="mt-1 text-[10px] text-gray-400">{formatTime(record.checkInTime)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Footer showing remaining */}
+          {activeSession && checkIns.length > 0 && absentCount > 0 && (
+            <div className="border-t border-gray-100 px-6 py-3">
+              <p className="flex items-center gap-2 text-xs text-gray-400">
+                <XCircle size={13} className="text-gray-300" />
+                {absentCount} student{absentCount !== 1 ? 's' : ''} haven&apos;t checked in yet
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
