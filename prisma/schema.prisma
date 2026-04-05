@@ -5,7 +5,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 // ── Auth (NextAuth required models) ──────────────────────────────
@@ -83,6 +82,7 @@ model StudentProfile {
 
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   unitEnrollments UnitEnrollment[]
+  attendanceMarks AttendanceMark[]
 
   @@index([studentId])
 }
@@ -99,7 +99,7 @@ model LecturerProfile {
   attendanceSessions AttendanceSession[]
 }
 
-// ── Units ─────────────────────────────────────────────────────────
+// ── Units (Courses) ───────────────────────────────────────────────
 
 model Unit {
   id           String      @id @default(cuid())
@@ -109,7 +109,7 @@ model Unit {
   semester     String
   year         Int
   capacity     Int
-  sessionType  SessionType
+  classType    SessionType 
   classGroup   String?
   scheduleDay  String?
   scheduleTime String?
@@ -120,6 +120,7 @@ model Unit {
   lecturer           LecturerProfile    @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
   enrollments        UnitEnrollment[]
   attendanceSessions AttendanceSession[]
+  classSessions      ClassSession[]
 
   @@unique([code, classGroup, lecturerId])
   @@index([lecturerId])
@@ -129,29 +130,83 @@ model Unit {
 model UnitEnrollment {
   id         String   @id @default(cuid())
   studentId  String
-  courseId   String
+  unitId     String                          
   enrolledAt DateTime @default(now())
 
   student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   unit    Unit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, courseId])
-  @@index([courseId])
+  @@unique([studentId, unitId])
+  @@index([unitId])
 }
 
-// ── Attendance ────────────────────────────────────────────────────
+// ── Weekly Attendance Tracking (For Excel Import) ─────────────────
+
+model ClassSession {
+  id          String    @id @default(cuid())
+  unitId      String
+  sessionType SessionType
+  groupNumber String?
+  dayOfWeek   String
+  startTime   String
+  endTime     String
+  venue       String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  unit             Unit               @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  weeklyAttendance WeeklyAttendance[]
+
+  @@unique([unitId, sessionType, groupNumber])
+  @@index([unitId])
+}
+
+model WeeklyAttendance {
+  id             String   @id @default(cuid())
+  classSessionId String
+  attendanceDate DateTime
+  weekNumber     Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  classSession    ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  attendanceMarks AttendanceMark[]
+
+  @@unique([classSessionId, attendanceDate])
+  @@index([classSessionId])
+  @@index([attendanceDate])
+}
+
+model AttendanceMark {
+  id                 String   @id @default(cuid())
+  studentId          String
+  weeklyAttendanceId String
+  status             AttendanceStatus @default(ABSENT)
+  remarks            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  student          StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  weeklyAttendance WeeklyAttendance  @relation(fields: [weeklyAttendanceId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, weeklyAttendanceId])
+  @@index([weeklyAttendanceId])
+  @@index([studentId])
+}
+
+// ── Real-time Attendance Sessions (QR Code based) ─────────────────
 
 model AttendanceSession {
-  id          String      @id @default(cuid())
-  courseId    String
-  lecturerId  String
-  sessionType SessionType
-  qrCode      String      @unique
-  startTime   DateTime
-  endTime     DateTime
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id         String      @id @default(cuid())
+  unitId     String                          
+  lecturerId String
+  classType  SessionType
+  qrCode     String      @unique
+  startTime  DateTime
+  endTime    DateTime
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   unit              Unit               @relation(fields: [unitId], references: [id], onDelete: Cascade)
   lecturer          LecturerProfile    @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
@@ -160,7 +215,7 @@ model AttendanceSession {
   @@index([unitId])
   @@index([lecturerId])
   @@map("AttendanceSession")
-}
+} 
 
 model AttendanceRecord {
   id          String           @id @default(cuid())
