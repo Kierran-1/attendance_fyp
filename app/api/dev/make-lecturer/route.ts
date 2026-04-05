@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
-// DEV ONLY — promotes the currently logged-in user to LECTURER and creates a LecturerProfile.
+// DEV ONLY — promotes the currently logged-in user to LECTURER.
 export async function GET() {
   if (process.env.NODE_ENV !== 'development') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -17,12 +17,6 @@ export async function GET() {
   await prisma.user.update({
     where: { id: session.user.id },
     data: { role: 'LECTURER' },
-  });
-
-  await prisma.lecturerProfile.upsert({
-    where: { userId: session.user.id },
-    update: {},
-    create: { userId: session.user.id, department: 'Computing' },
   });
 
   return NextResponse.json({

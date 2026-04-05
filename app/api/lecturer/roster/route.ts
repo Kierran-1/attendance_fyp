@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -15,13 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const profile = await prisma.lecturerProfile.findUnique({
-    where: { userId: session.user.id },
-  });
-
-  if (!profile) {
-    return NextResponse.json({ error: 'Lecturer profile not found' }, { status: 404 });
-  }
+  const userId = session.user.id;
 
   let formData: FormData;
   try {
@@ -37,12 +31,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'courseId and file are required' }, { status: 400 });
   }
 
-  const unit = await prisma.unit.findFirst({
-    where: { id: unitId, lecturerId: profile.id },
+  // Verify lecturer has a registration for this unit
+  const lecturerReg = await prisma.unitRegistration.findFirst({
+    where: { unitId, userId, userStatus: UserStatus.LECTURER },
   });
 
-  if (!unit) {
-    return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+  if (!lecturerReg) {
+    return NextResponse.json({ error: 'Unit not found or not assigned to you' }, { status: 404 });
   }
 
   const text = await file.text();
@@ -55,7 +50,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Normalise headers: lowercase, strip spaces
   const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/\s+/g, ''));
 
   const nameIdx = headers.indexOf('name');
@@ -63,13 +57,10 @@ export async function POST(request: NextRequest) {
     (h) => h === 'studentid' || h === 'student_id' || h === 'id'
   );
   const emailIdx = headers.indexOf('email');
-  const programIdx = headers.findIndex((h) => h === 'program' || h === 'major');
-  const nationalityIdx = headers.indexOf('nationality');
-  const schoolStatusIdx = headers.findIndex((h) => h === 'schoolstatus' || h === 'school_status' || h === 'status');
 
-  if (nameIdx === -1 || studentIdIdx === -1 || emailIdx === -1) {
+  if (nameIdx === -1 || (studentIdIdx === -1 && emailIdx === -1)) {
     return NextResponse.json(
-      { error: 'CSV must include columns: name, studentId, email' },
+      { error: 'CSV must include columns: name, and either studentId or email' },
       { status: 400 }
     );
   }
@@ -82,66 +73,46 @@ export async function POST(request: NextRequest) {
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(',').map((c) => c.trim());
     const name = cols[nameIdx];
-    const studentId = cols[studentIdIdx];
-    const email = cols[emailIdx];
-    const program = programIdx !== -1 ? cols[programIdx] || null : null;
-    const nationality = nationalityIdx !== -1 ? cols[nationalityIdx] || null : null;
-    const schoolStatus = schoolStatusIdx !== -1 ? cols[schoolStatusIdx] || null : null;
 
-    if (!name || !studentId || !email) {
+    let email: string;
+    if (emailIdx !== -1 && cols[emailIdx]) {
+      email = cols[emailIdx];
+    } else if (studentIdIdx !== -1 && cols[studentIdIdx]) {
+      email = `${cols[studentIdIdx]}@students.swinburne.edu.my`;
+    } else {
+      errors.push(`Row ${i + 1}: missing email or studentId`);
+      continue;
+    }
+
+    if (!name || !email) {
       errors.push(`Row ${i + 1}: missing required fields`);
       continue;
     }
 
     try {
-      // Upsert user by email
       const existingUser = await prisma.user.findUnique({ where: { email } });
+
       const user = await prisma.user.upsert({
         where: { email },
         update: { name },
-        create: { email, name, role: 'STUDENT' },
+        create: { email, name, role: UserRole.STUDENT },
       });
 
-      // Find or create student profile
-      let studentProfile = await prisma.studentProfile.findUnique({
-        where: { userId: user.id },
+      if (!existingUser) created++;
+
+      const existingReg = await prisma.unitRegistration.findUnique({
+        where: { unitId_userId: { unitId, userId: user.id } },
       });
 
-      if (!studentProfile) {
-        // Check studentId isn't already taken by another user
-        const takenProfile = await prisma.studentProfile.findUnique({
-          where: { studentId },
-        });
-        if (takenProfile) {
-          errors.push(`Row ${i + 1}: Student ID ${studentId} is already assigned to another account`);
-          continue;
-        }
-        studentProfile = await prisma.studentProfile.create({
+      if (!existingReg) {
+        await prisma.unitRegistration.create({
           data: {
+            unitId,
             userId: user.id,
-            studentId,
-            ...(program && { major: program }),
+            userStatus: UserStatus.STUDENT,
+            year: lecturerReg.year,
+            semester: lecturerReg.semester,
           },
-        });
-        if (!existingUser) created++;
-      } else {
-        // Update optional fields if provided
-        if (program) {
-          await prisma.studentProfile.update({
-            where: { id: studentProfile.id },
-            data: { major: program },
-          });
-        }
-      }
-
-      // Enroll in unit
-      const existingEnrollment = await prisma.unitEnrollment.findUnique({
-        where: { studentId_unitId: { studentId: studentProfile.id, unitId } },
-      });
-
-      if (!existingEnrollment) {
-        await prisma.unitEnrollment.create({
-          data: { studentId: studentProfile.id, unitId },
         });
         enrolled++;
       } else {

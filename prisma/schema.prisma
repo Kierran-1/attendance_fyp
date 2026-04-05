@@ -5,23 +5,27 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ── Auth (NextAuth required models) ──────────────────────────────
 
 model User {
   id            String    @id @default(cuid())
+  orgId         String?
   email         String    @unique
   emailVerified DateTime?
   name          String?
   image         String?
   role          UserRole  @default(STUDENT)
+  programName   String?
+  qrState       String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  disabledAt    DateTime?
 
-  studentProfile    StudentProfile?
-  lecturerProfile   LecturerProfile?
-  attendanceRecords AttendanceRecord[]
+  unitRegistrations UnitRegistration[]
+  ledSessions       ClassSession[]     @relation("LecturerSessions")
   accounts          Account[]
   sessions          Session[]
 }
@@ -53,6 +57,8 @@ model Session {
   expires      DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("AccountSession")
 }
 
 model VerificationToken {
@@ -63,156 +69,115 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// ── User Profiles ─────────────────────────────────────────────────
-
-model StudentProfile {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  studentId      String   @unique
-  major          String?
-  nationality    String?  
-  schoolStatus   String?  
-  enrollmentYear Int?
-  phone          String?
-  program        String?
-  faculty        String?
-  intake         String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  unitEnrollments UnitEnrollment[]
-  attendanceMarks AttendanceMark[]
-
-  @@index([studentId])
-}
-
-model LecturerProfile {
-  id         String   @id @default(cuid())
-  userId     String   @unique
-  department String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courses            Unit[]
-  attendanceSessions AttendanceSession[]
-}
-
-// ── Units (Courses) ───────────────────────────────────────────────
+// ── Units ─────────────────────────────────────────────────────────
 
 model Unit {
-  id           String      @id @default(cuid())
-  code         String
-  name         String
-  lecturerId   String
-  semester     String
-  year         Int
-  capacity     Int
-  classType    SessionType 
-  classGroup   String?
-  scheduleDay  String?
-  scheduleTime String?
-  venue        String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id   String @id @default(cuid())
+  code String @unique
+  name String
 
-  lecturer           LecturerProfile    @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
-  enrollments        UnitEnrollment[]
-  attendanceSessions AttendanceSession[]
-  classSessions      ClassSession[]
-
-  @@unique([code, classGroup, lecturerId])
-  @@index([lecturerId])
-  @@map("Unit")
+  unitRegistrations UnitRegistration[]
 }
 
-model UnitEnrollment {
-  id         String   @id @default(cuid())
-  studentId  String
-  unitId     String                          
-  enrolledAt DateTime @default(now())
+// ── Unit Registration ─────────────────────────────────────────────
 
-  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  unit    Unit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
+model UnitRegistration {
+  id         String     @id @default(cuid())
+  unitId     String
+  userId     String
+  name       String?
+  year       Int
+  semester   String
+  userStatus UserStatus
 
-  @@unique([studentId, unitId])
+  unit          Unit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classSessions ClassSession[]
+
+  @@unique([unitId, userId])
+  @@index([userId])
   @@index([unitId])
 }
 
+<<<<<<< HEAD
 
 // ── Weekly Attendance Tracking (For Excel Import) ─────────────────
+=======
+// ── Class Sessions ────────────────────────────────────────────────
+>>>>>>> f907c36f7f9a971bd808667067a3efd3b04e4610
 
 model ClassSession {
-  id          String    @id @default(cuid())
-  unitId      String
-  sessionType SessionType
-  groupNumber String?
-  dayOfWeek   String
-  startTime   String
-  endTime     String
-  venue       String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                 String      @id @default(cuid())
+  unitRegistrationId String
+  lecturerId         String
+  sessionName        SessionName
+  sessionTime        DateTime
+  sessionDuration    Int
+  weekNumber         Int?
+  subcomponent       String?
+  groupNo            String?
 
-  unit             Unit               @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  weeklyAttendance WeeklyAttendance[]
+  unitRegistration  UnitRegistration        @relation(fields: [unitRegistrationId], references: [id], onDelete: Cascade)
+  lecturer          User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
+  attendanceData    ClassAttendanceData[]
+  attendanceRecords ClassAttendanceRecord[]
 
-  @@unique([unitId, sessionType, groupNumber])
-  @@index([unitId])
+  @@index([unitRegistrationId])
+  @@index([lecturerId])
 }
 
-model WeeklyAttendance {
-  id             String   @id @default(cuid())
-  classSessionId String
-  attendanceDate DateTime
-  weekNumber     Int
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+// ── Attendance Data (raw QR scan payloads) ────────────────────────
 
-  classSession    ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
-  attendanceMarks AttendanceMark[]
+model ClassAttendanceData {
+  id                String   @id @default(cuid())
+  classSessionId    String
+  scanPayload       Json
+  scanMethod        String?
+  verificationStage String?
+  createdAt         DateTime @default(now())
 
-  @@unique([classSessionId, attendanceDate])
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+
   @@index([classSessionId])
-  @@index([attendanceDate])
 }
 
-model AttendanceMark {
-  id                 String   @id @default(cuid())
-  studentId          String
-  weeklyAttendanceId String
-  status             AttendanceStatus @default(ABSENT)
-  remarks            String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+// ── Attendance Record (verified) ──────────────────────────────────
 
-  student          StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  weeklyAttendance WeeklyAttendance  @relation(fields: [weeklyAttendanceId], references: [id], onDelete: Cascade)
+model ClassAttendanceRecord {
+  id                     String           @id @default(cuid())
+  classSessionId         String
+  studentId              String
+  status                 AttendanceStatus @default(PENDING)
+  verifiedAt             DateTime?
+  verificationConfidence Float?
+  createdAt              DateTime         @default(now())
 
-  @@unique([studentId, weeklyAttendanceId])
-  @@index([weeklyAttendanceId])
+  classSession ClassSession         @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  evidence     AttendanceEvidence[]
+
+  @@unique([classSessionId, studentId])
+  @@index([classSessionId])
   @@index([studentId])
 }
 
+<<<<<<< HEAD
 // ── Real-time Attendance Sessions (QR Code based) ─────────────────
+=======
+// ── Attendance Evidence (MC / sick leave uploads) ─────────────────
+>>>>>>> f907c36f7f9a971bd808667067a3efd3b04e4610
 
-model AttendanceSession {
-  id         String      @id @default(cuid())
-  unitId     String                          
-  lecturerId String
-  classType  SessionType
-  qrCode     String      @unique
-  startTime  DateTime
-  endTime    DateTime
-  isActive   Boolean     @default(true)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+model AttendanceEvidence {
+  id                 String   @id @default(cuid())
+  attendanceRecordId String
+  uploadedBy         String
+  fileUrl            String
+  reason             String?
+  uploadedAt         DateTime @default(now())
+  status             String   @default("PENDING")
 
-  unit              Unit               @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  lecturer          LecturerProfile    @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
-  attendanceRecords AttendanceRecord[]
+  attendanceRecord ClassAttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
 
+<<<<<<< HEAD
   @@index([unitId])
   @@index([lecturerId])
   @@map("AttendanceSession")
@@ -232,6 +197,9 @@ model AttendanceRecord {
   @@unique([userId, sessionId])
   @@index([sessionId])
   @@index([userId])
+=======
+  @@index([attendanceRecordId])
+>>>>>>> f907c36f7f9a971bd808667067a3efd3b04e4610
 }
 
 // ── Enums ─────────────────────────────────────────────────────────
@@ -241,16 +209,21 @@ enum UserRole {
   LECTURER
 }
 
-enum SessionType {
+enum UserStatus {
+  STUDENT
+  LECTURER
+  TUTOR
+}
+
+enum SessionName {
   LECTURE
   TUTORIAL
   LAB
-  PRACTICAL
 }
 
 enum AttendanceStatus {
   PRESENT
   ABSENT
   LATE
-  EXCUSED
+  PENDING
 }

@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { UserRole, AttendanceStatus } from '@prisma/client';
 import { verifyQRToken } from '@/lib/qr';
-import { UserRole } from '@prisma/client';
+
+function isSessionActive(s: { sessionTime: Date; sessionDuration: number }): boolean {
+  const now = Date.now();
+  const end = s.sessionTime.getTime() + s.sessionDuration * 60_000;
+  return now >= s.sessionTime.getTime() && now <= end;
+}
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -35,38 +41,47 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid or expired QR code' }, { status: 400 });
   }
 
-  const attendanceSession = await prisma.attendanceSession.findFirst({
-    where: {
-      id: payload.sessionId,
-      isActive: true,
+  const classSession = await prisma.classSession.findUnique({
+    where: { id: payload.sessionId },
+  });
+
+  if (!classSession) {
+    return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+  }
+
+  if (!isSessionActive(classSession)) {
+    return NextResponse.json({ error: 'Session is not currently active' }, { status: 400 });
+  }
+
+  const now = new Date();
+
+  await prisma.classAttendanceData.create({
+    data: {
+      classSessionId: classSession.id,
+      scanPayload: { token, timestamp: now.toISOString() },
+      scanMethod: 'QR',
+      verificationStage: 'VERIFIED',
     },
   });
 
-  if (!attendanceSession) {
-    return NextResponse.json({ error: 'Session not found or inactive' }, { status: 404 });
-  }
-
-  const existing = await prisma.attendanceRecord.findUnique({
+  const record = await prisma.classAttendanceRecord.upsert({
     where: {
-      userId_sessionId: {
-        userId: payload.userId,
-        sessionId: payload.sessionId,
+      classSessionId_studentId: {
+        classSessionId: classSession.id,
+        studentId: payload.userId,
       },
     },
-  });
-
-  if (existing) {
-    return NextResponse.json({ error: 'Already checked in' }, { status: 409 });
-  }
-
-  const record = await prisma.attendanceRecord.create({
-    data: {
-      userId: payload.userId,
-      sessionId: payload.sessionId,
-      checkInTime: new Date(),
-      status: 'PRESENT',
+    update: {
+      status: AttendanceStatus.PRESENT,
+      verifiedAt: now,
+    },
+    create: {
+      classSessionId: classSession.id,
+      studentId: payload.userId,
+      status: AttendanceStatus.PRESENT,
+      verifiedAt: now,
     },
   });
 
-  return NextResponse.json({ success: true, record }, { status: 201 });
+  return NextResponse.json({ success: true, record }, { status: 200 });
 }

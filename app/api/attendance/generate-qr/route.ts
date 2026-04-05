@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { signQRToken } from '@/lib/qr';
 import { UserRole } from '@prisma/client';
+import { signQRToken } from '@/lib/qr';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -15,6 +15,8 @@ export async function POST(request: NextRequest) {
   if (session.user.role !== UserRole.STUDENT) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const userId = session.user.id;
 
   let body: { sessionId?: string };
   try {
@@ -28,19 +30,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
   }
 
-  const studentProfile = await prisma.studentProfile.findUnique({
-    where: { userId: session.user.id },
+  const classSession = await prisma.classSession.findUnique({
+    where: { id: sessionId },
   });
 
-  if (!studentProfile) {
-    return NextResponse.json({ error: 'Student profile not found' }, { status: 404 });
+  if (!classSession) {
+    return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
 
-  const token = signQRToken({
-    studentId: studentProfile.studentId,
-    userId: session.user.id,
-    sessionId,
-  });
+  const token = signQRToken({ studentId: userId, userId, sessionId });
 
   return NextResponse.json({ token }, { status: 200 });
 }

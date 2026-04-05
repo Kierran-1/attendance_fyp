@@ -19,26 +19,23 @@ export async function PATCH(
   }
 
   const { id } = await params;
+  const userId = session.user.id;
 
-  const profile = await prisma.lecturerProfile.findUnique({
-    where: { userId: session.user.id },
+  const classSession = await prisma.classSession.findFirst({
+    where: { id, lecturerId: userId },
   });
 
-  if (!profile) {
-    return NextResponse.json({ error: 'Lecturer profile not found' }, { status: 404 });
-  }
-
-  const attendanceSession = await prisma.attendanceSession.findFirst({
-    where: { id, lecturerId: profile.id },
-  });
-
-  if (!attendanceSession) {
+  if (!classSession) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
 
-  await prisma.attendanceSession.update({
+  const now = Date.now();
+  const elapsed = Math.floor((now - classSession.sessionTime.getTime()) / 60_000);
+  const newDuration = Math.max(0, elapsed);
+
+  await prisma.classSession.update({
     where: { id },
-    data: { isActive: false, endTime: new Date() },
+    data: { sessionDuration: newDuration },
   });
 
   return NextResponse.json({ success: true });

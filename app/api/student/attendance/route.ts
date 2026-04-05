@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -19,25 +19,24 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const queryDate = req.nextUrl.searchParams.get('date');
 
-  const studentProfile = await prisma.studentProfile.findUnique({
-    where: { userId },
-    select: { id: true },
+  const studentRegistrations = await prisma.unitRegistration.findMany({
+    where: { userId, userStatus: UserStatus.STUDENT },
+    include: { unit: true },
   });
 
-  if (!studentProfile) {
-    return NextResponse.json({ error: 'Student profile not found' }, { status: 404 });
+  if (studentRegistrations.length === 0) {
+    return NextResponse.json({ records: [], courses: [], attendance: [] });
   }
 
-  const enrollments = await prisma.courseEnrollment.findMany({
-    where: { studentId: studentProfile.id },
-    select: { courseId: true },
+  const unitIds = studentRegistrations.map((r) => r.unitId);
+
+  // Find lecturer registrations for same units to get ClassSessions
+  const lecturerRegistrations = await prisma.unitRegistration.findMany({
+    where: { unitId: { in: unitIds }, userStatus: UserStatus.LECTURER },
+    select: { id: true, unitId: true },
   });
 
-  const courseIds = enrollments.map((e) => e.courseId);
-
-  if (courseIds.length === 0) {
-    return NextResponse.json({ records: [], courses: [] });
-  }
+  const lecturerRegIds = lecturerRegistrations.map((r) => r.id);
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -45,74 +44,87 @@ export async function GET(req: NextRequest) {
   todayEnd.setHours(23, 59, 59, 999);
 
   if (queryDate === 'today') {
-    const todaySessions = await prisma.attendanceSession.findMany({
+    const todaySessions = await prisma.classSession.findMany({
       where: {
-        courseId: { in: courseIds },
-        startTime: { gte: todayStart, lte: todayEnd },
+        unitRegistrationId: { in: lecturerRegIds },
+        sessionTime: { gte: todayStart, lte: todayEnd },
       },
       include: {
-        course: { select: { code: true } },
-        attendanceRecords: {
-          where: { userId },
-          take: 1,
-        },
+        unitRegistration: { select: { unitId: true } },
       },
-      orderBy: { startTime: 'desc' },
+      orderBy: { sessionTime: 'desc' },
     });
 
-    const attendance = todaySessions.map((s) => ({
-      id: s.id,
-      code: s.course.code,
-      session:
-        s.sessionType === 'LECTURE'
-          ? 'Lecture'
-          : s.sessionType === 'TUTORIAL'
-            ? 'Tutorial'
-            : s.sessionType === 'LAB'
-              ? 'Lab'
-              : 'Practical',
-      status: s.attendanceRecords[0]?.status === 'ABSENT' ? 'Absent' : 'Present',
-      recordedAt: s.attendanceRecords[0]?.checkInTime
-        ? new Date(s.attendanceRecords[0].checkInTime).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : null,
-    }));
+    const todaySessionIds = todaySessions.map((s) => s.id);
+
+    const todayRecords = await prisma.classAttendanceRecord.findMany({
+      where: { studentId: userId, classSessionId: { in: todaySessionIds } },
+      select: { classSessionId: true, status: true, verifiedAt: true },
+    });
+
+    const recordMap = new Map(todayRecords.map((r) => [r.classSessionId, r]));
+
+    const attendance = todaySessions.map((s) => {
+      const record = recordMap.get(s.id);
+      const unitReg = studentRegistrations.find(
+        (r) => r.unitId === s.unitRegistration.unitId
+      );
+      return {
+        id: s.id,
+        code: unitReg?.unit.code ?? '—',
+        session: s.sessionName,
+        status: record?.status === 'ABSENT' ? 'Absent' : record ? 'Present' : 'Absent',
+        recordedAt: record?.verifiedAt
+          ? new Date(record.verifiedAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : null,
+      };
+    });
 
     return NextResponse.json({ attendance });
   }
 
-  // All past sessions for enrolled courses with attendance status
-  const sessions = await prisma.attendanceSession.findMany({
+  // All past sessions
+  const sessions = await prisma.classSession.findMany({
     where: {
-      courseId: { in: courseIds },
-      startTime: { lte: now },
+      unitRegistrationId: { in: lecturerRegIds },
+      sessionTime: { lte: now },
     },
     include: {
-      course: { select: { id: true, code: true, name: true, venue: true } },
-      attendanceRecords: {
-        where: { userId },
-        take: 1,
-      },
+      unitRegistration: { select: { unitId: true } },
     },
-    orderBy: { startTime: 'desc' },
+    orderBy: { sessionTime: 'desc' },
     take: 200,
   });
 
-  const records = sessions.map((s) => ({
-    sessionId: s.id,
-    date: s.startTime,
-    courseId: s.course.id,
-    courseCode: s.course.code,
-    courseName: s.course.name,
-    venue: s.course.venue,
-    sessionType: s.sessionType,
-    startTime: s.startTime,
-    endTime: s.endTime,
-    checkInTime: s.attendanceRecords[0]?.checkInTime ?? null,
-    status: s.attendanceRecords[0]?.status ?? 'ABSENT',
-  }));
+  const sessionIds = sessions.map((s) => s.id);
+
+  const attendanceRecords = await prisma.classAttendanceRecord.findMany({
+    where: { studentId: userId, classSessionId: { in: sessionIds } },
+    select: { classSessionId: true, status: true, verifiedAt: true },
+  });
+
+  const recordMap = new Map(attendanceRecords.map((r) => [r.classSessionId, r]));
+
+  const records = sessions.map((s) => {
+    const record = recordMap.get(s.id);
+    const unitReg = studentRegistrations.find(
+      (r) => r.unitId === s.unitRegistration.unitId
+    );
+    return {
+      sessionId: s.id,
+      date: s.sessionTime,
+      unitId: s.unitRegistration.unitId,
+      courseCode: unitReg?.unit.code ?? '—',
+      courseName: unitReg?.unit.name ?? '—',
+      sessionName: s.sessionName,
+      sessionTime: s.sessionTime,
+      checkInTime: record?.verifiedAt ?? null,
+      status: record?.status ?? 'ABSENT',
+    };
+  });
 
   // Per-course summary
   const courseSummaries: Record<
@@ -121,37 +133,31 @@ export async function GET(req: NextRequest) {
   > = {};
 
   for (const r of records) {
-    if (!courseSummaries[r.courseId]) {
-      courseSummaries[r.courseId] = {
-        id: r.courseId,
+    if (!courseSummaries[r.unitId]) {
+      const unitReg = studentRegistrations.find((reg) => reg.unitId === r.unitId);
+      courseSummaries[r.unitId] = {
+        id: r.unitId,
         code: r.courseCode,
         name: r.courseName,
         total: 0,
         attended: 0,
       };
     }
-    courseSummaries[r.courseId].total += 1;
+    courseSummaries[r.unitId].total += 1;
     if (r.status !== 'ABSENT') {
-      courseSummaries[r.courseId].attended += 1;
+      courseSummaries[r.unitId].attended += 1;
     }
   }
 
   const attendance = records
     .filter((r) => {
-      const sessionDate = new Date(r.date);
-      return sessionDate >= todayStart && sessionDate <= todayEnd;
+      const d = new Date(r.date);
+      return d >= todayStart && d <= todayEnd;
     })
     .map((r) => ({
       id: r.sessionId,
       code: r.courseCode,
-      session:
-        r.sessionType === 'LECTURE'
-          ? 'Lecture'
-          : r.sessionType === 'TUTORIAL'
-            ? 'Tutorial'
-            : r.sessionType === 'LAB'
-              ? 'Lab'
-              : 'Practical',
+      session: r.sessionName,
       status: r.status === 'ABSENT' ? 'Absent' : 'Present',
       recordedAt: r.checkInTime
         ? new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
