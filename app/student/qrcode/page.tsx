@@ -20,15 +20,15 @@ const TOKEN_TTL = 60; // seconds — must match lib/qr.ts exp value
 
 type ActiveSession = {
   id: string;
-  courseId: string;
-  course: {
+  unitId: string;
+  unit: {
     code: string;
     name: string;
-    venue: string;
+    venue?: string;
   };
-  sessionType: string;
-  startTime: string;
-  endTime: string;
+  sessionName: string;
+  sessionTime: string;
+  sessionDuration: number; // minutes
 };
 
 type BasicProfile = {
@@ -44,7 +44,16 @@ function formatTime(iso: string) {
 }
 
 function formatSessionType(raw: string) {
-  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  const map: Record<string, string> = {
+    LECTURE: 'Lecture', TUTORIAL: 'Tutorial', LAB: 'Lab', PRACTICAL: 'Practical',
+  };
+  return map[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+function getEndTime(session: ActiveSession): string {
+  const start = new Date(session.sessionTime).getTime();
+  const end = new Date(start + session.sessionDuration * 60_000);
+  return end.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' });
 }
 
 // Countdown ring component
@@ -169,6 +178,7 @@ export default function StudentQRCodePage() {
       setActiveSession(session);
       activeSessionRef.current = session;
       return session;
+
     } catch {
       setActiveSession(null);
       activeSessionRef.current = null;
@@ -353,10 +363,10 @@ export default function StudentQRCodePage() {
             <ShieldCheck size={18} className="text-gray-300" />
           </div>
           <p className="text-2xl font-black tracking-tight text-gray-900">
-            {activeSession?.course.code ?? '—'}
+            {activeSession?.unit.code ?? '—'}
           </p>
           <p className="mt-2 text-xs text-gray-500 truncate">
-            {activeSession?.course.name ?? 'No active unit'}
+            {activeSession?.unit.name ?? 'No active unit'}
           </p>
         </div>
 
@@ -366,11 +376,11 @@ export default function StudentQRCodePage() {
             <Clock3 size={18} className="text-gray-300" />
           </div>
           <p className="text-2xl font-black tracking-tight text-gray-900">
-            {activeSession ? formatSessionType(activeSession.sessionType) : '—'}
+            {activeSession ? formatSessionType(activeSession.sessionName) : '—'}
           </p>
           <p className="mt-2 text-xs text-gray-500">
             {activeSession
-              ? `${formatTime(activeSession.startTime)} – ${formatTime(activeSession.endTime)}`
+              ? `${formatTime(activeSession.sessionTime)} – ${getEndTime(activeSession)}`
               : 'No session'}
           </p>
         </div>
@@ -455,7 +465,7 @@ export default function StudentQRCodePage() {
                 </p>
                 <p className="mt-0.5 text-sm text-gray-400">{profile?.studentId ?? '—'}</p>
                 <p className="mt-1.5 text-sm font-bold text-[#E4002B]">
-                  {activeSession?.course.code} · {activeSession ? formatSessionType(activeSession.sessionType) : '—'}
+                  {activeSession?.unit.code} · {activeSession ? formatSessionType(activeSession.sessionName) : '—'}
                 </p>
               </div>
             </div>
@@ -486,7 +496,7 @@ export default function StudentQRCodePage() {
               Session Details
             </p>
             <h2 className="mt-2 text-xl font-black tracking-tight text-gray-900">
-              {activeSession?.course.name ?? 'Waiting for session'}
+              {activeSession?.unit.name ?? 'Waiting for session'}
             </h2>
 
             <div className="mt-5 space-y-3">
@@ -495,7 +505,7 @@ export default function StudentQRCodePage() {
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Venue</p>
                   <p className="text-sm font-semibold text-gray-900">
-                    {activeSession?.course.venue ?? '—'}
+                    {activeSession?.unit.venue ?? '—'}
                   </p>
                 </div>
               </div>
@@ -504,13 +514,13 @@ export default function StudentQRCodePage() {
                 <div className="rounded-2xl bg-gray-50 px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Start</p>
                   <p className="mt-0.5 text-sm font-semibold text-gray-900">
-                    {activeSession ? formatTime(activeSession.startTime) : '—'}
+                    {activeSession ? formatTime(activeSession.sessionTime) : '—'}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-gray-50 px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">End</p>
                   <p className="mt-0.5 text-sm font-semibold text-gray-900">
-                    {activeSession ? formatTime(activeSession.endTime) : '—'}
+                    {activeSession ? getEndTime(activeSession) : '—'}
                   </p>
                 </div>
               </div>
