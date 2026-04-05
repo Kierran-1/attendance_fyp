@@ -99,12 +99,7 @@ model UnitRegistration {
   @@index([unitId])
 }
 
-<<<<<<< HEAD
-
-// ── Weekly Attendance Tracking (For Excel Import) ─────────────────
-=======
 // ── Class Sessions ────────────────────────────────────────────────
->>>>>>> f907c36f7f9a971bd808667067a3efd3b04e4610
 
 model ClassSession {
   id                 String      @id @default(cuid())
@@ -160,11 +155,7 @@ model ClassAttendanceRecord {
   @@index([studentId])
 }
 
-<<<<<<< HEAD
-// ── Real-time Attendance Sessions (QR Code based) ─────────────────
-=======
 // ── Attendance Evidence (MC / sick leave uploads) ─────────────────
->>>>>>> f907c36f7f9a971bd808667067a3efd3b04e4610
 
 model AttendanceEvidence {
   id                 String   @id @default(cuid())
@@ -177,29 +168,7 @@ model AttendanceEvidence {
 
   attendanceRecord ClassAttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
 
-<<<<<<< HEAD
-  @@index([unitId])
-  @@index([lecturerId])
-  @@map("AttendanceSession")
-}
-
-model AttendanceRecord {
-  id          String           @id @default(cuid())
-  userId      String
-  sessionId   String
-  status      AttendanceStatus @default(PRESENT)
-  checkInTime DateTime
-  createdAt   DateTime         @default(now())
-
-  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, sessionId])
-  @@index([sessionId])
-  @@index([userId])
-=======
   @@index([attendanceRecordId])
->>>>>>> f907c36f7f9a971bd808667067a3efd3b04e4610
 }
 
 // ── Enums ─────────────────────────────────────────────────────────
