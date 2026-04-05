@@ -23,7 +23,6 @@
     ],
     "target": "ES2017",
     "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": [
         "./*"
