@@ -1,7 +1,8 @@
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { NextRequest, NextResponse } from 'next/server';
+import { UserRole } from '@prisma/client';
 
 type MicrosoftMe = {
   mobilePhone?: string | null;
@@ -9,12 +10,6 @@ type MicrosoftMe = {
   companyName?: string | null;
   officeLocation?: string | null;
   jobTitle?: string | null;
-  employeeId?: string | null;
-  onPremisesExtensionAttributes?: {
-    extensionAttribute1?: string | null;
-    extensionAttribute2?: string | null;
-    extensionAttribute3?: string | null;
-  };
 };
 
 type JwtClaims = {
@@ -39,10 +34,6 @@ function decodeJwtClaims(token: string | null | undefined): JwtClaims {
   }
 }
 
-/**
- * GET /api/student/profile
- * Fetch the authenticated student's profile data (all synced from Microsoft Authenticator)
- */
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -51,44 +42,37 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    const studentProfile = await prisma.studentProfile.findUnique({
-      where: { userId: session.user.id },
-      select: { 
-        studentId: true, 
-        userId: true,
-        major: true,
-        enrollmentYear: true,
-      },
+    if (session.user.role !== UserRole.STUDENT) {
+      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { email: true, programName: true },
     });
 
-    if (!studentProfile) {
-      return NextResponse.json({ message: 'Student profile not found' }, { status: 404 });
+    if (!dbUser?.email) {
+      return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
+
+    const studentId = dbUser.email.split('@')[0];
 
     const basicMode = req.nextUrl.searchParams.get('basic') === '1';
     if (basicMode) {
       return NextResponse.json({
-        studentId: studentProfile.studentId,
+        studentId,
         phone: '',
-        program: studentProfile.major ?? '',
+        program: dbUser.programName ?? '',
         faculty: '',
-        intake: studentProfile.enrollmentYear ? String(studentProfile.enrollmentYear) : '',
+        intake: '',
       });
     }
 
-    // Fetch latest profile attributes directly from Microsoft Graph for live sync.
+    // Fetch Microsoft Graph profile for live data
     const account = await prisma.account.findFirst({
-      where: {
-        userId: session.user.id,
-        provider: 'azure-ad',
-      },
-      select: {
-        access_token: true,
-        id_token: true,
-      },
-      orderBy: {
-        id: 'desc',
-      },
+      where: { userId: session.user.id, provider: 'azure-ad' },
+      select: { access_token: true, id_token: true },
+      orderBy: { id: 'desc' },
     });
 
     const idTokenClaims = decodeJwtClaims(account?.id_token);
@@ -99,9 +83,7 @@ export async function GET(req: NextRequest) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 1500);
         const graphRes = await fetch('https://graph.microsoft.com/v1.0/me', {
-          headers: {
-            Authorization: `Bearer ${account.access_token}`,
-          },
+          headers: { Authorization: `Bearer ${account.access_token}` },
           cache: 'no-store',
           signal: controller.signal,
         });
@@ -117,7 +99,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const ext = graphProfile?.onPremisesExtensionAttributes;
     const phone = graphProfile?.mobilePhone ?? idTokenClaims.mobilePhone ?? '';
     const program =
       graphProfile?.jobTitle ??
@@ -125,41 +106,24 @@ export async function GET(req: NextRequest) {
       idTokenClaims.extension_Program ??
       idTokenClaims.jobTitle ??
       idTokenClaims.department ??
-      studentProfile.major ??
-      ext?.extensionAttribute1 ??
+      dbUser.programName ??
       '';
     const faculty =
       graphProfile?.companyName ??
       idTokenClaims.extension_Faculty ??
       idTokenClaims.companyName ??
-      ext?.extensionAttribute2 ??
       '';
     const intake =
-      graphProfile?.officeLocation ??
-      idTokenClaims.extension_Intake ??
-      (studentProfile.enrollmentYear ? String(studentProfile.enrollmentYear) : '') ??
-      ext?.extensionAttribute3 ??
-      '';
+      graphProfile?.officeLocation ?? idTokenClaims.extension_Intake ?? '';
 
-    return NextResponse.json({
-      studentId: studentProfile.studentId,
-      phone,
-      program,
-      faculty,
-      intake,
-    });
+    return NextResponse.json({ studentId, phone, program, faculty, intake });
   } catch (error) {
     console.error('[STUDENT_PROFILE_GET]', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }
 
-/**
- * PUT /api/student/profile
- * Update the authenticated student's profile (non-Microsoft fields only)
- * Student ID and Email are locked from Microsoft Authenticator
- */
-export async function PUT(req: NextRequest) {
+export async function PUT() {
   return NextResponse.json(
     { message: 'Profile is read-only and synced from Microsoft Authenticator' },
     { status: 405 }

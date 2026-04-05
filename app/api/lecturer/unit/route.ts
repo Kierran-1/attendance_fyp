@@ -1,105 +1,89 @@
-// app/api/lecturer/unit/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
-import { SessionType } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { UserRole, UserStatus } from '@prisma/client';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const lecturer = await prisma.lecturerProfile.findFirst({
-      where: { user: { email: session.user.email } },
+    if (session.user.role !== UserRole.LECTURER) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const userId = session.user.id;
+
+    const lecturerRegistrations = await prisma.unitRegistration.findMany({
+      where: { userId, userStatus: UserStatus.LECTURER },
       include: {
-        user: true,
-        courses: {
+        unit: true,
+        classSessions: {
           include: {
-            enrollments: {
-              include: {
-                student: {
-                  include: { user: true },
-                },
-              },
-            },
-            attendanceSessions: {
-              include: { attendanceRecords: true },
+            attendanceRecords: {
+              select: { studentId: true, status: true },
             },
           },
         },
       },
     });
 
-    if (!lecturer) {
-      return NextResponse.json({ error: 'Lecturer not found' }, { status: 404 });
-    }
+    const result = await Promise.all(
+      lecturerRegistrations.map(async (reg) => {
+        const studentRegistrations = await prisma.unitRegistration.findMany({
+          where: { unitId: reg.unitId, userStatus: UserStatus.STUDENT },
+          include: {
+            user: { select: { id: true, name: true, email: true, programName: true } },
+          },
+        });
 
-    const classTypeMap: Record<string, string> = {
-      LECTURE:   'LE',
-      TUTORIAL:  'TU',
-      LAB:       'LA',
-      PRACTICAL: 'PR',
-    };
+        const students = studentRegistrations.map((sr) => ({
+          id: sr.id,
+          studentNumber: sr.user.email?.split('@')[0] ?? '—',
+          name: sr.user.name ?? 'Unknown',
+          program: sr.user.programName ?? '',
+        }));
 
-    const transformedUnits = lecturer.courses.map(unit => {
-      const uniqueStudents = new Map<string, object>();
+        const sessions = reg.classSessions.map((cs) => {
+          const presentCount = cs.attendanceRecords.filter(
+            (r) => r.status === 'PRESENT' || r.status === 'LATE'
+          ).length;
+          const absentCount = cs.attendanceRecords.filter(
+            (r) => r.status === 'ABSENT'
+          ).length;
+          const total = cs.attendanceRecords.length;
+          const now = Date.now();
+          const end = cs.sessionTime.getTime() + cs.sessionDuration * 60_000;
+          const isActive = now >= cs.sessionTime.getTime() && now <= end;
 
-      unit.enrollments.forEach(enrollment => {
-        const student = enrollment.student;
-        if (!uniqueStudents.has(student.studentId)) {
-          uniqueStudents.set(student.studentId, {
-            id:            student.id,
-            studentNumber: student.studentId,
-            name:          student.user.name    ?? 'Unknown',
-            program:       student.major        ?? '',
-            nationality:   student.nationality  ?? '',       // ← read from DB
-            schoolStatus:  student.schoolStatus ?? 'Active', // ← read from DB
-          });
-        }
-      });
-
-      const sessions = unit.attendanceSessions.map(s => {
-        const records      = s.attendanceRecords;
-        const presentCount = records.filter(r => r.status === 'PRESENT').length;
-        const absentCount  = records.filter(r => r.status === 'ABSENT').length;
-        const lateCount    = records.filter(r => r.status === 'LATE').length;
-        const excusedCount = records.filter(r => r.status === 'EXCUSED').length;
-        const total        = records.length;
+          return {
+            id: cs.id,
+            date: cs.sessionTime.toISOString().split('T')[0],
+            attendancePercentage: total > 0 ? Math.round((presentCount / total) * 100) : 0,
+            status: isActive ? 'Ongoing' : 'Completed',
+            presentCount,
+            absentCount,
+          };
+        });
 
         return {
-          id:                   s.id,
-          date:                 s.startTime.toISOString().split('T')[0],
-          attendancePercentage: total > 0 ? Math.round((presentCount / total) * 100) : 0,
-          status:               s.isActive ? 'Ongoing' : 'Completed',
-          presentCount,
-          absentCount,
-          lateCount,
-          sickCount: excusedCount,
+          id: reg.id,
+          unitId: reg.unitId,
+          unitCode: reg.unit.code,
+          unitName: reg.unit.name,
+          semester: reg.semester,
+          year: reg.year,
+          students,
+          sessions,
         };
-      });
+      })
+    );
 
-      return {
-        id:        unit.id,
-        unitCode:  unit.code,
-        unitName:  unit.name,
-        day:       unit.scheduleDay  ?? 'TBA',
-        time:      unit.scheduleTime ?? 'TBA',
-        location:  unit.venue        ?? 'TBA',
-        lecturer:  lecturer.user.name ?? '',
-        classType: classTypeMap[unit.classType] ?? unit.classType,
-        group:     unit.classGroup ?? '01',
-        term:      unit.semester,
-        students:  Array.from(uniqueStudents.values()),
-        sessions,
-        createdAt: unit.createdAt.toISOString().split('T')[0],
-      };
-    });
-
-    return NextResponse.json(transformedUnits);
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching units:', error);
     return NextResponse.json({ error: 'Failed to fetch units' }, { status: 500 });
@@ -110,43 +94,60 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const lecturer = await prisma.lecturerProfile.findFirst({
-      where: { user: { email: session.user.email } },
-    });
-
-    if (!lecturer) {
-      return NextResponse.json({ error: 'Lecturer not found' }, { status: 404 });
+    if (session.user.role !== UserRole.LECTURER) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await request.json();
+    const userId = session.user.id;
 
-    const VALID_TYPES = ['LECTURE', 'TUTORIAL', 'LAB', 'PRACTICAL'] as const;
-    const rawType = (body.classType ?? body.sessionType ?? '').toUpperCase();
-    const classType: SessionType = (
-      VALID_TYPES.includes(rawType as (typeof VALID_TYPES)[number]) ? rawType : 'LECTURE'
-    ) as SessionType;
+    let body: { code?: string; name?: string; semester?: string; year?: number };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
 
-    const unit = await prisma.unit.create({
-      data: {
-        code:         body.code,
-        name:         body.name,
-        semester:     body.semester,
-        year:         body.year         ?? new Date().getFullYear(),
-        capacity:     body.capacity     ?? 999,
-        classType,
-        classGroup:   body.classGroup   ?? null,
-        scheduleDay:  body.scheduleDay  ?? null,
-        scheduleTime: body.scheduleTime ?? null,
-        venue:        body.venue        ?? null,
-        lecturerId:   lecturer.id,
-      },
+    const { code, name, semester, year } = body;
+
+    if (!code || !name || !semester || !year) {
+      return NextResponse.json(
+        { error: 'code, name, semester, and year are required' },
+        { status: 400 }
+      );
+    }
+
+    // Upsert unit by code
+    const unit = await prisma.unit.upsert({
+      where: { code },
+      update: { name },
+      create: { code, name },
     });
 
-    return NextResponse.json(unit, { status: 201 });
+    // Create UnitRegistration(LECTURER) if not exists
+    const existing = await prisma.unitRegistration.findUnique({
+      where: { unitId_userId: { unitId: unit.id, userId } },
+    });
+
+    if (existing) {
+      return NextResponse.json({ ...existing, unit }, { status: 200 });
+    }
+
+    const registration = await prisma.unitRegistration.create({
+      data: {
+        unitId: unit.id,
+        userId,
+        userStatus: UserStatus.LECTURER,
+        year,
+        semester,
+      },
+      include: { unit: true },
+    });
+
+    return NextResponse.json(registration, { status: 201 });
   } catch (error) {
     console.error('Error creating unit:', error);
     return NextResponse.json({ error: 'Failed to create unit' }, { status: 500 });

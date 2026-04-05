@@ -20,26 +20,30 @@ export async function GET(
 
   const { id } = await params;
 
-  const records = await prisma.attendanceRecord.findMany({
-    where: { sessionId: id },
-    include: {
-      user: {
-        select: {
-          name: true,
-          studentProfile: { select: { studentId: true } },
-        },
-      },
-    },
-    orderBy: { checkInTime: 'asc' },
+  const records = await prisma.classAttendanceRecord.findMany({
+    where: { classSessionId: id },
+    orderBy: { verifiedAt: 'asc' },
   });
 
+  // Fetch user info for each record
+  const userIds = records.map((r) => r.studentId);
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, email: true },
+  });
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
   return NextResponse.json({
-    records: records.map((r) => ({
-      id: r.id,
-      studentName: r.user.name ?? '—',
-      studentId: r.user.studentProfile?.studentId ?? '—',
-      checkInTime: r.checkInTime,
-      status: r.status,
-    })),
+    records: records.map((r) => {
+      const user = userMap.get(r.studentId);
+      const emailPrefix = user?.email?.split('@')[0] ?? '—';
+      return {
+        id: r.id,
+        studentName: user?.name ?? '—',
+        studentId: emailPrefix,
+        checkInTime: r.verifiedAt,
+        status: r.status,
+      };
+    }),
   });
 }

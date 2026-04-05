@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole, SessionType } from '@prisma/client';
-import crypto from 'crypto';
+import { UserRole, UserStatus, SessionName } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -16,63 +15,63 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let body: { courseId?: string; sessionType?: string; durationMinutes?: number };
+  const userId = session.user.id;
+
+  let body: {
+    unitId?: string;
+    courseId?: string;
+    sessionName?: string;
+    durationMinutes?: number;
+    weekNumber?: number;
+    groupNo?: string;
+    subcomponent?: string;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { courseId, sessionType, durationMinutes } = body;
+  // Accept legacy courseId as alias for unitId
+  const unitId = body.unitId ?? body.courseId;
+  const { sessionName, durationMinutes, weekNumber, groupNo, subcomponent } = body;
 
-  if (!courseId || !sessionType || !durationMinutes) {
-    return NextResponse.json({ error: 'courseId, sessionType, and durationMinutes are required' }, { status: 400 });
+  if (!unitId || !sessionName || !durationMinutes) {
+    return NextResponse.json(
+      { error: 'unitId (or courseId), sessionName, and durationMinutes are required' },
+      { status: 400 }
+    );
   }
 
-  if (!Object.values(SessionType).includes(sessionType as SessionType)) {
-    return NextResponse.json({ error: 'Invalid sessionType' }, { status: 400 });
+  if (!Object.values(SessionName).includes(sessionName as SessionName)) {
+    return NextResponse.json({ error: 'Invalid sessionName' }, { status: 400 });
   }
 
-  const profile = await prisma.lecturerProfile.findUnique({
-    where: { userId: session.user.id },
+  const unitRegistration = await prisma.unitRegistration.findFirst({
+    where: { unitId, userId, userStatus: UserStatus.LECTURER },
   });
 
-  if (!profile) {
-    return NextResponse.json({ error: 'Lecturer profile not found' }, { status: 404 });
+  if (!unitRegistration) {
+    return NextResponse.json(
+      { error: 'Unit not found or not assigned to you' },
+      { status: 404 }
+    );
   }
-
-  // Verify the unit belongs to this lecturer
-  const unit = await prisma.unit.findFirst({
-    where: { id: courseId, lecturerId: profile.id },
-  });
-
-  if (!unit) {
-    return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
-  }
-
-  // End any existing active sessions for this unit
-  await prisma.attendanceSession.updateMany({
-    where: { unitId: courseId, isActive: true },
-    data: { isActive: false, endTime: new Date() },
-  });
 
   const now = new Date();
-  const endTime = new Date(now.getTime() + durationMinutes * 60 * 1000);
 
-  const attendanceSession = await prisma.attendanceSession.create({
+  const classSession = await prisma.classSession.create({
     data: {
-      unitId: courseId,
-      lecturerId: profile.id,
-      classType: sessionType as SessionType,
-      qrCode: crypto.randomUUID(),
-      startTime: now,
-      endTime,
-      isActive: true,
-    },
-    include: {
-      unit: { select: { code: true, name: true } },
+      unitRegistrationId: unitRegistration.id,
+      lecturerId: userId,
+      sessionName: sessionName as SessionName,
+      sessionTime: now,
+      sessionDuration: durationMinutes,
+      weekNumber: weekNumber ?? null,
+      groupNo: groupNo ?? null,
+      subcomponent: subcomponent ?? null,
     },
   });
 
-  return NextResponse.json({ session: attendanceSession }, { status: 201 });
+  return NextResponse.json({ session: classSession }, { status: 201 });
 }

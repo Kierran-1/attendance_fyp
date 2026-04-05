@@ -4,14 +4,14 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole, UserStatus } from '@prisma/client';
 
-// studentId here is the UnitRegistration.id of the student
+// studentsID here is the UnitRegistration.id of the student
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string; studentId: string }> }
+  { params }: { params: Promise<{ id: string; studentsID: string }> }
 ) {
   try {
-    const { id: unitId, studentId } = await params;
+    const { id: unitId, studentsID } = await params;
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -33,9 +33,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Unit not found or not assigned to you' }, { status: 404 });
     }
 
-    // studentId param is the student's UnitRegistration.id
+    // studentsID is the student's UnitRegistration.id
     const studentReg = await prisma.unitRegistration.findUnique({
-      where: { id: studentId },
+      where: { id: studentsID },
       include: { user: true },
     });
 
@@ -67,10 +67,10 @@ export async function PUT(
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string; studentId: string }> }
+  { params }: { params: Promise<{ id: string; studentsID: string }> }
 ) {
   try {
-    const { id: unitId, studentId } = await params;
+    const { id: unitId, studentsID } = await params;
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -92,16 +92,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unit not found or not assigned to you' }, { status: 404 });
     }
 
-    // studentId param is the student's UnitRegistration.id
+    // studentsID is the student's UnitRegistration.id
     const studentReg = await prisma.unitRegistration.findUnique({
-      where: { id: studentId },
+      where: { id: studentsID },
     });
 
     if (!studentReg || studentReg.unitId !== unitId || studentReg.userStatus !== UserStatus.STUDENT) {
       return NextResponse.json({ error: 'Student not found in this unit' }, { status: 404 });
     }
 
-    await prisma.unitRegistration.delete({ where: { id: studentId } });
+    await prisma.unitRegistration.delete({ where: { id: studentsID } });
 
     return NextResponse.json({ success: true });
   } catch (error) {
