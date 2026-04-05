@@ -27,10 +27,10 @@ export async function GET() {
       return NextResponse.json({ classes: [] });
     }
 
-    const courseEnrollments = await prisma.courseEnrollment.findMany({
+    const unitEnrollment = await prisma.unitEnrollment.findMany({
       where: { studentId: studentProfile.id },
       include: {
-        course: {
+        unit: {
           include: {
             lecturer: {
               include: {
@@ -46,16 +46,16 @@ export async function GET() {
       },
     });
 
-    const courseIds = courseEnrollments.map((enrollment) => enrollment.course.id);
+    const unitIds = unitEnrollment.map((enrollment) => enrollment.unit.id);
 
     const attendanceSummary: Record<string, { total: number; attended: number }> = {};
 
-    if (courseIds.length > 0) {
-      const [totalSessionsByCourse, attendedRecords] = await Promise.all([
+    if (unitIds.length > 0) {
+      const [totalSessionsByUnit, attendedRecords] = await Promise.all([
         prisma.attendanceSession.groupBy({
-          by: ['courseId'],
+          by: ['unitId'],
           where: {
-            courseId: { in: courseIds },
+            unitId: { in: unitIds },
             startTime: { lte: new Date() },
           },
           _count: { _all: true },
@@ -65,29 +65,29 @@ export async function GET() {
             userId: session.user.id,
             status: { not: 'ABSENT' },
             session: {
-              courseId: { in: courseIds },
+              unitId: { in: unitIds },
               startTime: { lte: new Date() },
             },
           },
           select: {
             session: {
               select: {
-                courseId: true,
+                unitId: true,
               },
             },
           },
         }),
       ]);
 
-      for (const row of totalSessionsByCourse) {
-        attendanceSummary[row.courseId] = {
+      for (const row of totalSessionsByUnit) {
+        attendanceSummary[row.unitId] = {
           total: row._count._all,
           attended: 0,
         };
       }
 
       for (const row of attendedRecords) {
-        const cid = row.session.courseId;
+        const cid = row.session.unitId;
         if (!attendanceSummary[cid]) {
           attendanceSummary[cid] = { total: 0, attended: 0 };
         }
@@ -95,30 +95,30 @@ export async function GET() {
       }
     }
 
-    // Map database courses to class format
-    const classes = courseEnrollments.map((enrollment) => ({
-      id: enrollment.course.id,
-      code: enrollment.course.code,
-      name: enrollment.course.name,
-      lecturer: enrollment.course.lecturer.user.name || 'TBD',
-      faculty: enrollment.course.lecturer.department || '',
-      day: enrollment.course.scheduleDay || 'TBD',
-      time: enrollment.course.scheduleTime || 'TBD',
-      venue: enrollment.course.venue || 'TBD',
-      location: enrollment.course.venue || 'TBD',
+    // Map database units to class format
+    const classes = unitEnrollment.map((enrollment) => ({
+      id: enrollment.unit.id,
+      code: enrollment.unit.code,
+      name: enrollment.unit.name,
+      lecturer: enrollment.unit.lecturer.user.name || 'TBD',
+      faculty: enrollment.unit.lecturer.department || '',
+      day: enrollment.unit.scheduleDay || 'TBD',
+      time: enrollment.unit.scheduleTime || 'TBD',
+      venue: enrollment.unit.venue || 'TBD',
+      location: enrollment.unit.venue || 'TBD',
       sessionType:
-        enrollment.course.sessionType === 'LECTURE'
+        enrollment.unit.sessionType === 'LECTURE'
           ? 'Lecture'
-          : enrollment.course.sessionType === 'TUTORIAL'
+          : enrollment.unit.sessionType === 'TUTORIAL'
             ? 'Tutorial'
-            : enrollment.course.sessionType === 'LAB'
+            : enrollment.unit.sessionType === 'LAB'
               ? 'Lab'
               : 'Practical',
       attendanceRate:
-        attendanceSummary[enrollment.course.id]?.total > 0
+        attendanceSummary[enrollment.unit.id]?.total > 0
           ? Math.round(
-              (attendanceSummary[enrollment.course.id].attended /
-                attendanceSummary[enrollment.course.id].total) *
+              (attendanceSummary[enrollment.unit.id].attended /
+                attendanceSummary[enrollment.unit.id].total) *
                 100
             )
           : 0,

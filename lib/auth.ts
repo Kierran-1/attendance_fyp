@@ -5,11 +5,21 @@ import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
 
 /**
+ * Student email addresses that should be treated as LECTURER.
+ * Useful for dev accounts or lecturers who have student email addresses.
+ */
+const LECTURER_EMAIL_OVERRIDES = new Set([
+  '102785480@students.swinburne.edu.my',
+  // add more here as needed
+]);
+
+/**
  * Determine role from Swinburne email domain:
- *   @students.swinburne.edu.my -> STUDENT
+ *   @students.swinburne.edu.my -> STUDENT  (unless in LECTURER_EMAIL_OVERRIDES)
  *   @swinburne.edu.my          -> LECTURER
  */
 function getRoleFromEmail(email: string): UserRole {
+  if (LECTURER_EMAIL_OVERRIDES.has(email)) return UserRole.LECTURER;
   if (email.endsWith('@students.swinburne.edu.my')) return UserRole.STUDENT;
   if (email.endsWith('@swinburne.edu.my')) return UserRole.LECTURER;
   return UserRole.STUDENT;

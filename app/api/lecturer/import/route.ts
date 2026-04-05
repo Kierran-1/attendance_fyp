@@ -9,15 +9,15 @@ type StudentInput = {
   studentId: string;
   name: string;
   major?: string | null;
-  nationality?: string | null;   // ← added
-  schoolStatus?: string | null;  // ← added
+  nationality?: string | null;
+  schoolStatus?: string | null;
 };
 
-type CourseInput = {
+type UnitInput = {
   code: string;
   name: string;
   semester: string;
-  sessionType: string;
+  classType: string;
   classGroup?: string | null;
   scheduleDay?: string | null;
   scheduleTime?: string | null;
@@ -44,32 +44,32 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Parse body ──────────────────────────────────────────────────────────────
-  let body: { course: CourseInput; students: StudentInput[] };
+  let body: { unit: UnitInput; students: StudentInput[] };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { course: courseInput, students } = body;
-  if (!courseInput?.code || !courseInput?.name || !Array.isArray(students)) {
+  const { unit: unitInput, students } = body;
+  if (!unitInput?.code || !unitInput?.name || !Array.isArray(students)) {
     return NextResponse.json(
-      { error: 'course.code, course.name, and students[] are required' },
+      { error: 'unit.code, unit.name, and students[] are required' },
       { status: 400 }
     );
   }
 
-  console.log(`[Import] Starting import for ${courseInput.code} with ${students.length} students`);
+  console.log(`[Import] Starting import for ${unitInput.code} with ${students.length} students`);
 
-  // ── Map sessionType → classType ─────────────────────────────────────────────
+  // ── Map classType ──────────────────────────────────────────────────────────
   const VALID_TYPES = ['LECTURE', 'TUTORIAL', 'LAB', 'PRACTICAL'] as const;
-  const rawType = (courseInput.sessionType || '').toUpperCase();
+  const rawType = (unitInput.classType || '').toUpperCase();
   const classType: SessionType = (
     VALID_TYPES.includes(rawType as (typeof VALID_TYPES)[number]) ? rawType : 'LECTURE'
   ) as SessionType;
 
-  const semester = (courseInput.semester || '').split(/\s*[-,]\s*/)[0].trim() || courseInput.semester;
-  const classGroup = courseInput.classGroup ?? null;
+  const semester = (unitInput.semester || '').split(/\s*[-,]\s*/)[0].trim() || unitInput.semester;
+  const classGroup = unitInput.classGroup ?? null;
 
   // ── Upsert Unit ─────────────────────────────────────────────────────────────
   let unit;
@@ -77,30 +77,30 @@ export async function POST(request: NextRequest) {
     unit = await prisma.unit.upsert({
       where: {
         code_classGroup_lecturerId: {
-          code: courseInput.code,
+          code:       unitInput.code,
           classGroup: classGroup ?? '',
           lecturerId: lecturerProfile.id,
         },
       },
       update: {
-        name:         courseInput.name,
+        name:         unitInput.name,
         semester,
         classType,
-        scheduleDay:  courseInput.scheduleDay  ?? null,
-        scheduleTime: courseInput.scheduleTime ?? null,
-        venue:        courseInput.venue        ?? null,
+        scheduleDay:  unitInput.scheduleDay  ?? null,
+        scheduleTime: unitInput.scheduleTime ?? null,
+        venue:        unitInput.venue        ?? null,
       },
       create: {
-        code:         courseInput.code,
-        name:         courseInput.name,
+        code:         unitInput.code,
+        name:         unitInput.name,
         semester,
         year:         new Date().getFullYear(),
         capacity:     999,
         classType,
         classGroup,
-        scheduleDay:  courseInput.scheduleDay  ?? null,
-        scheduleTime: courseInput.scheduleTime ?? null,
-        venue:        courseInput.venue        ?? null,
+        scheduleDay:  unitInput.scheduleDay  ?? null,
+        scheduleTime: unitInput.scheduleTime ?? null,
+        venue:        unitInput.venue        ?? null,
         lecturerId:   lecturerProfile.id,
       },
     });
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
   });
   const userMap = new Map(users.map(u => [u.email, u.id]));
 
-  // ── 4. Bulk create StudentProfile rows — now includes nationality + schoolStatus
+  // ── 4. Bulk create StudentProfile rows ─────────────────────────────────────
   const profileData = validStudents
     .map(s => {
       const userId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
@@ -147,8 +147,8 @@ export async function POST(request: NextRequest) {
         userId,
         studentId:      s.studentId,
         major:          s.major        || null,
-        nationality:    s.nationality  || null,  // ← saved to DB
-        schoolStatus:   s.schoolStatus || null,  // ← saved to DB
+        nationality:    s.nationality  || null,
+        schoolStatus:   s.schoolStatus || null,
         enrollmentYear: new Date().getFullYear(),
       };
     })
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
   try {
     const result = await prisma.studentProfile.createMany({
       data: profileData as any,
-      skipDuplicates: true,  // won't update existing rows
+      skipDuplicates: true,
     });
     createdProfiles = result.count;
   } catch (err) {
@@ -171,8 +171,7 @@ export async function POST(request: NextRequest) {
     select: { id: true, studentId: true },
   });
 
-  // ── 6. Update existing profiles with latest nationality/schoolStatus ────────
-  // createMany skipDuplicates silently ignores existing rows, so we update them
+  // ── 6. Update existing profiles with latest data ───────────────────────────
   if (createdProfiles < validStudents.length) {
     const studentInputMap = new Map(validStudents.map(s => [s.studentId, s]));
 
@@ -211,14 +210,14 @@ export async function POST(request: NextRequest) {
 
   const duration = Date.now() - startTime;
   console.log(`[Bulk Import] Completed in ${duration}ms:`, {
-    course:   courseInput.code,
+    unit:     unitInput.code,
     users:    userData.length,
     profiles: createdProfiles,
     enrolled,
   });
 
   return NextResponse.json({
-    courseId: unit.id,
+    unitId:   unit.id,
     created:  createdProfiles,
     enrolled,
     skipped:  validStudents.length - enrolled,
