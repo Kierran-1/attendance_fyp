@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     include: {
       user: { select: { id: true, name: true, email: true, programName: true } },
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { user: { name: 'asc' } },
   });
 
   // Get all ClassSessions for the lecturer's registration

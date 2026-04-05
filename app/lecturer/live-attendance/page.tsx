@@ -20,7 +20,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SessionName = 'LECTURE' | 'TUTORIAL' | 'LAB' | 'PRACTICAL';
+type SessionName = 'LECTURE' | 'TUTORIAL' | 'LAB';
 
 type LecturerUnit = {
   id: string;
@@ -52,10 +52,9 @@ type ActiveSession = {
 };
 
 const SESSION_TYPES: { value: SessionName; label: string; colour: string }[] = [
-  { value: 'LECTURE',   label: 'Lecture',   colour: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { value: 'TUTORIAL',  label: 'Tutorial',  colour: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { value: 'LAB',       label: 'Lab',       colour: 'bg-green-100 text-green-700 border-green-200' },
-  { value: 'PRACTICAL', label: 'Practical', colour: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { value: 'LECTURE',  label: 'Lecture',  colour: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { value: 'TUTORIAL', label: 'Tutorial', colour: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { value: 'LAB',      label: 'Lab',      colour: 'bg-green-100 text-green-700 border-green-200' },
 ];
 
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
@@ -231,11 +230,11 @@ export default function LiveAttendancePage() {
 
       const data = await res.json();
       const s = data.session;
-      const unit = units.find(u => u.id === selectedUnitId);
+      const unit = units.find(u => u.unitId === selectedUnitId);
 
       const newSession: ActiveSession = {
         id: s.id,
-        unitId: s.unitRegistrationId,
+        unitId: selectedUnitId,
         unitCode: unit?.unitCode ?? '—',
         unitName: unit?.unitName ?? '—',
         sessionName: s.sessionName,
