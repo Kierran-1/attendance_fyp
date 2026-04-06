@@ -17,6 +17,12 @@ type UnitInput = {
   name: string;
   semester: string;
   year?: number;
+  classType?: string;
+  group?: string;
+  day?: string;
+  time?: string;
+  room?: string;
+  lecturer?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -50,16 +56,27 @@ export async function POST(request: NextRequest) {
   const year = unitInput.year ?? new Date().getFullYear();
   const semester = unitInput.semester;
 
-  // Upsert Unit by code (only code + name)
+  // Store all class metadata as JSON in the `name` field.
+  // This avoids needing extra columns while preserving all class-specific info.
+  const classMeta = JSON.stringify({
+    classType: unitInput.classType || '',
+    group: unitInput.group || '',
+    day: unitInput.day || '',
+    time: unitInput.time || '',
+    room: unitInput.room || '',
+    lecturer: unitInput.lecturer || '',
+  });
+
+  // Upsert Unit by code
   const unit = await prisma.unit.upsert({
     where: { code: unitInput.code },
     update: { name: unitInput.name },
     create: { code: unitInput.code, name: unitInput.name },
   });
 
-  // Find or create lecturer's UnitRegistration
-  let lecturerReg = await prisma.unitRegistration.findUnique({
-    where: { unitId_userId: { unitId: unit.id, userId } },
+  // Find existing registration for this exact class group (matched by classMeta in name)
+  let lecturerReg = await prisma.unitRegistration.findFirst({
+    where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER, name: classMeta },
   });
 
   if (!lecturerReg) {
@@ -70,13 +87,13 @@ export async function POST(request: NextRequest) {
         userStatus: UserStatus.LECTURER,
         year,
         semester,
+        name: classMeta,
       },
     });
   }
 
   const validStudents = students.filter((s) => s.studentId && s.name);
 
-  // Bulk upsert users
   const userData = validStudents.map((s) => ({
     email: `${s.studentId}@students.swinburne.edu.my`,
     name: s.name,
@@ -89,7 +106,6 @@ export async function POST(request: NextRequest) {
     console.error('User bulk create failed:', err);
   }
 
-  // Fetch all created/existing users
   const emails = userData.map((u) => u.email);
   const users = await prisma.user.findMany({
     where: { email: { in: emails } },
@@ -97,7 +113,6 @@ export async function POST(request: NextRequest) {
   });
   const userMap = new Map(users.map((u) => [u.email, u.id]));
 
-  // Build enrollment data
   const enrollmentData = validStudents
     .map((s) => {
       const studentUserId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
@@ -126,14 +141,13 @@ export async function POST(request: NextRequest) {
     errors.push(String(err));
   }
 
-  const duration = Date.now() - startTime;
-
   return NextResponse.json({
     unitId: unit.id,
+    registrationId: lecturerReg.id,
     created: userData.length,
     enrolled,
     skipped: validStudents.length - enrolled,
     errors,
-    duration: `${duration}ms`,
+    duration: `${Date.now() - startTime}ms`,
   });
 }

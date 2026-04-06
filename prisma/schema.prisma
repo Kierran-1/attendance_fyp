@@ -94,7 +94,7 @@ model UnitRegistration {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   classSessions ClassSession[]
 
-  @@unique([unitId, userId])
+  @@unique([unitId, userId, name])
   @@index([userId])
   @@index([unitId])
 }

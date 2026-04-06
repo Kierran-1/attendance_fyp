@@ -4,14 +4,31 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole, UserStatus } from '@prisma/client';
 
+// Helper: parse class metadata stored as JSON in UnitRegistration.name
+function parseClassMeta(name: string | null) {
+  if (!name) return { classType: '', group: '', day: '', time: '', room: '', lecturer: '' };
+  try {
+    const parsed = JSON.parse(name);
+    return {
+      classType: parsed.classType || '',
+      group: parsed.group || '',
+      day: parsed.day || '',
+      time: parsed.time || '',
+      room: parsed.room || '',
+      lecturer: parsed.lecturer || '',
+    };
+  } catch {
+    // Legacy: name was stored as plain "LA1-01" string
+    return { classType: name, group: '', day: '', time: '', room: '', lecturer: '' };
+  }
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
     if (session.user.role !== UserRole.LECTURER) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -34,6 +51,9 @@ export async function GET() {
 
     const result = await Promise.all(
       lecturerRegistrations.map(async (reg) => {
+        const meta = parseClassMeta(reg.name ?? null);
+
+        // Fetch students enrolled in this specific unit (shared across all class groups)
         const studentRegistrations = await prisma.unitRegistration.findMany({
           where: { unitId: reg.unitId, userStatus: UserStatus.STUDENT },
           include: {
@@ -77,6 +97,13 @@ export async function GET() {
           unitName: reg.unit.name,
           semester: reg.semester,
           year: reg.year,
+          // Class-specific metadata from stored JSON
+          classType: meta.classType,
+          group: meta.group,
+          day: meta.day,
+          time: meta.time,
+          location: meta.room,
+          lecturer: meta.lecturer,
           students,
           sessions,
         };
@@ -93,11 +120,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
     if (session.user.role !== UserRole.LECTURER) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -112,7 +137,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { code, name, semester, year } = body;
-
     if (!code || !name || !semester || !year) {
       return NextResponse.json(
         { error: 'code, name, semester, and year are required' },
@@ -120,16 +144,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upsert unit by code
     const unit = await prisma.unit.upsert({
       where: { code },
       update: { name },
       create: { code, name },
     });
 
-    // Create UnitRegistration(LECTURER) if not exists
-    const existing = await prisma.unitRegistration.findUnique({
-      where: { unitId_userId: { unitId: unit.id, userId } },
+    const existing = await prisma.unitRegistration.findFirst({
+      where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER, name: null },
     });
 
     if (existing) {
@@ -137,13 +159,7 @@ export async function POST(request: NextRequest) {
     }
 
     const registration = await prisma.unitRegistration.create({
-      data: {
-        unitId: unit.id,
-        userId,
-        userStatus: UserStatus.LECTURER,
-        year,
-        semester,
-      },
+      data: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER, year, semester, name: null },
       include: { unit: true },
     });
 

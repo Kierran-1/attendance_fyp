@@ -375,87 +375,63 @@ export default function ClassesPage() {
   // ── Excel parsing ───────────────────────────────────────────────────────────
 
   const parseSheet = (worksheet: XLSX.WorkSheet, sheetName: string): ParsedSheet | null => {
+    // Structure (confirmed from actual file inspection):
+    // row[0]: university header
+    // row[1]: empty
+    // row[2]: "Attendance Lists"
+    // row[3]: "Term : ... Unit : ..."  ← all data in col[0]
+    // row[4]: "classType , group , day , time , room , lecturer"  ← all in col[0]
+    // row[5]: column headers (Sl.No, Student Number, ...)
+    // row[6]: sub-header / week numbers (empty for our purposes)
+    // row[7]+: student data
     const allData = XLSX.utils.sheet_to_json(worksheet, {
       header: 1,
-      blankrows: false,
+      blankrows: true,
+      defval: '',
     }) as any[][];
 
-    if (allData.length < 7) {
-      console.warn(`Sheet "${sheetName}" skipped — only ${allData.length} rows`);
+    if (allData.length < 8) {
+      console.warn(`Sheet "${sheetName}" skipped - only ${allData.length} rows`);
       return null;
     }
 
-    const row4: any[] = allData[2] || [];
-    const row4Text = row4.join(' ');
-
-    const termMatch = row4Text.match(/Term\s*:\s*([^,]+)/i);
+    // Row 3: Term and Unit — everything is in the first cell (col 0)
+    const metaCell = String(allData[3]?.[0] ?? '');
+    const termMatch = metaCell.match(/Term\s*:\s*([^,]+)/i);
     const term = termMatch ? termMatch[1].trim() : "";
 
     let unitCode = "";
     let unitName = "";
-    const unitRegex = row4Text.match(/Unit\s*:\s*([A-Z]{2,4}\d{4,6})\s*-\s*(.+)/i);
+    const unitRegex = metaCell.match(/Unit\s*:\s*([A-Z]{2,4}\d{4,6})\s*-\s*(.+)/i);
     if (unitRegex) {
       unitCode = unitRegex[1].trim();
       unitName = unitRegex[2].split(',')[0].trim();
-    } else if (row4Text.includes("Unit")) {
-      const unitPart = row4Text.split("Unit")[1] || "";
-      const cleaned = unitPart.replace(":", "").trim();
-      const parts = cleaned.split("-");
-      unitCode = parts[0]?.trim() || "";
-      unitName = parts.slice(1).join("-").split(',')[0].trim() || "";
     }
 
-    const row5: any[] = allData[3] || [];
-    const row5Text = row5.join(',');
-    const classDetails = row5Text
-      .split(',')
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0);
+    // Row 4: class details — "classType , group , day , time , room , lecturer" all in col[0]
+    const classCell = String(allData[4]?.[0] ?? '');
+    const classParts = classCell.split(',').map((s: string) => s.trim());
+    const classType = classParts[0] || "";
+    const group     = classParts[1] || "";
+    const day       = classParts[2] || "";
+    const time      = classParts[3] || "";
+    const room      = classParts[4] || "";
+    const lecturer  = classParts[5] || "";
 
-    const classType = classDetails[0] || "";
-    const group = classDetails[1] || "";
-    const day = classDetails[2] || "";
-    const time = classDetails[3] || "";
-    const room = classDetails[4] || "";
-    const lecturer = classDetails[5] || "";
+    const coreHeaders = [
+      "Sl.No",
+      "Student Number",
+      "Empty",
+      "Student Name",
+      "Program",
+      "Registered Course",
+      "Nationality",
+      "School Status",
+    ];
 
-    const row6: any[] = allData[4] || [];
-    const row7: any[] = allData[5] || [];
-    const maxCols = Math.max(row6.length, row7.length);
-
-    const headers: string[] = [];
-    for (let i = 0; i < maxCols; i++) {
-      const r6 = row6[i]?.toString().trim() || "";
-      const r7 = row7[i]?.toString().trim() || "";
-
-      if (i < 8) {
-        switch (i) {
-          case 0: headers.push("Sl.No"); break;
-          case 1: headers.push("Student Number"); break;
-          case 2: headers.push("Empty"); break;
-          case 3: headers.push("Student Name"); break;
-          case 4: headers.push("Program"); break;
-          case 5: headers.push("Registered Course"); break;
-          case 6: headers.push("Nationality"); break;
-          case 7: headers.push("School Status"); break;
-        }
-      } else {
-        if (r6.includes('/')) {
-          headers.push(`Week_${r6.replace(/\//g, '_')}`);
-        } else if (r6) {
-          headers.push(r6);
-        } else if (/^\d+$/.test(r7)) {
-          headers.push(`Week_${r7}`);
-        } else {
-          headers.push(`Column_${i + 1}`);
-        }
-      }
-    }
-
-    const coreHeaders = headers.slice(0, 8);
-
+    // Row 7+ is student data (row[5]=headers, row[6]=sub-header, row[7]=first student)
     const studentData = allData
-      .slice(6)
+      .slice(7)
       .map((row: any[]) => {
         const padded = [...row];
         while (padded.length < 8) padded.push('');
@@ -463,8 +439,11 @@ export default function ClassesPage() {
       })
       .filter((row: any[]) => {
         const num = row[1];
-        return num != null && String(num).trim() !== '';
+        const s = String(num).trim();
+        return num != null && s !== '' && !/^\D/.test(s);
       });
+
+    console.log(`Sheet "${sheetName}": term=${term}, unit=${unitCode}, classType=${classType}, group=${group}, students=${studentData.length}`);
 
     return {
       sheetName,
@@ -485,12 +464,18 @@ export default function ClassesPage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const workbook = XLSX.read(e.target?.result, { type: 'binary' });
+        const workbook = XLSX.read(e.target?.result, { type: 'array' });
         const allSheets: ParsedSheet[] = [];
 
+        console.log('Sheets found in workbook:', workbook.SheetNames);
         workbook.SheetNames.forEach(name => {
           const parsed = parseSheet(workbook.Sheets[name], name);
-          if (parsed) allSheets.push(parsed);
+          if (parsed) {
+            allSheets.push(parsed);
+            console.log(`✓ Sheet "${name}" parsed: ${parsed.students.length} students`);
+          } else {
+            console.warn(`✗ Sheet "${name}" was skipped`);
+          }
         });
 
         if (allSheets.length === 0) {
@@ -522,7 +507,7 @@ export default function ClassesPage() {
         alert('Error parsing Excel file. Please ensure it is a valid Swinburne attendance form.');
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleDrag = useCallback((e: React.DragEvent, active: boolean) => {
@@ -589,6 +574,12 @@ export default function ClassesPage() {
               code: metadata.unitCode || 'UNKNOWN',
               name: metadata.unitName || 'Imported Unit',
               semester: metadata.term || '2026_MAR_S1',
+              classType: metadata.classType || '',
+              group: metadata.group || '',
+              day: metadata.day || '',
+              time: metadata.time || '',
+              room: metadata.room || '',
+              lecturer: metadata.lecturer || '',
             },
             students,
           }),
