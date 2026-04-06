@@ -4,162 +4,51 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole, UserStatus } from '@prisma/client';
 
-// id param = the lecturer's UnitRegistration.id (not unitId)
-
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id: registrationId } = await params;
-
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (session.user.role !== UserRole.LECTURER) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  // Resolve unitId from the lecturer's registration
-  const lecturerReg = await prisma.unitRegistration.findUnique({
-    where: { id: registrationId },
-  });
-  if (!lecturerReg || lecturerReg.userStatus !== UserStatus.LECTURER) {
-    return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
-  }
-
-  const unitId = lecturerReg.unitId;
-
-  const studentRegistrations = await prisma.unitRegistration.findMany({
-    where: { unitId, userStatus: UserStatus.STUDENT },
-    include: {
-      user: { select: { id: true, name: true, email: true, programName: true } },
-    },
-  });
-
-  const students = studentRegistrations.map((reg) => ({
-    id: reg.id,
-    studentNumber: reg.user.email?.split('@')[0] ?? '—',
-    name: reg.user.name ?? 'Unknown',
-    program: reg.user.programName ?? '',
-    email: reg.user.email,
-  }));
-
-  return NextResponse.json(students);
-}
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id: registrationId } = await params;
-
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (session.user.role !== UserRole.LECTURER) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const userId = session.user.id;
-
-  // Resolve unitId from the lecturer's registration
-  const lecturerReg = await prisma.unitRegistration.findUnique({
-    where: { id: registrationId },
-  });
-  if (!lecturerReg || lecturerReg.userId !== userId || lecturerReg.userStatus !== UserStatus.LECTURER) {
-    return NextResponse.json({ error: 'Unit not found or not assigned to you' }, { status: 404 });
-  }
-
-  const unitId = lecturerReg.unitId;
-
-  let body: { email?: string; name?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
-  }
-
-  const { email, name } = body;
-  if (!email) {
-    return NextResponse.json({ error: 'email is required' }, { status: 400 });
-  }
-
-  const studentUser = await prisma.user.upsert({
-    where: { email },
-    update: { ...(name ? { name } : {}) },
-    create: { email, name: name ?? null, role: UserRole.STUDENT },
-  });
-
-  // Use findFirst since @@unique([unitId, userId, name]) — student regs have name=null
-  const existing = await prisma.unitRegistration.findFirst({
-    where: { unitId, userId: studentUser.id, userStatus: UserStatus.STUDENT },
-  });
-
-  if (existing) {
-    return NextResponse.json({ error: 'Student already enrolled' }, { status: 409 });
-  }
-
-  const registration = await prisma.unitRegistration.create({
-    data: {
-      unitId,
-      userId: studentUser.id,
-      userStatus: UserStatus.STUDENT,
-      year: lecturerReg.year,
-      semester: lecturerReg.semester,
-    },
-    include: {
-      user: { select: { id: true, name: true, email: true, programName: true } },
-    },
-  });
-
-  return NextResponse.json(
-    {
-      id: registration.id,
-      studentNumber: studentUser.email?.split('@')[0] ?? '—',
-      name: studentUser.name ?? 'Unknown',
-      program: registration.user.programName ?? '',
-      email: studentUser.email,
-    },
-    { status: 201 }
-  );
-}
+// [id] = ClassSession.id
 
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: registrationId } = await params;
+    const { id: classSessionId } = await params;
 
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    if (session.user.role !== UserRole.LECTURER) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (session.user.role !== UserRole.LECTURER) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const userId = session.user.id;
 
-    const registration = await prisma.unitRegistration.findUnique({
-      where: { id: registrationId },
+    const cs = await prisma.classSession.findUnique({
+      where: { id: classSessionId },
+      include: { unitRegistration: true },
     });
 
-    if (!registration) {
-      return NextResponse.json({ error: 'Unit registration not found' }, { status: 404 });
-    }
+    if (!cs) return NextResponse.json({ error: 'Class session not found' }, { status: 404 });
+    if (cs.unitRegistration.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    if (registration.userId !== userId || registration.userStatus !== UserStatus.LECTURER) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const unitId = cs.unitRegistration.unitId;
+    const groupNo = cs.groupNo;
 
-    await prisma.unitRegistration.delete({ where: { id: registrationId } });
+    // Delete the class session (cascades to attendance records/data)
+    await prisma.classSession.delete({ where: { id: classSessionId } });
+
+    // Also remove student enrollments scoped to this group
+    await prisma.unitRegistration.deleteMany({
+      where: { unitId, userStatus: UserStatus.STUDENT, name: groupNo },
+    });
+
+    // If no more class sessions exist for this unit registration, delete it too
+    const remainingSessions = await prisma.classSession.count({
+      where: { unitRegistrationId: cs.unitRegistrationId },
+    });
+    if (remainingSessions === 0) {
+      await prisma.unitRegistration.delete({ where: { id: cs.unitRegistrationId } });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting unit registration:', error);
-    return NextResponse.json({ error: 'Failed to delete unit' }, { status: 500 });
+    console.error('Error deleting class session:', error);
+    return NextResponse.json({ error: 'Failed to delete class' }, { status: 500 });
   }
 }

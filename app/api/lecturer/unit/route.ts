@@ -4,34 +4,11 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole, UserStatus } from '@prisma/client';
 
-// Helper: parse class metadata stored as JSON in UnitRegistration.name
-function parseClassMeta(name: string | null) {
-  if (!name) return { classType: '', group: '', day: '', time: '', room: '', lecturer: '' };
-  try {
-    const parsed = JSON.parse(name);
-    return {
-      classType: parsed.classType || '',
-      group: parsed.group || '',
-      day: parsed.day || '',
-      time: parsed.time || '',
-      room: parsed.room || '',
-      lecturer: parsed.lecturer || '',
-    };
-  } catch {
-    // Legacy: name was stored as plain "LA1-01" string
-    return { classType: name, group: '', day: '', time: '', room: '', lecturer: '' };
-  }
-}
-
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    if (session.user.role !== UserRole.LECTURER) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (session.user.role !== UserRole.LECTURER) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const userId = session.user.id;
 
@@ -41,21 +18,25 @@ export async function GET() {
         unit: true,
         classSessions: {
           include: {
-            attendanceRecords: {
-              select: { studentId: true, status: true },
-            },
+            attendanceRecords: { select: { studentId: true, status: true } },
           },
         },
       },
     });
 
-    const result = await Promise.all(
-      lecturerRegistrations.map(async (reg) => {
-        const meta = parseClassMeta(reg.name ?? null);
+    // Each lecturer registration may have multiple class sessions (groups).
+    // Expand into one entry per ClassSession so the UI shows separate cards.
+    const result: any[] = [];
 
-        // Fetch students enrolled in this specific unit (shared across all class groups)
+    for (const reg of lecturerRegistrations) {
+      for (const cs of reg.classSessions) {
+        // Fetch students scoped to this session's groupNo
         const studentRegistrations = await prisma.unitRegistration.findMany({
-          where: { unitId: reg.unitId, userStatus: UserStatus.STUDENT },
+          where: {
+            unitId: reg.unitId,
+            userStatus: UserStatus.STUDENT,
+            name: cs.groupNo ?? null,
+          },
           include: {
             user: { select: { id: true, name: true, email: true, programName: true } },
           },
@@ -68,47 +49,52 @@ export async function GET() {
           program: sr.user.programName ?? '',
         }));
 
-        const sessions = reg.classSessions.map((cs) => {
-          const presentCount = cs.attendanceRecords.filter(
-            (r) => r.status === 'PRESENT' || r.status === 'LATE'
-          ).length;
-          const absentCount = cs.attendanceRecords.filter(
-            (r) => r.status === 'ABSENT'
-          ).length;
-          const total = cs.attendanceRecords.length;
-          const now = Date.now();
-          const end = cs.sessionTime.getTime() + cs.sessionDuration * 60_000;
-          const isActive = now >= cs.sessionTime.getTime() && now <= end;
+        const presentCount = cs.attendanceRecords.filter(
+          (r) => r.status === 'PRESENT' || r.status === 'LATE'
+        ).length;
+        const absentCount = cs.attendanceRecords.filter((r) => r.status === 'ABSENT').length;
+        const total = cs.attendanceRecords.length;
+        const now = Date.now();
+        const end = cs.sessionTime.getTime() + cs.sessionDuration * 60_000;
+        const isActive = now >= cs.sessionTime.getTime() && now <= end;
 
-          return {
+        // Derive day and time from sessionTime
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const day = days[cs.sessionTime.getDay()] ?? '';
+        const padTime = (h: number, m: number) =>
+          `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        const startH = cs.sessionTime.getHours();
+        const startM = cs.sessionTime.getMinutes();
+        const endDate = new Date(cs.sessionTime.getTime() + cs.sessionDuration * 60_000);
+        const time = `${padTime(startH, startM)} - ${padTime(endDate.getHours(), endDate.getMinutes())}`;
+
+        result.push({
+          // Use classSessionId as the card id so the frontend can scope operations
+          id: cs.id,
+          unitRegistrationId: reg.id,
+          unitId: reg.unitId,
+          unitCode: reg.unit.code,
+          unitName: reg.unit.name,
+          semester: reg.semester,
+          year: reg.year,
+          classType: cs.sessionName,   // "LAB" | "LECTURE" | "TUTORIAL"
+          group: cs.groupNo ?? '',
+          day,
+          time,
+          location: '',               // not stored
+          lecturer: '',               // not stored
+          students,
+          sessions: [{
             id: cs.id,
             date: cs.sessionTime.toISOString().split('T')[0],
             attendancePercentage: total > 0 ? Math.round((presentCount / total) * 100) : 0,
             status: isActive ? 'Ongoing' : 'Completed',
             presentCount,
             absentCount,
-          };
+          }],
         });
-
-        return {
-          id: reg.id,
-          unitId: reg.unitId,
-          unitCode: reg.unit.code,
-          unitName: reg.unit.name,
-          semester: reg.semester,
-          year: reg.year,
-          // Class-specific metadata from stored JSON
-          classType: meta.classType,
-          group: meta.group,
-          day: meta.day,
-          time: meta.time,
-          location: meta.room,
-          lecturer: meta.lecturer,
-          students,
-          sessions,
-        };
-      })
-    );
+      }
+    }
 
     return NextResponse.json(result);
   } catch (error) {
@@ -120,28 +106,18 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    if (session.user.role !== UserRole.LECTURER) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (session.user.role !== UserRole.LECTURER) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const userId = session.user.id;
 
     let body: { code?: string; name?: string; semester?: string; year?: number };
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
-    }
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
 
     const { code, name, semester, year } = body;
     if (!code || !name || !semester || !year) {
-      return NextResponse.json(
-        { error: 'code, name, semester, and year are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'code, name, semester, and year are required' }, { status: 400 });
     }
 
     const unit = await prisma.unit.upsert({
@@ -151,15 +127,12 @@ export async function POST(request: NextRequest) {
     });
 
     const existing = await prisma.unitRegistration.findFirst({
-      where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER, name: null },
+      where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER },
     });
-
-    if (existing) {
-      return NextResponse.json({ ...existing, unit }, { status: 200 });
-    }
+    if (existing) return NextResponse.json({ ...existing, unit }, { status: 200 });
 
     const registration = await prisma.unitRegistration.create({
-      data: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER, year, semester, name: null },
+      data: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER, year, semester },
       include: { unit: true },
     });
 

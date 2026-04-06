@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole, UserStatus } from '@prisma/client';
+import { UserRole, UserStatus, SessionName } from '@prisma/client';
 
 type StudentInput = {
   studentId: string;
@@ -17,13 +17,49 @@ type UnitInput = {
   name: string;
   semester: string;
   year?: number;
-  classType?: string;
-  group?: string;
-  day?: string;
-  time?: string;
+  sessionType?: string; // e.g. "LA1", "LE1", "TU1"
+  groupNo?: string;     // e.g. "01", "02"
+  day?: string;         // e.g. "Tue"
+  time?: string;        // e.g. "13:00 - 15:00"
   room?: string;
   lecturer?: string;
 };
+
+// Map Excel session prefix to Prisma SessionName enum
+function toSessionName(sessionType: string): SessionName {
+  const prefix = sessionType.slice(0, 2).toUpperCase();
+  if (prefix === 'LA') return SessionName.LAB;
+  if (prefix === 'TU') return SessionName.TUTORIAL;
+  return SessionName.LECTURE;
+}
+
+// Parse "13:00 - 15:00" into { startHour, startMin, durationMinutes }
+function parseTime(timeStr: string): { startHour: number; startMin: number; durationMinutes: number } {
+  const parts = timeStr.split('-').map(s => s.trim());
+  const [sh, sm] = (parts[0] || '00:00').split(':').map(Number);
+  const [eh, em] = (parts[1] || parts[0] || '00:00').split(':').map(Number);
+  const startHour = isNaN(sh) ? 0 : sh;
+  const startMin = isNaN(sm) ? 0 : sm;
+  const endHour = isNaN(eh) ? startHour + 2 : eh;
+  const endMin = isNaN(em) ? 0 : em;
+  const durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+  return { startHour, startMin, durationMinutes: durationMinutes > 0 ? durationMinutes : 120 };
+}
+
+// Build a representative sessionTime DateTime for the given day/time
+// Uses the semester year and finds the first matching weekday
+function buildSessionTime(day: string, startHour: number, startMin: number, year: number): Date {
+  const dayMap: Record<string, number> = {
+    sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+  };
+  const targetDay = dayMap[day.trim().toLowerCase().slice(0, 3)] ?? 1;
+  // Start from Jan 1 of the given year and find the first matching weekday
+  const date = new Date(year, 0, 1, startHour, startMin, 0, 0);
+  while (date.getDay() !== targetDay) {
+    date.setDate(date.getDate() + 1);
+  }
+  return date;
+}
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -55,28 +91,20 @@ export async function POST(request: NextRequest) {
 
   const year = unitInput.year ?? new Date().getFullYear();
   const semester = unitInput.semester;
+  const groupNo = unitInput.groupNo?.trim() || '01';
+  const sessionType = unitInput.sessionType?.trim() || 'LE';
+  const sessionNameEnum = toSessionName(sessionType);
 
-  // Store all class metadata as JSON in the `name` field.
-  // This avoids needing extra columns while preserving all class-specific info.
-  const classMeta = JSON.stringify({
-    classType: unitInput.classType || '',
-    group: unitInput.group || '',
-    day: unitInput.day || '',
-    time: unitInput.time || '',
-    room: unitInput.room || '',
-    lecturer: unitInput.lecturer || '',
-  });
-
-  // Upsert Unit by code
+  // Upsert Unit
   const unit = await prisma.unit.upsert({
     where: { code: unitInput.code },
     update: { name: unitInput.name },
     create: { code: unitInput.code, name: unitInput.name },
   });
 
-  // Find existing registration for this exact class group (matched by classMeta in name)
+  // One UnitRegistration per lecturer per unit (no splitting by group)
   let lecturerReg = await prisma.unitRegistration.findFirst({
-    where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER, name: classMeta },
+    where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER },
   });
 
   if (!lecturerReg) {
@@ -87,13 +115,39 @@ export async function POST(request: NextRequest) {
         userStatus: UserStatus.LECTURER,
         year,
         semester,
-        name: classMeta,
+        name: null,
       },
     });
   }
 
-  const validStudents = students.filter((s) => s.studentId && s.name);
+  // Create a ClassSession for this schedule slot if it doesn't exist yet
+  // Identified by sessionName + groupNo on this unit registration
+  let classSession = await prisma.classSession.findFirst({
+    where: {
+      unitRegistrationId: lecturerReg.id,
+      sessionName: sessionNameEnum,
+      groupNo,
+    },
+  });
 
+  if (!classSession) {
+    const { startHour, startMin, durationMinutes } = parseTime(unitInput.time || '08:00 - 10:00');
+    const sessionTime = buildSessionTime(unitInput.day || 'Mon', startHour, startMin, year);
+
+    classSession = await prisma.classSession.create({
+      data: {
+        unitRegistrationId: lecturerReg.id,
+        lecturerId: userId,
+        sessionName: sessionNameEnum,
+        sessionTime,
+        sessionDuration: durationMinutes,
+        groupNo,
+      },
+    });
+  }
+
+  // Upsert user accounts for all students
+  const validStudents = students.filter((s) => s.studentId && s.name);
   const userData = validStudents.map((s) => ({
     email: `${s.studentId}@students.swinburne.edu.my`,
     name: s.name,
@@ -113,37 +167,43 @@ export async function POST(request: NextRequest) {
   });
   const userMap = new Map(users.map((u) => [u.email, u.id]));
 
-  const enrollmentData = validStudents
-    .map((s) => {
-      const studentUserId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
-      if (!studentUserId) return null;
-      return {
-        unitId: unit.id,
-        userId: studentUserId,
-        userStatus: UserStatus.STUDENT,
-        year,
-        semester,
-      };
-    })
-    .filter((d): d is NonNullable<typeof d> => d !== null);
-
+  // Enroll students with name=groupNo to scope them to this session group.
+  // @@unique([unitId, userId, name]) allows same student in different groups.
   let enrolled = 0;
   const errors: string[] = [];
 
-  try {
-    const result = await prisma.unitRegistration.createMany({
-      data: enrollmentData,
-      skipDuplicates: true,
-    });
-    enrolled = result.count;
-  } catch (err) {
-    console.error('Enrollment bulk create failed:', err);
-    errors.push(String(err));
+  for (const s of validStudents) {
+    const studentUserId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
+    if (!studentUserId) continue;
+    try {
+      await prisma.unitRegistration.upsert({
+        where: {
+          unitId_userId_name: {
+            unitId: unit.id,
+            userId: studentUserId,
+            name: groupNo,
+          },
+        },
+        update: {},
+        create: {
+          unitId: unit.id,
+          userId: studentUserId,
+          userStatus: UserStatus.STUDENT,
+          year,
+          semester,
+          name: groupNo,
+        },
+      });
+      enrolled++;
+    } catch (err) {
+      errors.push(String(err));
+    }
   }
 
   return NextResponse.json({
     unitId: unit.id,
     registrationId: lecturerReg.id,
+    classSessionId: classSession.id,
     created: userData.length,
     enrolled,
     skipped: validStudents.length - enrolled,

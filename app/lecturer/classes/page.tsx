@@ -574,12 +574,10 @@ export default function ClassesPage() {
               code: metadata.unitCode || 'UNKNOWN',
               name: metadata.unitName || 'Imported Unit',
               semester: metadata.term || '2026_MAR_S1',
-              classType: metadata.classType || '',
-              group: metadata.group || '',
+              sessionType: metadata.classType || '',  // e.g. "LA1", "LE1"
+              groupNo: metadata.group || '',           // e.g. "01", "02"
               day: metadata.day || '',
               time: metadata.time || '',
-              room: metadata.room || '',
-              lecturer: metadata.lecturer || '',
             },
             students,
           }),
