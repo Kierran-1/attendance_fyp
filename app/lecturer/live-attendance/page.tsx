@@ -283,8 +283,8 @@ export default function LiveAttendancePage() {
     setScanning(true);
 
     try {
-      controlsRef.current = await readerRef.current.decodeFromVideoDevice(
-        undefined,
+      controlsRef.current = await readerRef.current.decodeFromConstraints(
+        { video: { facingMode: 'environment' } },
         'qr-video',
         async (result) => {
           if (result) {

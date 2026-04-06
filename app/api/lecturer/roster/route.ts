@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       if (!existingUser) created++;
 
       const existingReg = await prisma.unitRegistration.findUnique({
-        where: { unitId_userId: { unitId, userId: user.id } },
+        where: { unitId_userId_name: { unitId, userId: user.id, name: null } },
       });
 
       if (!existingReg) {

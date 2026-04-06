@@ -48,7 +48,7 @@ export async function POST() {
       });
 
       const devLecturerReg = await prisma.unitRegistration.upsert({
-        where: { unitId_userId: { unitId: studentReg.unitId, userId: devLecturer.id } },
+        where: { unitId_userId_name: { unitId: studentReg.unitId, userId: devLecturer.id, name: null } },
         update: {},
         create: {
           unitId: studentReg.unitId,
@@ -81,7 +81,7 @@ export async function POST() {
     });
 
     const devLecturerReg = await prisma.unitRegistration.upsert({
-      where: { unitId_userId: { unitId: devUnit.id, userId: devLecturer.id } },
+      where: { unitId_userId_name: { unitId: devUnit.id, userId: devLecturer.id, name: null } },
       update: {},
       create: {
         unitId: devUnit.id,
@@ -94,7 +94,7 @@ export async function POST() {
 
     // Also create student registration so the current user is enrolled
     await prisma.unitRegistration.upsert({
-      where: { unitId_userId: { unitId: devUnit.id, userId } },
+      where: { unitId_userId_name: { unitId: devUnit.id, userId, name: null } },
       update: {},
       create: {
         unitId: devUnit.id,
