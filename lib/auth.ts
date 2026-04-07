@@ -9,7 +9,13 @@ import { UserRole } from '@prisma/client';
  */
 const LECTURER_EMAIL_OVERRIDES = new Set([
   '102785480@students.swinburne.edu.my',
+  'dev-lecturer.swinburne@outlook.com'
+
   // add more here as needed
+]);
+
+const STUDENT_EMAIL_OVERRIDES = new Set([
+  'dev-student.swinburne@outlook.com'
 ]);
 
 /**
@@ -17,10 +23,15 @@ const LECTURER_EMAIL_OVERRIDES = new Set([
  */
 function getRoleFromEmail(email: string): UserRole {
   if (LECTURER_EMAIL_OVERRIDES.has(email)) return UserRole.LECTURER;
+  if (STUDENT_EMAIL_OVERRIDES.has(email)) return UserRole.STUDENT;
+
   if (email.endsWith('@students.swinburne.edu.my')) return UserRole.STUDENT;
+  if (email.endsWith('@swinburne@outlook.com')) return UserRole.STUDENT;
   if (email.endsWith('@swinburne.edu.my')) return UserRole.LECTURER;
+
   return UserRole.STUDENT;
 }
+
 
 export const authOptions: AuthOptions = {
   adapter: PrismaAdapter(prisma),

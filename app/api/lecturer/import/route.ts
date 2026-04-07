@@ -7,7 +7,7 @@ import { UserRole, UserStatus, SessionName } from '@prisma/client';
 type StudentInput = {
   studentId: string;
   name: string;
-  major?: string | null;
+  programName?: string | null;
   nationality?: string | null;
   schoolStatus?: string | null;
 };
@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
         year,
         semester,
         name: null,
+        
       },
     });
   }
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
     classSession = await prisma.classSession.create({
       data: {
         unitRegistrationId: lecturerReg.id,
+        
         lecturerId: userId,
         sessionName: sessionNameEnum,
         sessionTime,
@@ -152,6 +154,8 @@ export async function POST(request: NextRequest) {
     email: `${s.studentId}@students.swinburne.edu.my`,
     name: s.name,
     role: UserRole.STUDENT,
+    programName: s.programName ?? null,
+    nationality: s.nationality ?? null,
   }));
 
   try {
@@ -165,6 +169,17 @@ export async function POST(request: NextRequest) {
     where: { email: { in: emails } },
     select: { id: true, email: true },
   });
+  for (const s of validStudents) {
+  const email = `${s.studentId}@students.swinburne.edu.my`;
+
+  await prisma.user.update({
+    where: { email },
+    data: {
+      programName: s.programName ?? null,
+      nationality: s.nationality ?? null,
+    },
+  });
+  }
   const userMap = new Map(users.map((u) => [u.email, u.id]));
 
   // Enroll students with name=groupNo to scope them to this session group.

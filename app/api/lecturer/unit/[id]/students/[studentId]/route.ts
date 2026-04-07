@@ -38,16 +38,23 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name } = body;
-    if (name) {
-      await prisma.user.update({ where: { id: studentReg.userId }, data: { name } });
-    }
+    const { name, programName, nationality } = body;
+    
+    const updatedUser = await prisma.user.update({ 
+      where: { id: studentReg.userId }, 
+      data: { 
+        ...(name ? { name } : {}),
+        ...(programName ? { programName } : {}),
+        ...(nationality ? { nationality } : {}),
+      } 
+    });
 
     return NextResponse.json({
       id: studentReg.id,
-      studentNumber: studentReg.user.email?.split('@')[0] ?? '—',
-      name: name ?? studentReg.user.name ?? '',
-      program: studentReg.user.programName ?? '',
+      studentNumber: updatedUser.email?.split('@')[0] ?? '—',
+      name: updatedUser.name ?? '',
+      program: updatedUser.programName ?? '',
+      nationality: updatedUser.nationality ?? '',
     });
   } catch (error) {
     console.error('Error updating student:', error);

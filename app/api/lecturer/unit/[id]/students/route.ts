@@ -35,7 +35,7 @@ export async function GET(
       userStatus: UserStatus.STUDENT,
       name: cs.groupNo ?? null,
     },
-    include: { user: { select: { id: true, name: true, email: true, programName: true } } },
+    include: { user: { select: { id: true, name: true, email: true, programName: true, nationality: true } } },
   });
 
   return NextResponse.json(studentRegistrations.map((reg) => ({
@@ -43,6 +43,7 @@ export async function GET(
     studentNumber: reg.user.email?.split('@')[0] ?? '—',
     name: reg.user.name ?? 'Unknown',
     program: reg.user.programName ?? '',
+    nationality: reg.user.nationality ?? '',
     email: reg.user.email,
   })));
 }
@@ -60,11 +61,11 @@ export async function POST(
   const cs = await resolveSession(classSessionId, session.user.id);
   if (!cs) return NextResponse.json({ error: 'Class session not found' }, { status: 404 });
 
-  let body: { email?: string; name?: string };
+  let body: { email?: string; name?: string; programName?: string; nationality?: string };
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
 
-  const { email, name } = body;
+  const { email, name, programName, nationality } = body;
   if (!email) return NextResponse.json({ error: 'email is required' }, { status: 400 });
 
   const unitId = cs.unitRegistration.unitId;
@@ -72,8 +73,18 @@ export async function POST(
 
   const studentUser = await prisma.user.upsert({
     where: { email },
-    update: { ...(name ? { name } : {}) },
-    create: { email, name: name ?? null, role: UserRole.STUDENT },
+    update: { 
+      ...(name ? { name } : {}),
+      ...(programName ? { programName } : {}),
+      ...(nationality ? { nationality } : {}),
+    },
+    create: { 
+      email, 
+      name: name ?? null, 
+      programName: programName ?? null,
+      nationality: nationality ?? null,
+      role: UserRole.STUDENT 
+    },
   });
 
   const existing = await prisma.unitRegistration.findFirst({

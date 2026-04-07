@@ -68,7 +68,7 @@ export default function TopNavbar({ onMenuClick }: TopNavbarProps) {
         </button>
 
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
             {isStudentPanel ? 'Student Panel' : 'Lecturer Panel'}
           </p>
           <h1 className="text-lg font-semibold text-gray-800">{pageTitle}</h1>

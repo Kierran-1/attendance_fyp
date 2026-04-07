@@ -19,6 +19,7 @@ model User {
   image         String?
   role          UserRole  @default(STUDENT)
   programName   String?
+  nationality String?
   qrState       String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
