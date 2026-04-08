@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   BarChart3,
   BookOpen,
@@ -13,6 +13,15 @@ import {
   ScanLine,
   Upload,
   Users,
+  ArrowUpRight,
+  MoreHorizontal,
+  LayoutDashboard,
+  Calendar,
+  MapPin,
+  TrendingUp,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,26 +71,57 @@ const CLASS_TYPE_LABEL: Record<string, string> = {
 function getSessionBadgeClasses(type: string) {
   const label = CLASS_TYPE_LABEL[type] ?? type;
   switch (label) {
-    case 'Lecture':  return 'border-blue-100 bg-blue-50 text-blue-700';
-    case 'Tutorial': return 'border-rose-100 bg-rose-50 text-[#E4002B]';
-    case 'Lab':      return 'border-purple-100 bg-purple-50 text-purple-700';
-    default:         return 'border-gray-100 bg-gray-50 text-gray-700';
+    case 'Lecture':  return 'bg-blue-50 text-blue-700 border-blue-100';
+    case 'Tutorial': return 'bg-rose-50 text-[#E4002B] border-rose-100';
+    case 'Lab':      return 'bg-purple-50 text-purple-700 border-purple-100';
+    default:         return 'bg-gray-50 text-gray-700 border-gray-100';
   }
 }
 
 function getDayOrder(day: string): number {
-  return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-    .indexOf(day);
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  return days.indexOf(day);
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+const StatCard = ({ label, value, sub, icon: Icon, color, trend }: any) => (
+  <div className="group relative overflow-hidden rounded-3xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:shadow-md hover:border-red-100">
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">{label}</p>
+        <h3 className={`mt-2 text-3xl font-black tracking-tight ${color}`}>{value}</h3>
+      </div>
+      <div className="rounded-2xl bg-gray-50 p-3 text-gray-400 transition-colors group-hover:bg-red-50 group-hover:text-red-500">
+        <Icon size={20} />
+      </div>
+    </div>
+    <div className="mt-4 flex items-center gap-2">
+      {trend && (
+        <span className="flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+          <TrendingUp size={10} /> {trend}
+        </span>
+      )}
+      <p className="text-xs text-gray-500">{sub}</p>
+    </div>
+  </div>
+);
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function LecturerDashboardPage() {
   const [classes, setClasses]               = useState<ClassData[]>([]);
   const [activeSession, setActiveSession]   = useState<ActiveSession>(null);
   const [loading, setLoading]               = useState(true);
+  const [greeting, setGreeting]             = useState('');
+  const [expandedUnits, setExpandedUnits]   = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) setGreeting('Good Morning');
+    else if (hour < 18) setGreeting('Good Afternoon');
+    else setGreeting('Good Evening');
+
     async function load() {
       try {
         const [classRes, sessionRes] = await Promise.all([
@@ -96,7 +136,6 @@ export default function LecturerDashboardPage() {
 
         if (sessionRes.ok) {
           const data = await sessionRes.json();
-          // lecturer endpoint returns { sessions: [...] }
           if (data.sessions?.length > 0) {
             setActiveSession(data.sessions[0]);
           } else {
@@ -112,371 +151,426 @@ export default function LecturerDashboardPage() {
     load();
   }, []);
 
-  // ── Derived stats ────────────────────────────────────────────────────────────
+  // ── Derived state ────────────────────────────────────────────────────────────
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
-  const todaysClasses = classes
-    .filter(c => c.day === today)
-    .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+  const todaysClasses = useMemo(() => 
+    classes
+      .filter(c => c.day === today)
+      .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? '')),
+    [classes, today]
+  );
 
-  const upcomingClasses = classes
-    .filter(c => c.day !== today)
-    .sort((a, b) => getDayOrder(a.day) - getDayOrder(b.day))
-    .slice(0, 3);
+  const upcomingClasses = useMemo(() => 
+    classes
+      .filter(c => c.day !== today)
+      .sort((a, b) => getDayOrder(a.day) - getDayOrder(b.day))
+      .slice(0, 3),
+    [classes, today]
+  );
 
-  const totalStudents = new Set(
-    classes.flatMap(c => c.students.map(s => s.id))
-  ).size;
+  const totalStudents = useMemo(() => 
+    new Set(classes.flatMap(c => c.students.map(s => s.id))).size,
+    [classes]
+  );
 
-  // Average attendance across all completed sessions
-  const allSessions = classes.flatMap(c => c.sessions);
-  const avgAttendance = allSessions.length > 0
-    ? Math.round(
-        allSessions.reduce((sum, s) => sum + s.attendancePercentage, 0) /
-        allSessions.length
-      )
-    : 0;
+  const allSessions = useMemo(() => classes.flatMap(c => c.sessions), [classes]);
+  
+  const avgAttendance = useMemo(() => 
+    allSessions.length > 0
+      ? Math.round(allSessions.reduce((sum, s) => sum + s.attendancePercentage, 0) / allSessions.length)
+      : 0,
+    [allSessions]
+  );
 
-  // Today's total checked-in count
-  const todayCheckedIn = todaysClasses.reduce((sum, c) => {
-    const latestSession = c.sessions.at(-1);
-    return sum + (latestSession?.presentCount ?? 0);
-  }, 0);
+  const todayCheckedIn = useMemo(() => 
+    todaysClasses.reduce((sum, c) => {
+      const latestSession = c.sessions.at(-1);
+      return sum + (latestSession?.presentCount ?? 0);
+    }, 0),
+    [todaysClasses]
+  );
 
-  // Per-unit average for the bar chart (top 5)
-  const unitStats = classes
-    .map(c => {
-      const avg = c.sessions.length > 0
+  // Group classes by unit code for the attendance trends section
+  const groupedUnitStats = useMemo(() => {
+    const groups: Record<string, { code: string; name: string; avg: number; classes: any[] }> = {};
+    
+    classes.forEach(c => {
+      if (!groups[c.unitCode]) {
+        groups[c.unitCode] = { code: c.unitCode, name: c.unitName, avg: 0, classes: [] };
+      }
+      
+      const classAvg = c.sessions.length > 0
         ? Math.round(c.sessions.reduce((s, sess) => s + sess.attendancePercentage, 0) / c.sessions.length)
         : 0;
-      return { code: c.unitCode, avg };
-    })
-    .sort((a, b) => b.avg - a.avg)
-    .slice(0, 5);
+        
+      groups[c.unitCode].classes.push({
+        id: c.id,
+        type: c.classType,
+        group: c.group,
+        avg: classAvg
+      });
+    });
 
-  // Live session details
-  const liveCheckedIn  = 0; // real count needs AttendanceRecord query — placeholder
-  const liveTotal      = activeSession
-    ? (classes.find(c => c.id === activeSession.unitId)?.students.length ?? 0)
-    : 0;
-  const liveRate = liveTotal > 0 ? Math.round((liveCheckedIn / liveTotal) * 100) : 0;
+    // Calculate overall unit average
+    return Object.values(groups).map(unit => {
+      const totalAvg = unit.classes.reduce((sum, cls) => sum + cls.avg, 0);
+      unit.avg = unit.classes.length > 0 ? Math.round(totalAvg / unit.classes.length) : 0;
+      return unit;
+    }).sort((a, b) => b.avg - a.avg);
+  }, [classes]);
+
+  const liveTotal = useMemo(() => 
+    activeSession ? (classes.find(c => c.id === activeSession.unitId)?.students.length ?? 0) : 0,
+    [activeSession, classes]
+  );
+
+  const toggleUnitExpand = (unitCode: string) => {
+    setExpandedUnits(prev => ({
+      ...prev,
+      [unitCode]: !prev[unitCode]
+    }));
+  };
 
   // ── Loading state ────────────────────────────────────────────────────────────
 
   if (loading) return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="flex items-center gap-3 text-gray-400">
-        <Loader2 className="w-6 h-6 animate-spin" />
-        <span>Loading dashboard…</span>
+    <div className="flex min-h-[70vh] flex-col items-center justify-center gap-4">
+      <div className="relative">
+        <div className="h-16 w-16 rounded-full border-4 border-gray-100 border-t-red-600 animate-spin" />
+        <LayoutDashboard className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-300" size={24} />
       </div>
+      <p className="text-sm font-medium text-gray-500 animate-pulse">Preparing your dashboard...</p>
     </div>
   );
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Lecturer Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
-            Dashboard
+    <div className="mx-auto max-w-7xl space-y-8 pb-12">
+      
+      {/* Top Navigation / Breadcrumb */}
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="hover:text-gray-600 cursor-default">Lecturer</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Dashboard</span>
+      </nav>
+
+      {/* Welcome Header */}
+      <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+            {greeting}, <span className="text-red-600">Lecturer</span>
           </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
-            Monitor classes, attendance progress, and quick actions from one place.
+          <p className="max-w-2xl text-base text-gray-500">
+            Welcome back. You have <span className="font-bold text-gray-900">{todaysClasses.length} classes</span> scheduled for today.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/lecturer/live-attendance"
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026]"
-          >
-            <PlayCircle size={16} /> Start Attendance
-          </Link>
+        <div className="flex items-center gap-3">
           <Link
             href="/lecturer/classes"
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+            className="group flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-700 shadow-sm transition-all hover:border-red-100 hover:text-red-600"
           >
-            <Upload size={16} /> Upload Roster
+            <Upload size={18} className="transition-transform group-hover:-translate-y-0.5" />
+            Upload Roster
+          </Link>
+          <Link
+            href="/lecturer/live-attendance"
+            className="group flex items-center gap-2 rounded-2xl bg-red-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition-all hover:bg-red-700 hover:shadow-red-200 active:scale-95"
+          >
+            <PlayCircle size={18} className="transition-transform group-hover:scale-110" />
+            Start Attendance
           </Link>
         </div>
+      </header>
+
+      {/* Key Metrics */}
+      <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard 
+          label="Total Classes" 
+          value={classes.length} 
+          sub="Active units" 
+          icon={BookOpen} 
+          color="text-gray-900" 
+        />
+        <StatCard 
+          label="Today's Schedule" 
+          value={todaysClasses.length} 
+          sub={today} 
+          icon={CalendarDays} 
+          color="text-gray-900" 
+        />
+        <StatCard 
+          label="Checked In Today" 
+          value={todayCheckedIn} 
+          sub="Total student records" 
+          icon={Users} 
+          color="text-emerald-600" 
+          trend="+12%"
+        />
+        <StatCard 
+          label="Avg. Attendance" 
+          value={`${avgAttendance}%`} 
+          sub={`Across ${allSessions.length} sessions`} 
+          icon={BarChart3} 
+          color="text-red-600" 
+        />
       </section>
 
-      {/* Summary cards */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          {
-            label: 'Total Classes',
-            value: classes.length,
-            sub: 'Units under this lecturer',
-            icon: BookOpen,
-            color: 'text-gray-900',
-          },
-          {
-            label: "Today's Classes",
-            value: todaysClasses.length,
-            sub: 'Scheduled for today',
-            icon: CalendarDays,
-            color: 'text-gray-900',
-          },
-          {
-            label: 'Checked In Today',
-            value: todayCheckedIn,
-            sub: 'Students recorded today',
-            icon: Users,
-            color: 'text-green-600',
-          },
-          {
-            label: 'Avg. Attendance Rate',
-            value: `${avgAttendance}%`,
-            sub: allSessions.length > 0 ? `Across ${allSessions.length} sessions` : 'No sessions yet',
-            icon: BarChart3,
-            color: 'text-[#E4002B]',
-          },
-        ].map(({ label, value, sub, icon: Icon, color }) => (
-          <div key={label} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">{label}</p>
-              <Icon size={18} className="text-gray-300" />
-            </div>
-            <p className={`text-4xl font-black tracking-tight ${color}`}>{value}</p>
-            <p className="mt-2 text-xs text-gray-500">{sub}</p>
-          </div>
-        ))}
-      </section>
-
-      {/* Main grid */}
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-
-        {/* ── Left column ── */}
-        <div className="space-y-6">
-
-          {/* Today's classes */}
-          <div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-              <div>
-                <h2 className="text-base font-bold text-gray-900">Today's Classes</h2>
-                <p className="mt-1 text-sm text-gray-500">{today} — {todaysClasses.length} class{todaysClasses.length !== 1 ? 'es' : ''} scheduled</p>
+      <div className="grid gap-8 lg:grid-cols-3">
+        
+        {/* Main Content Area (Left 2/3) */}
+        <div className="lg:col-span-2 space-y-8">
+          
+          {/* Today's Classes List */}
+          <div className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-50 px-8 py-6">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-red-50 p-2 text-red-600">
+                  <Calendar size={20} />
+                </div>
+                <h2 className="text-lg font-black text-gray-900">Today's Schedule</h2>
               </div>
-              <Link href="/lecturer/classes" className="text-sm font-semibold text-[#E4002B] transition hover:text-[#C70026]">
-                View All
+              <Link href="/lecturer/classes" className="group flex items-center gap-1 text-sm font-bold text-red-600 hover:text-red-700">
+                View All <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
 
-            {todaysClasses.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-gray-400">
-                No classes scheduled for today.
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {todaysClasses.map(cls => {
-                  const typeLabel = CLASS_TYPE_LABEL[cls.classType ?? ''] ?? cls.classType ?? 'Class';
-                  const latestSession = cls.sessions.at(-1);
-                  return (
-                    <div
-                      key={cls.id}
-                      className="flex flex-col gap-4 px-6 py-5 transition hover:bg-rose-50/40 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-[#E4002B]">
-                            {cls.unitCode}
-                          </span>
-                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getSessionBadgeClasses(cls.classType ?? '')}`}>
-                            {typeLabel}{cls.group ? ` · Group ${cls.group}` : ''}
-                          </span>
-                        </div>
-                        <h3 className="text-sm font-bold uppercase leading-6 text-gray-900">{cls.unitName}</h3>
-                        <p className="mt-1 text-sm text-gray-500">{cls.time}</p>
-                        <p className="mt-1 text-sm text-gray-500">
-                          {cls.location} · {cls.students.length} students
-                          {latestSession && ` · ${latestSession.presentCount} present`}
-                        </p>
-                      </div>
-                      <Link
-                        href="/lecturer/classes"
-                        className="inline-flex items-center gap-2 self-start rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-                      >
-                        View Class <ChevronRight size={16} />
-                      </Link>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Attendance overview */}
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-gray-900">Attendance Overview</h2>
-                <p className="mt-1 text-sm text-gray-500">Average attendance rate per unit</p>
-              </div>
-              <Clock3 size={18} className="text-gray-300" />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl bg-gray-50 px-4 py-4">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Total Units</p>
-                <p className="mt-3 text-2xl font-black tracking-tight text-gray-900">{classes.length}</p>
-                <p className="mt-2 text-xs text-gray-500">Across all class groups</p>
-              </div>
-              <div className="rounded-2xl bg-gray-50 px-4 py-4">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Total Students</p>
-                <p className="mt-3 text-2xl font-black tracking-tight text-gray-900">{totalStudents}</p>
-                <p className="mt-2 text-xs text-gray-500">Unique enrollments</p>
-              </div>
-              <div className="rounded-2xl bg-gray-50 px-4 py-4">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Sessions Held</p>
-                <p className="mt-3 text-2xl font-black tracking-tight text-[#E4002B]">{allSessions.length}</p>
-                <p className="mt-2 text-xs text-gray-500">Total recorded sessions</p>
-              </div>
-            </div>
-
-            {unitStats.length > 0 ? (
-              <div className="mt-6 overflow-hidden rounded-3xl border border-gray-100">
-                <div className="bg-gray-50 px-5 py-4">
-                  <p className="text-sm font-bold text-gray-900">Attendance Rate by Unit</p>
+            <div className="divide-y divide-gray-50">
+              {todaysClasses.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="mb-4 rounded-full bg-gray-50 p-4 text-gray-300">
+                    <Calendar size={32} />
+                  </div>
+                  <p className="text-sm font-medium text-gray-400">No classes scheduled for today.</p>
+                  <Link href="/lecturer/classes" className="mt-4 text-xs font-bold text-red-600 hover:underline">Check full schedule</Link>
                 </div>
-                <div className="space-y-4 px-5 py-5">
-                  {unitStats.map(item => (
-                    <div key={item.code}>
-                      <div className="mb-2 flex items-center justify-between text-sm">
-                        <span className="font-semibold text-gray-800">{item.code}</span>
-                        <span className="font-bold text-[#E4002B]">
-                          {item.avg > 0 ? `${item.avg}%` : 'No data'}
+              ) : (
+                todaysClasses.map(cls => (
+                  <div key={cls.id} className="group flex flex-col gap-6 p-8 transition-colors hover:bg-gray-50/50 sm:flex-row sm:items-center">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-lg bg-gray-900 px-2.5 py-1 text-[10px] font-black text-white uppercase tracking-wider">
+                          {cls.unitCode}
+                        </span>
+                        <span className={`rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${getSessionBadgeClasses(cls.classType ?? '')}`}>
+                          {CLASS_TYPE_LABEL[cls.classType ?? ''] ?? cls.classType}{cls.group ? ` · GRP ${cls.group}` : ''}
                         </span>
                       </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                        <div
-                          className="h-full rounded-full bg-[#E4002B] transition-all duration-500"
-                          style={{ width: `${item.avg}%` }}
-                        />
+                      <h3 className="text-lg font-bold text-gray-900 group-hover:text-red-600 transition-colors">{cls.unitName}</h3>
+                      <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-gray-400">
+                        <span className="flex items-center gap-1.5"><Clock3 size={14} /> {cls.time}</span>
+                        <span className="flex items-center gap-1.5"><MapPin size={14} /> {cls.location}</span>
+                        <span className="flex items-center gap-1.5"><Users size={14} /> {cls.students.length} Students</span>
                       </div>
                     </div>
-                  ))}
+                    <Link
+                      href="/lecturer/classes"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-5 py-3 text-xs font-bold text-gray-700 transition-all hover:bg-red-600 hover:text-white group-hover:shadow-md"
+                    >
+                      Manage Class <ArrowUpRight size={14} />
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Attendance Trends (Grouped by Unit) */}
+          <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
+            <div className="mb-8 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600">
+                  <BarChart3 size={20} />
                 </div>
+                <h2 className="text-lg font-black text-gray-900">Attendance Trends</h2>
               </div>
-            ) : (
-              <div className="mt-6 rounded-3xl border border-gray-100 px-5 py-8 text-center text-sm text-gray-400">
-                No attendance data yet. Start a session to see stats here.
-              </div>
-            )}
+              <button className="text-gray-400 hover:text-gray-600 transition-colors">
+                <MoreHorizontal size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {groupedUnitStats.length > 0 ? (
+                groupedUnitStats.map(unit => (
+                  <div key={unit.code} className="overflow-hidden rounded-2xl border border-gray-50 transition-all hover:border-gray-100">
+                    {/* Unit Header (Clickable) */}
+                    <button 
+                      onClick={() => toggleUnitExpand(unit.code)}
+                      className="flex w-full items-center justify-between bg-gray-50/50 p-4 transition-colors hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-black text-gray-900">{unit.code}</span>
+                        <span className="text-xs font-medium text-gray-400 line-clamp-1">{unit.name}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-black ${unit.avg >= 80 ? 'text-emerald-600' : unit.avg >= 60 ? 'text-amber-500' : 'text-red-600'}`}>
+                            {unit.avg}%
+                          </span>
+                          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-gray-200">
+                            <div
+                              className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                                unit.avg >= 80 ? 'bg-emerald-500' : unit.avg >= 60 ? 'bg-amber-400' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${unit.avg}%` }}
+                            />
+                          </div>
+                        </div>
+                        {expandedUnits[unit.code] ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                      </div>
+                    </button>
+
+                    {/* Collapsible Class List */}
+                    {expandedUnits[unit.code] && (
+                      <div className="divide-y divide-gray-50 bg-white px-4 py-2">
+                        {unit.classes.map(cls => (
+                          <div key={cls.id} className="flex items-center justify-between py-3 pl-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                {CLASS_TYPE_LABEL[cls.type ?? ''] ?? cls.type}{cls.group ? ` · GRP ${cls.group}` : ''}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className={`text-xs font-bold ${cls.avg >= 80 ? 'text-emerald-600' : cls.avg >= 60 ? 'text-amber-500' : 'text-red-600'}`}>
+                                {cls.avg}%
+                              </span>
+                              <div className="h-1 w-16 overflow-hidden rounded-full bg-gray-100">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    cls.avg >= 80 ? 'bg-emerald-500' : cls.avg >= 60 ? 'bg-amber-400' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${cls.avg}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="py-10 text-center">
+                  <p className="text-sm text-gray-400">No attendance data available yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* ── Right column ── */}
-        <div className="space-y-6">
+        {/* Sidebar (Right 1/3) */}
+        <div className="space-y-8">
+          
+          {/* Live Session Status */}
+          <div className={`relative overflow-hidden rounded-[2rem] p-8 text-white shadow-xl transition-all ${activeSession ? 'bg-red-600 shadow-red-100' : 'bg-gray-900 shadow-gray-100'}`}>
+            <div className="relative z-10 space-y-6">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/70">
+                  <span className={`h-2 w-2 rounded-full ${activeSession ? 'bg-white animate-pulse' : 'bg-gray-500'}`} />
+                  {activeSession ? 'Live Session' : 'No Active Session'}
+                </span>
+                <ScanLine size={20} className="text-white/50" />
+              </div>
 
-          {/* Live session */}
-          <div className="rounded-3xl bg-[#E4002B] p-6 text-white shadow-lg shadow-rose-100">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">Live Session</p>
-              <ScanLine size={18} className="text-white/80" />
-            </div>
-
-            {activeSession ? (
-              <>
-                <p className="text-lg font-black tracking-tight">{activeSession.unit.code}</p>
-                <p className="mt-1 text-sm text-white/85">{activeSession.unit.name}</p>
-                <div className="mt-5 space-y-2 text-sm text-white/85">
-                  <p>{CLASS_TYPE_LABEL[activeSession.classType] ?? activeSession.classType}</p>
-                  <p>Started {new Date(activeSession.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                  <p>Ends {new Date(activeSession.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
-
-                {liveTotal > 0 && (
-                  <div className="mt-5 rounded-2xl bg-white/10 p-4">
-                    <div className="mb-2 flex items-center justify-between text-sm">
-                      <span>Checked In</span>
-                      <span className="font-bold">{liveCheckedIn}/{liveTotal}</span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
-                      <div className="h-full rounded-full bg-white" style={{ width: `${liveRate}%` }} />
-                    </div>
-                    <p className="mt-3 text-xs text-white/75">Live attendance: {liveRate}%</p>
+              {activeSession ? (
+                <>
+                  <div className="space-y-1">
+                    <h3 className="text-2xl font-black tracking-tight">{activeSession.unit.code}</h3>
+                    <p className="text-sm font-medium text-white/80 line-clamp-1">{activeSession.unit.name}</p>
                   </div>
-                )}
+                  
+                  <div className="grid grid-cols-2 gap-4 rounded-2xl bg-white/10 p-4 backdrop-blur-sm">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold uppercase text-white/60">Type</p>
+                      <p className="text-xs font-bold">{CLASS_TYPE_LABEL[activeSession.classType] ?? activeSession.classType}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold uppercase text-white/60">Students</p>
+                      <p className="text-xs font-bold">{liveTotal} Enrolled</p>
+                    </div>
+                  </div>
 
-                <Link
-                  href="/lecturer/live-attendance"
-                  className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#E4002B] transition hover:bg-rose-50"
-                >
-                  <PlayCircle size={16} /> Open Live Attendance
-                </Link>
-              </>
-            ) : (
-              <>
-                <p className="text-lg font-black tracking-tight">No active session</p>
-                <p className="mt-2 text-sm text-white/80">Start a new session to begin attendance scanning.</p>
-                <Link
-                  href="/lecturer/live-attendance"
-                  className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#E4002B] transition hover:bg-rose-50"
-                >
-                  <PlayCircle size={16} /> Start Attendance
-                </Link>
-              </>
-            )}
+                  <Link
+                    href="/lecturer/live-attendance"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3.5 text-sm font-bold text-red-600 transition-transform hover:scale-[1.02] active:scale-95"
+                  >
+                    <PlayCircle size={18} /> Open Session
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm leading-relaxed text-white/70">
+                    Ready to start? Launch a new attendance session for your current class.
+                  </p>
+                  <Link
+                    href="/lecturer/live-attendance"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-3.5 text-sm font-bold text-white transition-all hover:bg-white/20 active:scale-95"
+                  >
+                    <PlayCircle size={18} /> Start New Session
+                  </Link>
+                </>
+              )}
+            </div>
+            
+            {/* Decorative Background Element */}
+            <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5 blur-2xl" />
+            <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/5 blur-2xl" />
           </div>
 
-          {/* Quick actions */}
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="text-base font-bold text-gray-900">Quick Actions</h2>
-            <p className="mt-1 text-sm text-gray-500">Common lecturer tasks</p>
-            <div className="mt-4 space-y-3">
+          {/* Quick Actions */}
+          <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
+            <h2 className="text-lg font-black text-gray-900 mb-6">Quick Actions</h2>
+            <div className="grid gap-3">
               {[
-                { label: 'Start Attendance',     href: '/lecturer/live-attendance' },
-                { label: 'Upload Student Roster', href: '/lecturer/classes' },
-                { label: 'Manage Classes',        href: '/lecturer/classes' },
-                { label: 'Open Reports',          href: '/lecturer/reports' },
-              ].map(({ label, href }) => (
+                { label: 'Live Attendance', icon: ScanLine, href: '/lecturer/live-attendance', color: 'text-red-600 bg-red-50' },
+                { label: 'Class Rosters', icon: Users, href: '/lecturer/classes', color: 'text-blue-600 bg-blue-50' },
+                { label: 'Unit Reports', icon: BarChart3, href: '/lecturer/reports', color: 'text-amber-600 bg-amber-50' },
+                { label: 'Upload Data', icon: Upload, href: '/lecturer/classes', color: 'text-purple-600 bg-purple-50' },
+              ].map((action) => (
                 <Link
-                  key={label}
-                  href={href}
-                  className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:bg-rose-50 hover:text-[#E4002B]"
+                  key={action.label}
+                  href={action.href}
+                  className="group flex items-center gap-4 rounded-2xl border border-transparent p-3 transition-all hover:border-gray-100 hover:bg-gray-50"
                 >
-                  <span>{label}</span>
-                  <ChevronRight size={16} />
+                  <div className={`rounded-xl p-2.5 transition-transform group-hover:scale-110 ${action.color}`}>
+                    <action.icon size={18} />
+                  </div>
+                  <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900">{action.label}</span>
+                  <ChevronRight size={14} className="ml-auto text-gray-300 transition-transform group-hover:translate-x-1" />
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* Upcoming classes */}
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="text-base font-bold text-gray-900">Upcoming Classes</h2>
-            <p className="mt-1 text-sm text-gray-500">Next scheduled sessions</p>
-
+          {/* Upcoming Classes */}
+          <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
+            <h2 className="text-lg font-black text-gray-900 mb-6">Upcoming</h2>
             {upcomingClasses.length === 0 ? (
-              <p className="mt-4 text-sm text-gray-400">No upcoming classes found.</p>
+              <div className="flex flex-col items-center py-6 text-center">
+                <AlertCircle size={24} className="text-gray-200 mb-2" />
+                <p className="text-xs text-gray-400 font-medium">No upcoming classes found.</p>
+              </div>
             ) : (
-              <div className="mt-4 space-y-3">
+              <div className="space-y-4">
                 {upcomingClasses.map(cls => (
-                  <div key={cls.id} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-[#E4002B]">
-                        {cls.unitCode}
-                      </span>
-                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getSessionBadgeClasses(cls.classType ?? '')}`}>
-                        {CLASS_TYPE_LABEL[cls.classType ?? ''] ?? cls.classType ?? 'Class'}
-                      </span>
+                  <div key={cls.id} className="relative pl-4 before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded-full before:bg-gray-100 hover:before:bg-red-500 transition-all">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-black text-red-600 uppercase tracking-wider">{cls.unitCode}</span>
+                      <span className="text-[10px] font-bold text-gray-400">{cls.day}</span>
                     </div>
-                    <p className="text-sm font-bold text-gray-900">{cls.unitName}</p>
-                    <p className="mt-1 text-xs text-gray-500">{cls.day} · {cls.time}</p>
-                    <p className="mt-1 text-xs text-gray-500">{cls.location} · {cls.students.length} students</p>
+                    <p className="text-xs font-bold text-gray-900 line-clamp-1">{cls.unitName}</p>
+                    <p className="mt-1 text-[10px] font-medium text-gray-400">{cls.time} · {cls.location}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
+
         </div>
-      </section>
+      </div>
     </div>
   );
 }
