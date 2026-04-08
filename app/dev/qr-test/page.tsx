@@ -1,156 +1,245 @@
 'use client';
 
 import { useState } from 'react';
-import QRCode from 'react-qr-code';
+import { QRCodeSVG } from 'qrcode.react';
 
-interface TestSession {
-  id: string;
-  course: { code: string; name: string };
-  startTime: string;
-  endTime: string;
-}
-
-type ScanStatus = { ok: true } | { ok: false; error: string } | null;
+type Step = 'idle' | 'session-created' | 'token-generated' | 'scanned';
 
 export default function QRTestPage() {
-  const [session, setSession] = useState<TestSession | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [scanStatus, setScanStatus] = useState<ScanStatus>(null);
-  const [loading, setLoading] = useState<string | null>(null);
+  const [step, setStep]           = useState<Step>('idle');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [token, setToken]         = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
+  const [loading, setLoading]     = useState(false);
+  const [scanResult, setScanResult] = useState<string | null>(null);
 
-  async function createSession() {
-    setLoading('session');
+  function err(msg: string) {
+    setError(msg);
+    setLoading(false);
+  }
+
+  // ── Step 1: Create a dev session ──────────────────────────────────────────
+  async function handleCreateSession() {
+    setLoading(true);
+    setError(null);
     setToken(null);
-    setScanStatus(null);
-    const res = await fetch('/api/dev/create-test-session', { method: 'POST' });
+    setScanResult(null);
+
+    const res  = await fetch('/api/dev/create-test-session', { method: 'POST' });
     const data = await res.json();
-    if (res.ok) {
-      setSession(data.session);
-    } else {
-      alert(data.error ?? 'Failed to create session');
-    }
-    setLoading(null);
+
+    if (!res.ok) return err(data.error ?? 'Failed to create session');
+
+    // API returns { sessionId, session } — grab whichever is present
+    const id = data.sessionId ?? data.session?.id;
+    if (!id) return err('No session ID returned from API');
+
+    setSessionId(id);
+    setStep('session-created');
+    setLoading(false);
   }
 
-  async function generateToken() {
-    if (!session) return;
-    setLoading('token');
-    setScanStatus(null);
-    const res = await fetch('/api/attendance/generate-qr', {
-      method: 'POST',
+  // ── Step 2: Generate QR token (calls simulate-scan backend directly) ──────
+  // generate-qr requires STUDENT role, so for dev we call a simpler token endpoint
+  // or fall back to simulate-scan which bypasses the QR entirely.
+  async function handleGenerateToken() {
+    if (!sessionId) return;
+    setLoading(true);
+    setError(null);
+
+    // Try the real generate-qr first (works if logged in as student)
+    const res  = await fetch('/api/attendance/generate-qr', {
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: session.id }),
+      body:    JSON.stringify({ sessionId }),
     });
     const data = await res.json();
-    if (res.ok) {
+
+    if (res.ok && data.token) {
       setToken(data.token);
-    } else {
-      alert(data.error ?? 'Failed to generate token');
+      setStep('token-generated');
+      setLoading(false);
+      return;
     }
-    setLoading(null);
+
+    // If 403 (lecturer account), skip token and go straight to simulate
+    if (res.status === 403) {
+      setError('You are logged in as a lecturer — QR generation is student-only. Use "Simulate Scan" directly instead (it bypasses the QR).');
+      setLoading(false);
+      return;
+    }
+
+    err(data.error ?? 'Failed to generate token');
   }
 
-  async function simulateScan() {
+  // ── Step 3a: Simulate scan with token (student flow) ─────────────────────
+  async function handleScanWithToken() {
     if (!token) return;
-    setLoading('scan');
-    const res = await fetch('/api/dev/simulate-scan', {
-      method: 'POST',
+    setLoading(true);
+    setError(null);
+
+    const res  = await fetch('/api/attendance/scan', {
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+      body:    JSON.stringify({ token }),
     });
     const data = await res.json();
-    setScanStatus(res.ok ? { ok: true } : { ok: false, error: data.error ?? 'Scan failed' });
-    setLoading(null);
+
+    if (!res.ok) return err(data.error ?? 'Scan failed');
+
+    setScanResult('Attendance marked as PRESENT via QR token ✓');
+    setStep('scanned');
+    setLoading(false);
+  }
+
+  // ── Step 3b: Bypass QR — directly mark present (any role) ────────────────
+  async function handleDirectSimulate() {
+    if (!sessionId) return;
+    setLoading(true);
+    setError(null);
+
+    const res  = await fetch('/api/dev/simulate-scan', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sessionId }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) return err(data.error ?? 'Simulate failed');
+
+    setScanResult('Attendance marked as PRESENT via dev simulate ✓');
+    setStep('scanned');
+    setLoading(false);
+  }
+
+  // ── Reset ─────────────────────────────────────────────────────────────────
+  function reset() {
+    setStep('idle');
+    setSessionId(null);
+    setToken(null);
+    setError(null);
+    setScanResult(null);
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-lg mx-auto">
+      <div className="mx-auto max-w-lg space-y-4">
 
         {/* Header */}
-        <div className="mb-6">
-          <span className="text-xs font-bold uppercase tracking-widest bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+        <div className="mb-2">
+          <span className="rounded bg-yellow-100 px-2 py-1 text-xs font-bold uppercase tracking-widest text-yellow-700">
             Dev Only
           </span>
-          <h1 className="text-2xl font-black text-gray-900 mt-2">QR Attendance Test</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Simulate the full QR attendance flow without a lecturer account.
+          <h1 className="mt-2 text-2xl font-black text-gray-900">QR Attendance Test</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Simulate the full QR attendance flow. Works with both student and lecturer accounts.
           </p>
         </div>
 
-        {/* Step 1: Create session */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">
+        {/* Error banner */}
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* Step 1 */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-gray-400">
             Step 1 — Create Test Session
           </p>
           <button
-            onClick={createSession}
-            disabled={loading === 'session'}
-            className="w-full py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-lg hover:bg-gray-700 disabled:opacity-50 transition"
+            onClick={handleCreateSession}
+            disabled={loading}
+            className="w-full rounded-lg bg-gray-900 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-700 disabled:opacity-50"
           >
-            {loading === 'session' ? 'Creating…' : 'Create Test Session'}
+            {loading && step === 'idle' ? 'Creating…' : 'Create Test Session'}
           </button>
-          {session && (
-            <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
-              <p className="font-semibold text-green-800">{session.course.code} — {session.course.name}</p>
-              <p className="text-green-600 text-xs mt-0.5">
-                Session ID: <span className="font-mono">{session.id}</span>
-              </p>
-              <p className="text-green-600 text-xs">
-                Ends: {new Date(session.endTime).toLocaleTimeString()}
-              </p>
+          {sessionId && (
+            <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm">
+              <p className="font-semibold text-green-800">Session created ✓</p>
+              <p className="mt-1 font-mono text-xs text-green-600 break-all">{sessionId}</p>
             </div>
           )}
         </div>
 
-        {/* Step 2: Generate QR token */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">
-            Step 2 — Generate Your QR Token
+        {/* Step 2 */}
+        <div className={`rounded-xl border bg-white p-5 ${step === 'idle' ? 'border-gray-100 opacity-50' : 'border-gray-200'}`}>
+          <p className="mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+            Step 2 — Generate QR Token
+          </p>
+          <p className="mb-3 text-xs text-gray-400">
+            Only works if you're logged in as a <strong>student</strong>. If you're a lecturer, skip to Step 3b.
           </p>
           <button
-            onClick={generateToken}
-            disabled={!session || loading === 'token'}
-            className="w-full py-2.5 bg-[#E4002B] text-white text-sm font-semibold rounded-lg hover:bg-[#c2001f] disabled:opacity-40 transition"
+            onClick={handleGenerateToken}
+            disabled={!sessionId || loading}
+            className="w-full rounded-lg bg-[#E4002B] py-2.5 text-sm font-semibold text-white transition hover:bg-[#c2001f] disabled:opacity-40"
           >
-            {loading === 'token' ? 'Generating…' : 'Generate QR Token'}
+            {loading && step === 'session-created' ? 'Generating…' : 'Generate QR Token'}
           </button>
           {token && (
             <div className="mt-4 flex flex-col items-center gap-3">
-              <div className="p-3 bg-white border border-gray-200 rounded-xl shadow-sm">
-                <QRCode value={token} size={200} />
+              <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                <QRCodeSVG value={token} size={180} />
               </div>
-              <p className="text-xs text-gray-400 break-all text-center font-mono px-2">{token}</p>
+              <p className="break-all text-center font-mono text-xs text-gray-400 px-2">{token}</p>
             </div>
           )}
         </div>
 
-        {/* Step 3: Simulate scan */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">
-            Step 3 — Simulate Lecturer Scan
+        {/* Step 3a — scan with token */}
+        <div className={`rounded-xl border bg-white p-5 ${!token ? 'border-gray-100 opacity-50' : 'border-gray-200'}`}>
+          <p className="mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+            Step 3a — Scan Token (Student Flow)
+          </p>
+          <p className="mb-3 text-xs text-gray-400">
+            Submits the QR token to the real scan API — same as a lecturer scanning a student QR.
           </p>
           <button
-            onClick={simulateScan}
-            disabled={!token || loading === 'scan'}
-            className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"
+            onClick={handleScanWithToken}
+            disabled={!token || loading}
+            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-40"
           >
-            {loading === 'scan' ? 'Scanning…' : 'Simulate Scan'}
+            {loading && step === 'token-generated' ? 'Scanning…' : 'Scan Token → Mark Present'}
           </button>
-          {scanStatus !== null && (
-            <div className={`mt-3 rounded-lg p-3 text-sm font-semibold ${
-              scanStatus.ok
-                ? 'bg-green-50 border border-green-200 text-green-800'
-                : 'bg-red-50 border border-red-200 text-red-700'
-            }`}>
-              {scanStatus.ok ? '✓ Attendance marked as PRESENT' : `✗ ${'error' in scanStatus ? scanStatus.error : ''}`}
-            </div>
-          )}
         </div>
 
-        <p className="text-xs text-center text-gray-300 mt-4">
-          This page is only available in development mode.
-        </p>
+        {/* Step 3b — bypass QR entirely */}
+        <div className={`rounded-xl border bg-white p-5 ${!sessionId ? 'border-gray-100 opacity-50' : 'border-gray-200'}`}>
+          <p className="mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+            Step 3b — Direct Simulate (Any Role)
+          </p>
+          <p className="mb-3 text-xs text-gray-400">
+            Bypasses QR entirely. Marks the current logged-in user as PRESENT directly in the database. Use this if you're logged in as a lecturer.
+          </p>
+          <button
+            onClick={handleDirectSimulate}
+            disabled={!sessionId || loading}
+            className="w-full rounded-lg bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-40"
+          >
+            {loading ? 'Simulating…' : 'Simulate Attendance → Mark Present'}
+          </button>
+        </div>
+
+        {/* Result */}
+        {scanResult && (
+          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-800">
+            {scanResult}
+            <p className="mt-1 text-xs font-normal text-green-600">
+              Check <a href="/lecturer/reports" className="underline">Reports</a> or <a href="/student/attendance" className="underline">Attendance</a> to confirm it appears.
+            </p>
+          </div>
+        )}
+
+        {/* Reset */}
+        {step !== 'idle' && (
+          <button onClick={reset} className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 transition">
+            Reset / Start Over
+          </button>
+        )}
+
+        <p className="text-center text-xs text-gray-300">Dev mode only — not visible in production</p>
       </div>
     </div>
   );
