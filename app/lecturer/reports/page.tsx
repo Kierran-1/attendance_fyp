@@ -94,43 +94,56 @@ function buildUnitSummaries(units: ApiUnit[]): UnitSummary[] {
     entry.sessions.push(...u.sessions);
   }
 
-  // Calculate averages
+  // Calculate averages using totalStudents enrolled, not just those with records
   for (const entry of map.values()) {
+    const totalStudents = entry.students.length;
     const totalPresent = entry.sessions.reduce((s, r) => s + r.presentCount, 0);
-    const totalAbsent  = entry.sessions.reduce((s, r) => s + r.absentCount, 0);
-    const total = totalPresent + totalAbsent;
+    const totalPossible = totalStudents * entry.sessions.length;
     entry.totalPresent = totalPresent;
-    entry.totalAbsent  = totalAbsent;
-    entry.avgAttendance = total > 0 ? Math.round((totalPresent / total) * 100) : 0;
+    entry.totalAbsent  = totalPossible - totalPresent;
+    entry.avgAttendance = totalPossible > 0 ? Math.round((totalPresent / totalPossible) * 100) : 0;
   }
 
   return Array.from(map.values());
 }
 
 function buildAtRiskRows(units: ApiUnit[]): AtRiskRow[] {
-  // Per student per unit: count sessions present vs total
   const key = (studentNum: string, unitCode: string) => `${studentNum}::${unitCode}`;
 
-  const presentMap  = new Map<string, number>();
-  const totalMap    = new Map<string, number>();
-  const nameMap     = new Map<string, string>();
-  const unitMap     = new Map<string, string>();
+  const presentMap = new Map<string, number>();
+  const totalMap   = new Map<string, number>();
+  const nameMap    = new Map<string, string>();
+  const unitMap    = new Map<string, string>();
 
   for (const u of units) {
     const totalSessions = u.sessions.length;
     if (totalSessions === 0) continue;
+
+    // Total students enrolled in this unit
+    const totalStudents = u.students.length;
+    if (totalStudents === 0) continue;
 
     for (const s of u.students) {
       const k = key(s.studentNumber, u.unitCode);
       totalMap.set(k, (totalMap.get(k) ?? 0) + totalSessions);
       nameMap.set(k, s.name);
       unitMap.set(k, u.unitCode);
+    }
 
-      // Estimate per-student present using class-level attendance %
-      // (real per-student data would need a separate API)
-      const avgPct = u.sessions.reduce((sum, sess) => sum + sess.attendancePercentage, 0) / totalSessions;
-      const estimatedPresent = Math.round((avgPct / 100) * totalSessions);
-      presentMap.set(k, (presentMap.get(k) ?? 0) + estimatedPresent);
+    // Use actual presentCount and totalStudents to distribute attendance
+    // presentCount = number of students present in that session
+    // so each session contributes presentCount present marks spread across students
+    // We approximate: a student is present in a session if
+    // their index < presentCount (best we can do without per-student records)
+    for (let i = 0; i < u.students.length; i++) {
+      const s = u.students[i];
+      const k = key(s.studentNumber, u.unitCode);
+      let studentPresent = 0;
+      for (const sess of u.sessions) {
+        // Students are sorted — first presentCount students get marked present
+        if (i < sess.presentCount) studentPresent++;
+      }
+      presentMap.set(k, (presentMap.get(k) ?? 0) + studentPresent);
     }
   }
 
@@ -138,7 +151,7 @@ function buildAtRiskRows(units: ApiUnit[]): AtRiskRow[] {
   for (const [k, total] of totalMap.entries()) {
     const present = presentMap.get(k) ?? 0;
     const rate = total > 0 ? Math.round((present / total) * 100) : 0;
-    if (rate >= 75) continue; // only at-risk
+    if (rate >= 75) continue;
     const [studentNumber] = k.split('::');
     rows.push({
       name: nameMap.get(k) ?? '—',

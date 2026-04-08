@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole, UserStatus, SessionName } from '@prisma/client';
 
-// DEV ONLY — creates a temporary 1-hour ClassSession for testing.
+// DEV ONLY — creates a 60-min session under the current user's lecturer account.
 export async function POST() {
   if (process.env.NODE_ENV !== 'development') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -16,107 +16,36 @@ export async function POST() {
   }
 
   const userId = session.user.id;
+  const year = new Date().getFullYear();
+  const semester = 'DEV';
 
-  // Find user's first student UnitRegistration
-  const studentReg = await prisma.unitRegistration.findFirst({
-    where: { userId, userStatus: UserStatus.STUDENT },
-    include: { unit: true },
+  // 1. Find or create the dev unit
+  const devUnit = await prisma.unit.upsert({
+    where: { code: 'DEV0001' },
+    update: {},
+    create: { code: 'DEV0001', name: 'Dev Test Unit' },
   });
 
-  let lecturerRegId: string;
-  let lecturerUserId: string;
+  // 2. Register the CURRENT USER as a lecturer for this unit
+  //    This is the key — the session must be owned by the logged-in account
+  //    so it shows up in /lecturer/reports and /lecturer/unit
+  let myLecturerReg = await prisma.unitRegistration.findFirst({
+    where: { unitId: devUnit.id, userId, userStatus: UserStatus.LECTURER },
+  });
 
-  if (studentReg) {
-    // Find any lecturer UnitRegistration for the same unit
-    const lecturerReg = await prisma.unitRegistration.findFirst({
-      where: { unitId: studentReg.unitId, userStatus: UserStatus.LECTURER },
+  if (!myLecturerReg) {
+    myLecturerReg = await prisma.unitRegistration.create({
+      data: { unitId: devUnit.id, userId, userStatus: UserStatus.LECTURER, year, semester },
     });
-
-    if (lecturerReg) {
-      lecturerRegId = lecturerReg.id;
-      lecturerUserId = lecturerReg.userId;
-    } else {
-      // No lecturer reg found — create dev lecturer + registration
-      const devLecturer = await prisma.user.upsert({
-        where: { email: 'dev-lecturer@swinburne.edu.my' },
-        update: {},
-        create: {
-          email: 'dev-lecturer@swinburne.edu.my',
-          name: 'Dev Lecturer',
-          role: UserRole.LECTURER,
-        },
-      });
-
-      const devLecturerReg = await prisma.unitRegistration.upsert({
-        where: { unitId_userId_name: { unitId: studentReg.unitId, userId: devLecturer.id, name: null } },
-        update: {},
-        create: {
-          unitId: studentReg.unitId,
-          userId: devLecturer.id,
-          userStatus: UserStatus.LECTURER,
-          year: studentReg.year,
-          semester: studentReg.semester,
-        },
-      });
-
-      lecturerRegId = devLecturerReg.id;
-      lecturerUserId = devLecturer.id;
-    }
-  } else {
-    // No student registration — create a full dev setup
-    const devLecturer = await prisma.user.upsert({
-      where: { email: 'dev-lecturer@swinburne.edu.my' },
-      update: {},
-      create: {
-        email: 'dev-lecturer@swinburne.edu.my',
-        name: 'Dev Lecturer',
-        role: UserRole.LECTURER,
-      },
-    });
-
-    const devUnit = await prisma.unit.upsert({
-      where: { code: 'DEV0001' },
-      update: {},
-      create: { code: 'DEV0001', name: 'Dev Test Unit' },
-    });
-
-    const devLecturerReg = await prisma.unitRegistration.upsert({
-      where: { unitId_userId_name: { unitId: devUnit.id, userId: devLecturer.id, name: null } },
-      update: {},
-      create: {
-        unitId: devUnit.id,
-        userId: devLecturer.id,
-        userStatus: UserStatus.LECTURER,
-        year: new Date().getFullYear(),
-        semester: 'Dev',
-      },
-    });
-
-    // Also create student registration so the current user is enrolled
-    await prisma.unitRegistration.upsert({
-      where: { unitId_userId_name: { unitId: devUnit.id, userId, name: null } },
-      update: {},
-      create: {
-        unitId: devUnit.id,
-        userId,
-        userStatus: UserStatus.STUDENT,
-        year: new Date().getFullYear(),
-        semester: 'Dev',
-      },
-    });
-
-    lecturerRegId = devLecturerReg.id;
-    lecturerUserId = devLecturer.id;
   }
 
-  const now = new Date();
-
+  // 3. Create the class session under the current user's lecturer registration
   const classSession = await prisma.classSession.create({
     data: {
-      unitRegistrationId: lecturerRegId,
-      lecturerId: lecturerUserId,
+      unitRegistrationId: myLecturerReg.id,
+      lecturerId: userId,
       sessionName: SessionName.LECTURE,
-      sessionTime: now,
+      sessionTime: new Date(),
       sessionDuration: 60,
     },
   });

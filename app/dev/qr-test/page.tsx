@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession, signIn } from 'next-auth/react';
 import { QRCodeSVG } from 'qrcode.react';
 
 type Step = 'idle' | 'session-created' | 'token-generated' | 'scanned';
@@ -12,6 +13,7 @@ export default function QRTestPage() {
   const [error, setError]         = useState<string | null>(null);
   const [loading, setLoading]     = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const { data: authSession, status } = useSession();
 
   function err(msg: string) {
     setError(msg);
@@ -112,6 +114,27 @@ export default function QRTestPage() {
     setLoading(false);
   }
 
+  // ── Step 3c: Bulk simulate — create 8 fake students and mark 6 present ───
+  async function handleBulkSimulate() {
+    if (!sessionId) return;
+    setLoading(true);
+    setError(null);
+
+    const res  = await fetch('/api/dev/simulate-scan', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sessionId, bulkStudents: true }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) return err(data.error ?? 'Bulk simulate failed');
+
+    const errList = data.errors?.length ? `\nErrors: ${data.errors.join(', ')}` : '';
+    setScanResult(`Bulk done — ${data.present} present, ${data.absent} absent out of ${data.created} students ✓${errList}`);
+    setStep('scanned');
+    setLoading(false);
+  }
+
   // ── Reset ─────────────────────────────────────────────────────────────────
   function reset() {
     setStep('idle');
@@ -125,7 +148,27 @@ export default function QRTestPage() {
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-lg space-y-4">
 
-        {/* Header */}
+        {/* Not logged in gate */}
+        {status === 'loading' && (
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+            Checking session…
+          </div>
+        )}
+
+        {status === 'unauthenticated' && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-8 text-center">
+            <p className="font-semibold text-amber-800 mb-3">You are not logged in</p>
+            <p className="text-sm text-amber-600 mb-5">You need to be signed in to use the dev test page.</p>
+            <button
+              onClick={() => signIn()}
+              className="rounded-lg bg-[#E4002B] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#c2001f] transition"
+            >
+              Sign In
+            </button>
+          </div>
+        )}
+
+        {status === 'authenticated' && (<>
         <div className="mb-2">
           <span className="rounded bg-yellow-100 px-2 py-1 text-xs font-bold uppercase tracking-widest text-yellow-700">
             Dev Only
@@ -222,6 +265,23 @@ export default function QRTestPage() {
           </button>
         </div>
 
+        {/* Step 3c — bulk simulate */}
+        <div className={`rounded-xl border bg-white p-5 ${!sessionId ? 'border-gray-100 opacity-50' : 'border-gray-200'}`}>
+          <p className="mb-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+            Step 3c — Bulk Simulate (Recommended for Reports)
+          </p>
+          <p className="mb-3 text-xs text-gray-400">
+            Creates <strong>8 fake students</strong>, enrolls them in the dev unit, and marks <strong>6 as present</strong> and 2 as absent. Gives you realistic data to view in Reports without needing any other account.
+          </p>
+          <button
+            onClick={handleBulkSimulate}
+            disabled={!sessionId || loading}
+            className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-40"
+          >
+            {loading ? 'Simulating…' : 'Bulk Simulate → 8 Students, 6 Present'}
+          </button>
+        </div>
+
         {/* Result */}
         {scanResult && (
           <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-800">
@@ -240,6 +300,7 @@ export default function QRTestPage() {
         )}
 
         <p className="text-center text-xs text-gray-300">Dev mode only — not visible in production</p>
+        </>)}
       </div>
     </div>
   );

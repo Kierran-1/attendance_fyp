@@ -50,6 +50,11 @@ export default function StudentAttendancePage() {
         cache: 'no-store',
       });
 
+      if (res.status === 403) {
+        setError('This page is only available for student accounts.');
+        return;
+      }
+
       if (!res.ok) {
         throw new Error('Failed to load attendance.');
       }
