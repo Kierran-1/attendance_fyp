@@ -4,494 +4,312 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  ReferenceLine,
-  Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, LineChart, Line, ReferenceLine, Cell,
 } from 'recharts';
 import {
-  ArrowLeft,
-  CalendarDays,
-  ChevronRight,
-  Download,
-  FileText,
-  Search,
+  AlertTriangle, ArrowLeft, BarChart3, BookOpen,
+  Download, Loader2, Search, ShieldAlert, Users,
 } from 'lucide-react';
 
-type SessionType = 'Lecture' | 'Tutorial' | 'Lab';
-type SessionStatus = 'Completed' | 'Ongoing' | 'Scheduled';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type Student = {
+type ApiUnit = {
   id: string;
-  studentNumber: string;
-  name: string;
-  program: string;
-  nationality: string;
-  schoolStatus: string;
-};
-
-type Session = {
-  id: string;
-  date: string;
-  time: string;
-  venue: string;
-  attendancePercentage: number;
-  status: SessionStatus;
-  presentCount: number;
-  absentCount: number;
-  lateCount: number;
-  sickCount: number;
-};
-
-type LecturerClass = {
-  id: string;
+  unitId: string;
   unitCode: string;
   unitName: string;
-  day: string;
-  time: string;
-  location: string;
-  lecturer?: string;
-  classType?: string;
-  group?: string;
-  term?: string;
-  sessionType?: SessionType;
-  students: Student[];
-  sessions: Session[];
-  createdAt: string;
+  semester: string;
+  year: number;
+  classType: string;
+  group: string;
+  students: {
+    id: string;
+    studentNumber: string;
+    name: string;
+    program: string;
+    nationality: string;
+  }[];
+  sessions: {
+    id: string;
+    date: string;
+    attendancePercentage: number;
+    status: string;
+    presentCount: number;
+    absentCount: number;
+  }[];
 };
 
-const INITIAL_CLASSES: LecturerClass[] = [
-  {
-    id: 'cls-1',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    day: 'Monday',
-    time: '09:00 - 11:00',
-    location: 'A304',
-    lecturer: 'Jason Thomas Chew',
-    classType: 'Tutorial',
-    group: '01',
-    term: '2026_MAR_S1',
-    sessionType: 'Tutorial',
-    createdAt: '2026-03-01',
-    students: [
-      {
-        id: 'st-1',
-        studentNumber: '102788856',
-        name: 'Ally',
-        program: 'Bachelor of Computer Science',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-      {
-        id: 'st-2',
-        studentNumber: '102788857',
-        name: 'Nur Aisyah Binti Ahmad',
-        program: 'Bachelor of Computer Science',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-      {
-        id: 'st-3',
-        studentNumber: '102788858',
-        name: 'Lee Wen Hao',
-        program: 'Bachelor of Computer Science',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-    ],
-    sessions: [
-      {
-        id: 'se-1',
-        date: '19 Mar 2026',
-        time: '09:00 - 11:00',
-        venue: 'A304',
-        attendancePercentage: 89,
-        status: 'Completed',
-        presentCount: 25,
-        absentCount: 2,
-        lateCount: 1,
-        sickCount: 0,
-      },
-      {
-        id: 'se-2',
-        date: '26 Mar 2026',
-        time: '09:00 - 11:00',
-        venue: 'A304',
-        attendancePercentage: 68,
-        status: 'Ongoing',
-        presentCount: 19,
-        absentCount: 8,
-        lateCount: 1,
-        sickCount: 0,
-      },
-    ],
-  },
-  {
-    id: 'cls-2',
-    unitCode: 'SWE30003',
-    unitName: 'Software Architecture and Design',
-    day: 'Thursday',
-    time: '14:00 - 16:00',
-    location: 'C102',
-    lecturer: 'Siti Khatijah Bolhassan',
-    classType: 'Lecture',
-    group: 'LE1',
-    term: '2026_MAR_S1',
-    sessionType: 'Lecture',
-    createdAt: '2026-03-02',
-    students: [
-      {
-        id: 'st-4',
-        studentNumber: '102799101',
-        name: 'Muhammad Danish',
-        program: 'Bachelor of Software Engineering',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-      {
-        id: 'st-5',
-        studentNumber: '102799102',
-        name: 'Chloe Ting',
-        program: 'Bachelor of Software Engineering',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-    ],
-    sessions: [
-      {
-        id: 'se-3',
-        date: '20 Mar 2026',
-        time: '14:00 - 16:00',
-        venue: 'C102',
-        attendancePercentage: 84,
-        status: 'Completed',
-        presentCount: 44,
-        absentCount: 7,
-        lateCount: 2,
-        sickCount: 0,
-      },
-      {
-        id: 'se-4',
-        date: '27 Mar 2026',
-        time: '14:00 - 16:00',
-        venue: 'C102',
-        attendancePercentage: 79,
-        status: 'Completed',
-        presentCount: 41,
-        absentCount: 8,
-        lateCount: 3,
-        sickCount: 1,
-      },
-    ],
-  },
-  {
-    id: 'cls-3',
-    unitCode: 'COS30049',
-    unitName: 'Computing Technology Innovation Project',
-    day: 'Tuesday',
-    time: '10:00 - 12:00',
-    location: 'B203',
-    lecturer: 'Elaine Yeu Yee Lee',
-    classType: 'Lecture',
-    group: '01',
-    term: '2026_MAR_S1',
-    sessionType: 'Lecture',
-    createdAt: '2026-03-04',
-    students: [
-      {
-        id: 'st-6',
-        studentNumber: '102700001',
-        name: 'Alya Sofia',
-        program: 'Bachelor of Computer Science',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-      {
-        id: 'st-7',
-        studentNumber: '102700002',
-        name: 'Brandon Lim',
-        program: 'Bachelor of Information Technology',
-        nationality: 'Malaysian',
-        schoolStatus: 'Current',
-      },
-    ],
-    sessions: [
-      {
-        id: 'se-5',
-        date: '18 Mar 2026',
-        time: '10:00 - 12:00',
-        venue: 'B203',
-        attendancePercentage: 84,
-        status: 'Completed',
-        presentCount: 34,
-        absentCount: 5,
-        lateCount: 2,
-        sickCount: 0,
-      },
-      {
-        id: 'se-6',
-        date: '25 Mar 2026',
-        time: '10:00 - 12:00',
-        venue: 'B203',
-        attendancePercentage: 90,
-        status: 'Completed',
-        presentCount: 37,
-        absentCount: 2,
-        lateCount: 1,
-        sickCount: 1,
-      },
-    ],
-  },
-];
+// Group multiple class-session rows by unitCode into a logical unit
+type UnitSummary = {
+  unitCode: string;
+  unitName: string;
+  classes: ApiUnit[];
+  // merged unique students across all class groups
+  students: ApiUnit['students'];
+  // all sessions across all class groups
+  sessions: ApiUnit['sessions'];
+  avgAttendance: number;
+  totalPresent: number;
+  totalAbsent: number;
+};
 
-function averageAttendanceForClass(item: LecturerClass) {
-  if (!item.sessions.length) return 0;
-  return Math.round(
-    item.sessions.reduce((sum, session) => sum + session.attendancePercentage, 0) /
-      item.sessions.length
-  );
+type AtRiskRow = {
+  name: string;
+  studentNumber: string;
+  unit: string;
+  sessionsPresent: number;
+  sessionsTotal: number;
+  rate: number;
+  risk: 'High Risk' | 'Medium';
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildUnitSummaries(units: ApiUnit[]): UnitSummary[] {
+  const map = new Map<string, UnitSummary>();
+
+  for (const u of units) {
+    if (!map.has(u.unitCode)) {
+      map.set(u.unitCode, {
+        unitCode: u.unitCode,
+        unitName: u.unitName,
+        classes: [],
+        students: [],
+        sessions: [],
+        avgAttendance: 0,
+        totalPresent: 0,
+        totalAbsent: 0,
+      });
+    }
+    const entry = map.get(u.unitCode)!;
+    entry.classes.push(u);
+
+    // Merge unique students by studentNumber
+    for (const s of u.students) {
+      if (!entry.students.find(x => x.studentNumber === s.studentNumber)) {
+        entry.students.push(s);
+      }
+    }
+    entry.sessions.push(...u.sessions);
+  }
+
+  // Calculate averages
+  for (const entry of map.values()) {
+    const totalPresent = entry.sessions.reduce((s, r) => s + r.presentCount, 0);
+    const totalAbsent  = entry.sessions.reduce((s, r) => s + r.absentCount, 0);
+    const total = totalPresent + totalAbsent;
+    entry.totalPresent = totalPresent;
+    entry.totalAbsent  = totalAbsent;
+    entry.avgAttendance = total > 0 ? Math.round((totalPresent / total) * 100) : 0;
+  }
+
+  return Array.from(map.values());
 }
 
-function riskLabel(rate: number) {
-  if (rate < 50) return 'High Risk';
-  if (rate < 75) return 'Medium';
-  return 'Stable';
+function buildAtRiskRows(units: ApiUnit[]): AtRiskRow[] {
+  // Per student per unit: count sessions present vs total
+  const key = (studentNum: string, unitCode: string) => `${studentNum}::${unitCode}`;
+
+  const presentMap  = new Map<string, number>();
+  const totalMap    = new Map<string, number>();
+  const nameMap     = new Map<string, string>();
+  const unitMap     = new Map<string, string>();
+
+  for (const u of units) {
+    const totalSessions = u.sessions.length;
+    if (totalSessions === 0) continue;
+
+    for (const s of u.students) {
+      const k = key(s.studentNumber, u.unitCode);
+      totalMap.set(k, (totalMap.get(k) ?? 0) + totalSessions);
+      nameMap.set(k, s.name);
+      unitMap.set(k, u.unitCode);
+
+      // Estimate per-student present using class-level attendance %
+      // (real per-student data would need a separate API)
+      const avgPct = u.sessions.reduce((sum, sess) => sum + sess.attendancePercentage, 0) / totalSessions;
+      const estimatedPresent = Math.round((avgPct / 100) * totalSessions);
+      presentMap.set(k, (presentMap.get(k) ?? 0) + estimatedPresent);
+    }
+  }
+
+  const rows: AtRiskRow[] = [];
+  for (const [k, total] of totalMap.entries()) {
+    const present = presentMap.get(k) ?? 0;
+    const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+    if (rate >= 75) continue; // only at-risk
+    const [studentNumber] = k.split('::');
+    rows.push({
+      name: nameMap.get(k) ?? '—',
+      studentNumber,
+      unit: unitMap.get(k) ?? '—',
+      sessionsPresent: present,
+      sessionsTotal: total,
+      rate,
+      risk: rate < 50 ? 'High Risk' : 'Medium',
+    });
+  }
+
+  return rows.sort((a, b) => a.rate - b.rate);
 }
 
-export default function ReportsAnalytics() {
-  const { data: session } = useSession();
+const CHART_COLORS = ['#ef4444', '#6366f1', '#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6'];
 
-  const [classes, setClasses] = useState<LecturerClass[]>(INITIAL_CLASSES);
-  const [timeRange, setTimeRange] = useState<'weekly' | 'monthly' | 'semester'>(
-    'weekly'
-  );
-  const [selectedUnitId, setSelectedUnitId] = useState<string>('all');
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function ReportsPage() {
+  const { data: authSession } = useSession();
+
+  const [rawUnits, setRawUnits]     = useState<ApiUnit[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
+  const [selectedCode, setSelectedCode] = useState('all');
+  const [trendView, setTrendView]   = useState<'session' | 'unit'>('session');
   const [studentSearch, setStudentSearch] = useState('');
 
+  // ── Fetch real data ─────────────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      const importedRaw = localStorage.getItem('lecturerImportedClasses');
-      if (!importedRaw) return;
-
-      const importedClasses: LecturerClass[] = JSON.parse(importedRaw);
-      if (!Array.isArray(importedClasses) || importedClasses.length === 0) return;
-
-      setClasses((prev) => {
-        const existingIds = new Set(prev.map((item) => item.id));
-        const uniqueImported = importedClasses.filter(
-          (item) => !existingIds.has(item.id)
-        );
-        return [...uniqueImported, ...prev];
-      });
-    } catch (error) {
-      console.error('Failed to load imported classes:', error);
+    async function load() {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/lecturer/unit');
+        if (!res.ok) throw new Error('Failed to load units');
+        const data: ApiUnit[] = await res.json();
+        setRawUnits(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
     }
+    load();
   }, []);
 
-  const filteredClasses = useMemo(() => {
-    if (selectedUnitId === 'all') return classes;
-    return classes.filter((item) => item.id === selectedUnitId);
-  }, [classes, selectedUnitId]);
+  // ── Derived data ────────────────────────────────────────────────────────────
 
-  const classAttendanceData = useMemo(() => {
-    return filteredClasses.map((item) => ({
-      name: item.unitCode,
-      attendance: averageAttendanceForClass(item),
-      students: item.students.length,
-      unitName: item.unitName,
-    }));
-  }, [filteredClasses]);
+  const unitSummaries = useMemo(() => buildUnitSummaries(rawUnits), [rawUnits]);
 
-  const weeklyTrendData = useMemo(() => {
-    const maxSessions = Math.max(
-      ...filteredClasses.map((item) => item.sessions.length),
-      0
-    );
+  const filteredSummaries = useMemo(() => {
+    if (selectedCode === 'all') return unitSummaries;
+    return unitSummaries.filter(u => u.unitCode === selectedCode);
+  }, [unitSummaries, selectedCode]);
 
-    return Array.from({ length: maxSessions }, (_, index) => {
-      const point: Record<string, string | number> = {
-        week: `Week ${index + 1}`,
-      };
+  // Bar chart data — one bar per unit
+  const barData = useMemo(() =>
+    filteredSummaries.map(u => ({
+      name: u.unitCode,
+      attendance: u.avgAttendance,
+      students: u.students.length,
+    }))
+  , [filteredSummaries]);
 
-      filteredClasses.forEach((item) => {
-        point[item.unitCode] = item.sessions[index]?.attendancePercentage ?? null;
+  // Line chart: per-session trend across all selected units
+  const sessionTrendData = useMemo(() => {
+    const maxSessions = Math.max(...filteredSummaries.map(u => u.sessions.length), 0);
+    return Array.from({ length: maxSessions }, (_, i) => {
+      const point: Record<string, string | number> = { label: `Session ${i + 1}` };
+      filteredSummaries.forEach(u => {
+        point[u.unitCode] = u.sessions[i]?.attendancePercentage ?? 0;
       });
-
       return point;
     });
-  }, [filteredClasses]);
+  }, [filteredSummaries]);
 
-  const monthlyTrendData = useMemo(() => {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+  // Line chart: per-unit average (single bar-style trend)
+  const unitTrendData = useMemo(() =>
+    filteredSummaries.map(u => ({ name: u.unitCode, avg: u.avgAttendance }))
+  , [filteredSummaries]);
 
-    return monthNames.map((month, index) => {
-      const values = filteredClasses
-        .map((item) => item.sessions[index]?.attendancePercentage)
-        .filter((value): value is number => typeof value === 'number');
-
-      const overall =
-        values.length > 0
-          ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
-          : 0;
-
-      return { month, overall };
-    });
-  }, [filteredClasses]);
-
-  const studentBreakdown = useMemo(() => {
-    const rows = filteredClasses.flatMap((item) => {
-      const average = averageAttendanceForClass(item);
-
-      return item.students.map((student, index) => {
-        const adjustment = (index % 4) * 7;
-        const attendance = Math.max(35, Math.min(98, average - adjustment));
-        const totalClasses = item.sessions.length > 0 ? item.sessions.length * 2 + 2 : 6;
-        const attendedClasses = Math.max(
-          0,
-          Math.round((attendance / 100) * totalClasses)
-        );
-
-        return {
-          name: student.name,
-          id: student.studentNumber,
-          unit: item.unitCode,
-          attendance,
-          classesAttended: `${attendedClasses}/${totalClasses}`,
-          status: riskLabel(attendance),
-        };
-      });
-    });
-
-    return rows.filter((row) => {
-      const matchesRisk = row.attendance < 75;
-      const matchesSearch =
-        row.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-        row.id.toLowerCase().includes(studentSearch.toLowerCase()) ||
-        row.unit.toLowerCase().includes(studentSearch.toLowerCase());
-
-      return matchesRisk && matchesSearch;
-    });
-  }, [filteredClasses, studentSearch]);
-
-  const stats = useMemo(() => {
-    const totalClasses = filteredClasses.length;
-    const totalStudents = filteredClasses.reduce(
-      (sum, item) => sum + item.students.length,
-      0
+  const atRiskRows = useMemo(() => {
+    const allRows = buildAtRiskRows(
+      selectedCode === 'all' ? rawUnits : rawUnits.filter(u => u.unitCode === selectedCode)
     );
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return allRows;
+    return allRows.filter(r =>
+      r.name.toLowerCase().includes(q) ||
+      r.studentNumber.toLowerCase().includes(q) ||
+      r.unit.toLowerCase().includes(q)
+    );
+  }, [rawUnits, selectedCode, studentSearch]);
 
-    const averages = filteredClasses.map((item) => averageAttendanceForClass(item));
-    const avgAttendance =
-      averages.length > 0
-        ? Math.round(averages.reduce((sum, value) => sum + value, 0) / averages.length)
-        : 0;
+  // Summary stats
+  const totalStudents = useMemo(() => {
+    const all = new Set<string>();
+    filteredSummaries.forEach(u => u.students.forEach(s => all.add(s.studentNumber)));
+    return all.size;
+  }, [filteredSummaries]);
 
-    const highRiskCount = studentBreakdown.filter(
-      (item) => item.status === 'High Risk'
-    ).length;
-    const mediumRiskCount = studentBreakdown.filter(
-      (item) => item.status === 'Medium'
-    ).length;
+  const totalSessions = useMemo(() =>
+    filteredSummaries.reduce((s, u) => s + u.sessions.length, 0)
+  , [filteredSummaries]);
 
-    return {
-      totalClasses,
-      totalStudents,
-      avgAttendance,
-      atRiskCount: studentBreakdown.length,
-      highRiskCount,
-      mediumRiskCount,
-    };
-  }, [filteredClasses, studentBreakdown]);
+  const overallAvg = useMemo(() => {
+    if (!filteredSummaries.length) return 0;
+    return Math.round(filteredSummaries.reduce((s, u) => s + u.avgAttendance, 0) / filteredSummaries.length);
+  }, [filteredSummaries]);
 
-  const selectedUnit = useMemo(() => {
-    if (selectedUnitId === 'all') return null;
-    return classes.find((item) => item.id === selectedUnitId) ?? null;
-  }, [classes, selectedUnitId]);
+  // ── Export ──────────────────────────────────────────────────────────────────
 
-  const handleExportReport = () => {
-    const lines: string[] = [];
-
-    lines.push('Lecturer Reports Export');
-    lines.push(`Generated by: ${session?.user?.name ?? 'Lecturer'}`);
-    lines.push(`Selected Unit: ${selectedUnit ? `${selectedUnit.unitCode} - ${selectedUnit.unitName}` : 'All Units'}`);
-    lines.push(`Average Attendance: ${stats.avgAttendance}%`);
-    lines.push(`At-Risk Students: ${stats.atRiskCount}`);
-    lines.push('');
-
-    lines.push('Unit Summary');
-    classAttendanceData.forEach((item) => {
-      lines.push(`${item.name}: ${item.attendance}% (${item.students} students)`);
-    });
-
-    lines.push('');
-    lines.push('At-Risk Students');
-    studentBreakdown.forEach((item) => {
-      lines.push(
-        `${item.name} | ${item.id} | ${item.unit} | ${item.attendance}% | ${item.classesAttended} | ${item.status}`
-      );
-    });
-
-    const blob = new Blob([lines.join('\n')], {
-      type: 'text/plain;charset=utf-8;',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    link.href = url;
-    link.download = selectedUnit
-      ? `${selectedUnit.unitCode}_report.txt`
-      : 'lecturer_reports.txt';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const insightCards = useMemo(() => {
-    const lowest = classAttendanceData
-      .slice()
-      .sort((a, b) => a.attendance - b.attendance)[0];
-    const highest = classAttendanceData
-      .slice()
-      .sort((a, b) => b.attendance - a.attendance)[0];
-
-    return [
-      {
-        title: 'Critical Insight',
-        body: lowest
-          ? `${lowest.name} currently has the lowest tracked attendance at ${lowest.attendance}%.`
-          : 'No class insight available yet.',
-        theme: 'from-red-600 to-red-700',
-      },
-      {
-        title: 'Pattern Detected',
-        body:
-          timeRange === 'weekly'
-            ? 'Weekly trend view helps compare attendance changes across units.'
-            : 'Monthly trend view helps observe broader attendance movement over time.',
-        theme: 'from-orange-500 to-orange-600',
-      },
-      {
-        title: 'Positive Trend',
-        body: highest
-          ? `${highest.name} is the strongest tracked unit at ${highest.attendance}% average attendance.`
-          : 'No positive trend available yet.',
-        theme: 'from-green-600 to-green-700',
-      },
+  function handleExport() {
+    const lines: string[] = [
+      'AttendSync — Attendance Report',
+      `Generated by: ${authSession?.user?.name ?? 'Lecturer'}`,
+      `Date: ${new Date().toLocaleString()}`,
+      `Filter: ${selectedCode === 'all' ? 'All Units' : selectedCode}`,
+      '',
+      '=== Unit Summary ===',
+      ...filteredSummaries.map(u =>
+        `${u.unitCode} | ${u.unitName} | Avg: ${u.avgAttendance}% | Students: ${u.students.length} | Sessions: ${u.sessions.length}`
+      ),
+      '',
+      '=== At-Risk Students (<75%) ===',
+      ...atRiskRows.map(r =>
+        `${r.name} | ${r.studentNumber} | ${r.unit} | ${r.rate}% (${r.sessionsPresent}/${r.sessionsTotal}) | ${r.risk}`
+      ),
     ];
-  }, [classAttendanceData, timeRange]);
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `attendsync_report_${selectedCode}_${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Loading / error ─────────────────────────────────────────────────────────
+
+  if (loading) return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex items-center gap-3 text-gray-400">
+        <Loader2 size={22} className="animate-spin" />
+        <span className="text-sm">Loading reports…</span>
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="rounded-2xl border border-red-100 bg-red-50 px-6 py-8 text-center max-w-sm">
+        <AlertTriangle size={28} className="mx-auto mb-3 text-red-500" />
+        <p className="font-semibold text-red-700">{error}</p>
+        <button onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-[#E4002B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#C70026]">
+          Retry
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
+
+      {/* Header */}
       <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
@@ -501,8 +319,7 @@ export default function ReportsAnalytics() {
             Analytics & Reports
           </h1>
           <p className="mt-2 text-sm leading-7 text-gray-500">
-            Decision-making dashboard for attendance insights, class tracking, and
-            at-risk student review.
+            Real-time attendance insights, trends, and at-risk student tracking across your units.
           </p>
         </div>
 
@@ -511,509 +328,399 @@ export default function ReportsAnalytics() {
             href="/lecturer/dashboard"
             className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
-            <ArrowLeft size={16} />
-            Back to Dashboard
+            <ArrowLeft size={16} /> Back to Dashboard
           </Link>
-
           <button
             type="button"
-            onClick={handleExportReport}
+            onClick={handleExport}
             className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
           >
-            <Download size={16} />
-            Export Report
+            <Download size={16} /> Export Report
           </button>
         </div>
       </section>
 
+      {/* Filters */}
       <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[1fr_220px_220px]">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label
-              htmlFor="student-search"
-              className="mb-2 block text-sm font-semibold text-gray-700"
-            >
-              Search at-risk students
-            </label>
-            <div className="relative">
-              <Search
-                size={18}
-                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-              <input
-                id="student-search"
-                type="text"
-                value={studentSearch}
-                onChange={(e) => setStudentSearch(e.target.value)}
-                placeholder="Search by student name, ID, or unit"
-                className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="selected-unit"
-              className="mb-2 block text-sm font-semibold text-gray-700"
-            >
-              Tracked Unit
-            </label>
+            <label className="mb-2 block text-sm font-semibold text-gray-700">Unit Filter</label>
             <select
-              id="selected-unit"
-              value={selectedUnitId}
-              onChange={(e) => setSelectedUnitId(e.target.value)}
+              value={selectedCode}
+              onChange={e => setSelectedCode(e.target.value)}
               className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
             >
               <option value="all">All Units</option>
-              {classes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.unitCode} - {item.unitName}
+              {unitSummaries.map(u => (
+                <option key={u.unitCode} value={u.unitCode}>
+                  {u.unitCode} — {u.unitName}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label
-              htmlFor="time-range"
-              className="mb-2 block text-sm font-semibold text-gray-700"
-            >
-              Trend View
-            </label>
+            <label className="mb-2 block text-sm font-semibold text-gray-700">Trend View</label>
             <select
-              id="time-range"
-              value={timeRange}
-              onChange={(e) =>
-                setTimeRange(e.target.value as 'weekly' | 'monthly' | 'semester')
-              }
+              value={trendView}
+              onChange={e => setTrendView(e.target.value as 'session' | 'unit')}
               className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
             >
-              <option value="weekly">Weekly View</option>
-              <option value="monthly">Monthly View</option>
-              <option value="semester">Semester View</option>
+              <option value="session">Per Session</option>
+              <option value="unit">Per Unit Average</option>
             </select>
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-gray-700">
-          <span className="font-semibold text-[#E4002B]">Tracked unit:</span>{' '}
-          {selectedUnit
-            ? `${selectedUnit.unitCode} - ${selectedUnit.unitName}`
-            : 'All units currently loaded in lecturer pages'}
-        </div>
+        {unitSummaries.length === 0 && (
+          <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            No sessions recorded yet. Start a live attendance session to see data here.
+          </div>
+        )}
       </section>
 
+      {/* Summary cards */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Total Classes"
-          value={stats.totalClasses}
-          note="Active in current view"
-        />
-        <MetricCard
-          label="Avg Attendance"
-          value={`${stats.avgAttendance}%`}
-          note="Based on tracked sessions"
-          valueClassName="text-green-600"
-        />
-        <MetricCard
-          label="At-Risk Students"
-          value={stats.atRiskCount}
-          note={`${stats.highRiskCount} High · ${stats.mediumRiskCount} Medium`}
-          valueClassName="text-red-600"
-        />
-        <MetricCard
-          label="Total Students"
-          value={stats.totalStudents}
-          note="Across selected units"
-        />
+        {[
+          { label: 'Units', value: filteredSummaries.length, note: 'In current view', icon: <BookOpen size={18} className="text-gray-300" />, cls: 'text-gray-900' },
+          { label: 'Avg Attendance', value: `${overallAvg}%`, note: 'Across selected units', icon: <BarChart3 size={18} className="text-green-400" />, cls: overallAvg >= 75 ? 'text-green-600' : 'text-red-600' },
+          { label: 'At-Risk Students', value: buildAtRiskRows(selectedCode === 'all' ? rawUnits : rawUnits.filter(u => u.unitCode === selectedCode)).length, note: 'Below 75% threshold', icon: <ShieldAlert size={18} className="text-red-400" />, cls: 'text-red-600' },
+          { label: 'Total Students', value: totalStudents, note: `Across ${totalSessions} sessions`, icon: <Users size={18} className="text-gray-300" />, cls: 'text-gray-900' },
+        ].map(({ label, value, note, icon, cls }) => (
+          <div key={label} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">{label}</p>
+              {icon}
+            </div>
+            <p className={`text-4xl font-black tracking-tight ${cls}`}>{value}</p>
+            <p className="mt-2 text-xs text-gray-500">{note}</p>
+          </div>
+        ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="font-semibold text-base sm:text-lg">
-              Attendance % by Unit
-            </h2>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="h-3 w-3 rounded-full bg-red-500" />
-              <span>Below 75%</span>
-              <span className="ml-2 h-3 w-3 rounded-full bg-green-500" />
-              <span>75% and above</span>
-            </div>
-          </div>
+      {/* Charts */}
+      {unitSummaries.length > 0 && (
+        <section className="grid gap-6 xl:grid-cols-2">
 
-          <div className="h-72 w-full sm:h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={classAttendanceData}
-                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 12 }}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                  domain={[0, 100]}
-                  tickFormatter={(value) => `${value}%`}
-                />
-                <Tooltip
-                  formatter={(value) => [`${value}%`, 'Attendance']}
-                  contentStyle={{
-                    borderRadius: '8px',
-                    border: 'none',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                  }}
-                />
-                <ReferenceLine
-                  y={75}
-                  stroke="#ef4444"
-                  strokeDasharray="3 3"
-                  label={{
-                    value: 'Risk Threshold (75%)',
-                    position: 'right',
-                    fill: '#ef4444',
-                    fontSize: 10,
-                  }}
-                />
-                <Bar dataKey="attendance" radius={[4, 4, 0, 0]}>
-                  {classAttendanceData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.attendance >= 75 ? '#22c55e' : '#ef4444'}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-4 border-t pt-4 text-center text-xs text-gray-600">
-            <div>
-              <p className="font-semibold text-green-600">
-                {classAttendanceData.filter((item) => item.attendance >= 75).length}{' '}
-                Units
-              </p>
-              <p>Above threshold</p>
+          {/* Bar chart — attendance per unit */}
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Attendance by Unit</h2>
+                <p className="mt-1 text-xs text-gray-400">Average across all sessions per unit</p>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-green-500" /> ≥75%</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-500" /> &lt;75%</span>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-red-600">
-                {classAttendanceData.filter((item) => item.attendance < 75).length}{' '}
-                Units
-              </p>
-              <p>Below threshold</p>
-            </div>
-            <div>
-              <p className="font-semibold text-gray-900">
-                Lowest:{' '}
-                {classAttendanceData.length > 0
-                  ? classAttendanceData.slice().sort((a, b) => a.attendance - b.attendance)[0]
-                      .name
-                  : 'N/A'}
-              </p>
-              <p>
-                {classAttendanceData.length > 0
-                  ? `${classAttendanceData
-                      .slice()
-                      .sort((a, b) => a.attendance - b.attendance)[0].attendance}% attendance`
-                  : 'No data'}
-              </p>
-            </div>
-          </div>
-        </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-base sm:text-lg">Attendance Trends</h2>
-            <div className="flex rounded-lg bg-gray-100 p-1">
-              <button
-                onClick={() => setTimeRange('weekly')}
-                className={`px-3 py-1 text-xs rounded-md transition-all ${
-                  timeRange === 'weekly'
-                    ? 'bg-white shadow-sm text-gray-900'
-                    : 'text-gray-500'
-                }`}
-              >
-                Weekly
-              </button>
-              <button
-                onClick={() => setTimeRange('monthly')}
-                className={`px-3 py-1 text-xs rounded-md transition-all ${
-                  timeRange === 'monthly'
-                    ? 'bg-white shadow-sm text-gray-900'
-                    : 'text-gray-500'
-                }`}
-              >
-                Monthly
-              </button>
-            </div>
-          </div>
-
-          <div className="h-72 w-full sm:h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              {timeRange === 'weekly' || timeRange === 'semester' ? (
-                <LineChart
-                  data={weeklyTrendData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis
-                    dataKey="week"
-                    tick={{ fontSize: 11 }}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                    domain={[60, 100]}
-                    tickFormatter={(value) => `${value}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: 'none',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    }}
-                  />
-                  <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="3 3" />
-                  {filteredClasses.map((item, index) => {
-                    const colors = ['#ef4444', '#6366f1', '#14b8a6', '#ec4899', '#f59e0b', '#8b5cf6'];
-                    return (
-                      <Line
-                        key={item.id}
-                        type="monotone"
-                        dataKey={item.unitCode}
-                        stroke={colors[index % colors.length]}
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        name={item.unitCode}
-                      />
-                    );
-                  })}
-                </LineChart>
-              ) : (
-                <LineChart
-                  data={monthlyTrendData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 11 }}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    axisLine={{ stroke: '#e5e7eb' }}
-                    domain={[70, 95]}
-                    tickFormatter={(value) => `${value}%`}
-                  />
-                  <Tooltip
-                    formatter={(value) => [`${value}%`, 'Overall Attendance']}
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: 'none',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    }}
-                  />
-                  <ReferenceLine
-                    y={75}
-                    stroke="#ef4444"
-                    strokeDasharray="3 3"
-                    label={{
-                      value: '75% Threshold',
-                      position: 'right',
-                      fill: '#ef4444',
-                      fontSize: 10,
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="overall"
-                    stroke="#dc2626"
-                    strokeWidth={3}
-                    dot={{ r: 4, fill: '#dc2626' }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs">
-            {timeRange === 'weekly' || timeRange === 'semester' ? (
-              filteredClasses.map((item) => (
-                <span key={item.id} className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-gray-400" />
-                  {item.unitCode}
-                </span>
-              ))
+            {barData.length === 0 ? (
+              <div className="flex h-64 items-center justify-center text-sm text-gray-400">No session data yet</div>
             ) : (
-              <p className="text-gray-500">
-                Broader monthly attendance pattern for the current report view
-              </p>
+              <>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+                      <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+                      <Tooltip
+                        formatter={(v, _name, props) => [`${v}%`, props.payload.name]}
+                        contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                      />
+                      <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="4 3" label={{ value: '75%', position: 'insideTopRight', fill: '#ef4444', fontSize: 10 }} />
+                      <Bar dataKey="attendance" radius={[6, 6, 0, 0]}>
+                        {barData.map((entry, i) => (
+                          <Cell key={i} fill={entry.attendance >= 75 ? '#22c55e' : '#ef4444'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-3 border-t border-gray-100 pt-4 text-center text-xs">
+                  <div>
+                    <p className="font-bold text-green-600">{barData.filter(d => d.attendance >= 75).length} unit{barData.filter(d => d.attendance >= 75).length !== 1 ? 's' : ''}</p>
+                    <p className="mt-0.5 text-gray-400">Above threshold</p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-red-600">{barData.filter(d => d.attendance < 75).length} unit{barData.filter(d => d.attendance < 75).length !== 1 ? 's' : ''}</p>
+                    <p className="mt-0.5 text-gray-400">Below threshold</p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900">{overallAvg}%</p>
+                    <p className="mt-0.5 text-gray-400">Overall avg</p>
+                  </div>
+                </div>
+              </>
             )}
           </div>
-        </div>
-      </section>
 
-      <section className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-            <span className="text-red-500">⚠️</span> At-Risk Students (&lt;75% Attendance)
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/lecturer/classes"
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-            >
-              Filter by Unit
-            </Link>
-            <button className="rounded-lg bg-red-100 px-3 py-1.5 text-xs text-red-700 hover:bg-red-200 transition-colors">
-              Send Alerts
-            </button>
+          {/* Line chart — trend */}
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Attendance Trend</h2>
+                <p className="mt-1 text-xs text-gray-400">
+                  {trendView === 'session' ? 'Attendance % per recorded session' : 'Average per unit comparison'}
+                </p>
+              </div>
+              <div className="flex rounded-xl border border-gray-100 bg-gray-50 p-1 text-xs">
+                <button
+                  onClick={() => setTrendView('session')}
+                  className={`rounded-lg px-3 py-1.5 font-semibold transition ${trendView === 'session' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Per Session
+                </button>
+                <button
+                  onClick={() => setTrendView('unit')}
+                  className={`rounded-lg px-3 py-1.5 font-semibold transition ${trendView === 'unit' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Per Unit
+                </button>
+              </div>
+            </div>
+
+            {(trendView === 'session' ? sessionTrendData : unitTrendData).length === 0 ? (
+              <div className="flex h-64 items-center justify-center text-sm text-gray-400">No session data yet</div>
+            ) : (
+              <>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {trendView === 'session' ? (
+                      <LineChart data={sessionTrendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+                        <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+                        <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} formatter={(v) => [`${v}%`]} />
+                        <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="4 3" />
+                        {filteredSummaries.map((u, i) => (
+                          <Line
+                            key={u.unitCode}
+                            type="monotone"
+                            dataKey={u.unitCode}
+                            stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                            strokeWidth={2.5}
+                            dot={{ r: 4, strokeWidth: 0 }}
+                            activeDot={{ r: 6 }}
+                          />
+                        ))}
+                      </LineChart>
+                    ) : (
+                      <BarChart data={unitTrendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+                        <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} axisLine={{ stroke: '#e5e7eb' }} />
+                        <Tooltip formatter={v => [`${v}%`, 'Avg Attendance']} contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
+                        <ReferenceLine y={75} stroke="#ef4444" strokeDasharray="4 3" />
+                        <Bar dataKey="avg" radius={[6, 6, 0, 0]}>
+                          {unitTrendData.map((entry, i) => (
+                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Legend */}
+                {trendView === 'session' && filteredSummaries.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-3 border-t border-gray-100 pt-4">
+                    {filteredSummaries.map((u, i) => (
+                      <span key={u.unitCode} className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                        {u.unitCode}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Unit breakdown table */}
+      {filteredSummaries.length > 0 && (
+        <section className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-gray-100 px-6 py-4">
+            <h2 className="text-base font-bold text-gray-900">Unit Breakdown</h2>
+            <p className="mt-1 text-xs text-gray-400">Summary across all class groups</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-gray-100 bg-gray-50">
+                <tr>
+                  {['Unit Code', 'Unit Name', 'Students', 'Sessions', 'Present', 'Absent', 'Avg Attendance'].map(h => (
+                    <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filteredSummaries.map(u => (
+                  <tr key={u.unitCode} className="hover:bg-rose-50/30 transition-colors">
+                    <td className="px-5 py-4">
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-bold text-[#E4002B]">{u.unitCode}</span>
+                    </td>
+                    <td className="px-5 py-4 font-medium text-gray-900">{u.unitName}</td>
+                    <td className="px-5 py-4 text-gray-600">{u.students.length}</td>
+                    <td className="px-5 py-4 text-gray-600">{u.sessions.length}</td>
+                    <td className="px-5 py-4 font-semibold text-green-600">{u.totalPresent}</td>
+                    <td className="px-5 py-4 font-semibold text-red-500">{u.totalAbsent}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className={`h-full rounded-full ${u.avgAttendance >= 75 ? 'bg-green-500' : 'bg-red-500'}`}
+                            style={{ width: `${u.avgAttendance}%` }}
+                          />
+                        </div>
+                        <span className={`font-bold text-sm ${u.avgAttendance >= 75 ? 'text-green-600' : 'text-red-600'}`}>
+                          {u.avgAttendance}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* At-risk table */}
+      <section className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
+              <AlertTriangle size={16} className="text-red-500" />
+              At-Risk Students
+              <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-600">
+                &lt;75%
+              </span>
+            </h2>
+            <p className="mt-1 text-xs text-gray-400">
+              Students below the 75% attendance threshold
+            </p>
+          </div>
+
+          <div className="relative w-full sm:w-72">
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by name, ID or unit…"
+              value={studentSearch}
+              onChange={e => setStudentSearch(e.target.value)}
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-4 text-sm outline-none transition focus:border-[#E4002B] focus:bg-white"
+            />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[720px] w-full text-sm">
-            <thead className="border-b border-gray-200 text-gray-500">
+          <table className="min-w-[700px] w-full text-sm">
+            <thead className="border-b border-gray-100 bg-gray-50">
               <tr>
-                <th className="py-3 text-left font-medium">Student Name</th>
-                <th className="py-3 text-left font-medium">Student ID</th>
-                <th className="py-3 text-left font-medium">Unit</th>
-                <th className="py-3 text-left font-medium">Attendance %</th>
-                <th className="py-3 text-left font-medium">Classes Attended</th>
-                <th className="py-3 text-left font-medium">Risk Level</th>
-                <th className="py-3 text-left font-medium">Action</th>
+                {['Student Name', 'Student ID', 'Unit', 'Attendance', 'Sessions', 'Risk Level'].map(h => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400">{h}</th>
+                ))}
               </tr>
             </thead>
-            <tbody>
-              {studentBreakdown.length > 0 ? (
-                studentBreakdown.map((student) => (
-                  <tr
-                    key={`${student.id}-${student.unit}`}
-                    className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="py-3 font-medium text-gray-900">{student.name}</td>
-                    <td className="py-3 font-mono text-xs text-gray-600">{student.id}</td>
-                    <td className="py-3 text-gray-600">{student.unit}</td>
-                    <td className="py-3">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`font-semibold ${
-                            student.attendance < 50
-                              ? 'text-red-600'
-                              : student.attendance < 65
-                              ? 'text-orange-600'
-                              : 'text-yellow-600'
-                          }`}
-                        >
-                          {student.attendance}%
-                        </span>
-                        <div className="h-1.5 w-16 rounded-full bg-gray-200">
+            <tbody className="divide-y divide-gray-50">
+              {atRiskRows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-sm text-gray-400">
+                    {rawUnits.length === 0
+                      ? 'No session data yet — start a live attendance session first.'
+                      : studentSearch
+                        ? 'No students matched your search.'
+                        : 'No at-risk students found for this filter. Great job! 🎉'}
+                  </td>
+                </tr>
+              ) : (
+                atRiskRows.map((r, i) => (
+                  <tr key={`${r.studentNumber}-${r.unit}-${i}`} className="hover:bg-rose-50/30 transition-colors">
+                    <td className="px-5 py-3.5 font-medium text-gray-900">{r.name}</td>
+                    <td className="px-5 py-3.5 font-mono text-xs text-gray-500">{r.studentNumber}</td>
+                    <td className="px-5 py-3.5">
+                      <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{r.unit}</span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-100">
                           <div
-                            className={`h-1.5 rounded-full ${
-                              student.attendance < 50
-                                ? 'bg-red-500'
-                                : student.attendance < 65
-                                ? 'bg-orange-500'
-                                : 'bg-yellow-500'
-                            }`}
-                            style={{ width: `${student.attendance}%` }}
+                            className={`h-full rounded-full ${r.rate < 50 ? 'bg-red-500' : 'bg-amber-400'}`}
+                            style={{ width: `${r.rate}%` }}
                           />
                         </div>
+                        <span className={`font-bold text-sm ${r.rate < 50 ? 'text-red-600' : 'text-amber-600'}`}>
+                          {r.rate}%
+                        </span>
                       </div>
                     </td>
-                    <td className="py-3 text-gray-600">{student.classesAttended}</td>
-                    <td className="py-3">
-                      <span
-                        className={`inline-block rounded-md px-2 py-1 text-xs font-medium ${
-                          student.status === 'High Risk'
-                            ? 'bg-red-100 text-red-600'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                      >
-                        {student.status}
-                      </span>
+                    <td className="px-5 py-3.5 text-gray-500 text-xs">
+                      {r.sessionsPresent} / {r.sessionsTotal}
                     </td>
-                    <td className="py-3">
-                      <Link
-                        href="/lecturer/attendance"
-                        className="text-xs font-medium text-red-600 hover:text-red-800"
-                      >
-                        View Attendance →
-                      </Link>
+                    <td className="px-5 py-3.5">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                        r.risk === 'High Risk'
+                          ? 'bg-red-50 text-red-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}>
+                        {r.risk}
+                      </span>
                     </td>
                   </tr>
                 ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center text-sm text-gray-500">
-                    No at-risk students found for the current filters.
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-gray-500">
-          <p>
-            Showing {studentBreakdown.length} at-risk students out of {stats.totalStudents}{' '}
-            total in the current view
-          </p>
-          <div className="flex gap-2">
-            <button className="rounded border border-gray-300 px-3 py-1 hover:bg-gray-50">
-              Previous
-            </button>
-            <button className="rounded border border-gray-300 px-3 py-1 hover:bg-gray-50">
-              Next
-            </button>
+        {atRiskRows.length > 0 && (
+          <div className="border-t border-gray-100 px-6 py-3 text-xs text-gray-400">
+            Showing {atRiskRows.length} student{atRiskRows.length !== 1 ? 's' : ''} below the 75% threshold
           </div>
-        </div>
+        )}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        {insightCards.map((card) => (
-          <div
-            key={card.title}
-            className={`rounded-xl bg-gradient-to-br ${card.theme} p-5 text-white shadow-md`}
-          >
-            <p className="mb-2 text-xs uppercase tracking-wide opacity-90">
-              {card.title}
-            </p>
-            <p className="text-lg font-semibold">{card.body}</p>
-          </div>
-        ))}
-      </section>
-    </div>
-  );
-}
+      {/* Insight cards */}
+      {filteredSummaries.length > 0 && (() => {
+        const sorted = [...filteredSummaries].sort((a, b) => a.avgAttendance - b.avgAttendance);
+        const lowest  = sorted[0];
+        const highest = sorted[sorted.length - 1];
+        const highRisk = buildAtRiskRows(selectedCode === 'all' ? rawUnits : rawUnits.filter(u => u.unitCode === selectedCode)).filter(r => r.risk === 'High Risk').length;
 
-function MetricCard({
-  label,
-  value,
-  note,
-  valueClassName = 'text-gray-900',
-}: {
-  label: string;
-  value: string | number;
-  note: string;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-        {label}
-      </p>
-      <p className={`mt-3 text-4xl font-black tracking-tight ${valueClassName}`}>
-        {value}
-      </p>
-      <p className="mt-2 text-xs text-gray-500">{note}</p>
+        return (
+          <section className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-3xl bg-gradient-to-br from-red-600 to-red-700 p-5 text-white shadow-md shadow-red-100">
+              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-white/70">Needs Attention</p>
+              <p className="text-lg font-bold leading-snug">
+                {lowest
+                  ? `${lowest.unitCode} has the lowest attendance at ${lowest.avgAttendance}%.`
+                  : 'No data yet.'}
+              </p>
+            </div>
+            <div className="rounded-3xl bg-gradient-to-br from-amber-500 to-orange-500 p-5 text-white shadow-md shadow-orange-100">
+              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-white/70">At-Risk Count</p>
+              <p className="text-lg font-bold leading-snug">
+                {highRisk > 0
+                  ? `${highRisk} student${highRisk !== 1 ? 's' : ''} are High Risk and below 50% attendance.`
+                  : 'No high-risk students detected right now.'}
+              </p>
+            </div>
+            <div className="rounded-3xl bg-gradient-to-br from-green-600 to-emerald-600 p-5 text-white shadow-md shadow-green-100">
+              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-white/70">Best Performing</p>
+              <p className="text-lg font-bold leading-snug">
+                {highest
+                  ? `${highest.unitCode} leads with ${highest.avgAttendance}% average attendance.`
+                  : 'No data yet.'}
+              </p>
+            </div>
+          </section>
+        );
+      })()}
+
     </div>
   );
 }
