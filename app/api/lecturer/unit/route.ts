@@ -82,8 +82,8 @@ export async function GET() {
           group: cs.groupNo ?? '',
           day,
           time,
-          location: '',               
-          lecturer: '',               
+          location: cs.location || '',               
+          lecturer: session.user.name || '',               
           students,
           sessions: [{
             id: cs.id,

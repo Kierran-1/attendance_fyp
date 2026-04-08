@@ -21,7 +21,7 @@ type UnitInput = {
   groupNo?: string;     // e.g. "01", "02"
   day?: string;         // e.g. "Tue"
   time?: string;        // e.g. "13:00 - 15:00"
-  room?: string;
+  location?: string;
   lecturer?: string;
 };
 
@@ -138,12 +138,12 @@ export async function POST(request: NextRequest) {
     classSession = await prisma.classSession.create({
       data: {
         unitRegistrationId: lecturerReg.id,
-        
         lecturerId: userId,
         sessionName: sessionNameEnum,
         sessionTime,
         sessionDuration: durationMinutes,
         groupNo,
+        location: unitInput.location || '', // Added location here
       },
     });
   }

@@ -78,7 +78,7 @@ interface ParsedSheet {
     group?: string;
     day?: string;
     time?: string;
-    room?: string;
+    location?: string;
     lecturer?: string;
   };
   students: any[];
@@ -315,13 +315,13 @@ export default function ClassesPage() {
     const group = classParts[1] || "";
     const day = classParts[2] || "";
     const time = classParts[3] || "";
-    const room = classParts[4] || "";
+    const location = classParts[4] || "";
     const lecturer = classParts[5] || "";
     const coreHeaders = ["Sl.No","Student Number","Empty","Student Name","Program","Registered Course","Nationality","School Status"];
     const studentData = allData.slice(7)
       .map((row: any[]) => { const p = [...row]; while (p.length < 8) p.push(''); return p.slice(0, 8); })
       .filter((row: any[]) => { const s = String(row[1]).trim(); return row[1] != null && s !== '' && !/^\D/.test(s); });
-    return { sheetName, metadata: { term, unitCode, unitName, classType, group, day, time, room, lecturer }, students: studentData, columns: coreHeaders };
+    return { sheetName, metadata: { term, unitCode, unitName, classType, group, day, time, location, lecturer }, students: studentData, columns: coreHeaders };
   };
 
   const handleFileUpload = (file: File) => {
@@ -374,7 +374,16 @@ export default function ClassesPage() {
           }).filter(Boolean);
         const response = await fetch('/api/lecturer/import', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ unit: { code: metadata.unitCode || 'UNKNOWN', name: metadata.unitName || 'Imported Unit', semester: metadata.term || '2026_MAR_S1', sessionType: metadata.classType || '', groupNo: metadata.group || '', day: metadata.day || '', time: metadata.time || '' }, students }),
+          body: JSON.stringify({ 
+            unit: { code: metadata.unitCode || 'UNKNOWN', 
+              name: metadata.unitName || 'Imported Unit', 
+              semester: metadata.term || '2026_MAR_S1', 
+              sessionType: metadata.classType || '', 
+              groupNo: metadata.group || '', 
+              day: metadata.day || '', 
+              time: metadata.time || '',
+              location: metadata.location || '',}, 
+              students }),
         });
         if (!response.ok) { const err = await response.json(); throw new Error(err.error || `Failed to import sheet "${sheet.sheetName}"`); }
         const result = await response.json();
@@ -685,7 +694,7 @@ export default function ClassesPage() {
                       </div>
                       <div className="flex items-center gap-3 text-gray-400">
                         {sheet.metadata.day && <span>{sheet.metadata.day}{sheet.metadata.time ? `, ${sheet.metadata.time}` : ''}</span>}
-                        {sheet.metadata.room && <span>{sheet.metadata.room}</span>}
+                        {sheet.metadata.location && <span>{sheet.metadata.location}</span>}
                         <span className="font-medium text-gray-600">{sheet.students.length} students</span>
                       </div>
                     </div>

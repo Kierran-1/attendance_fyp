@@ -112,6 +112,7 @@ model ClassSession {
   weekNumber         Int?
   subcomponent       String?
   groupNo            String?
+  location           String?
 
   unitRegistration  UnitRegistration        @relation(fields: [unitRegistrationId], references: [id], onDelete: Cascade)
   lecturer          User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
