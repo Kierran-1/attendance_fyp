@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     role: UserRole.STUDENT,
     nationality: s.nationality,
     programName: s.programName,
-    schoolStatus: s.schoolStatus,
+    schoolStatus: 'Active',
   }));
 
   try {
@@ -184,25 +184,24 @@ export async function POST(request: NextRequest) {
     const studentUserId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
     if (!studentUserId) continue;
     try {
-      // ✅ CORRECT
-await prisma.unitRegistration.upsert({
-  where: {
-    unitId_userId_name: {
-      unitId: unit.id,
-      userId: studentUserId,
-      name: scopeKey,
-    },
-  },
-  update: {},
-  create: {
-    unitId: unit.id,
-    userId: studentUserId,
-    userStatus: UserStatus.STUDENT,
-    year,
-    semester,
-    name: scopeKey,
-  },
-});
+      await prisma.unitRegistration.upsert({
+        where: {
+          unitId_userId_name: {
+            unitId: unit.id,
+            userId: studentUserId,
+            name: scopeKey,
+          },
+        },
+        update: {},
+        create: {
+          unitId: unit.id,
+          userId: studentUserId,
+          userStatus: UserStatus.STUDENT,
+          year,
+          semester,
+          name: scopeKey,
+        },
+      });
       enrolled++;
     } catch (err) {
       errors.push(String(err));

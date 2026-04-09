@@ -21,6 +21,7 @@ import {
   Check,
   BarChart3,
   GraduationCap,
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   FolderOpen,
@@ -895,10 +896,22 @@ export default function ClassesPage() {
                             <td className="px-6 py-3.5 font-medium text-gray-900">{student.name}</td>
                             <td className="px-6 py-3.5 text-gray-500 text-xs max-w-[180px] truncate">{student.program || '—'}</td>
                             <td className="px-6 py-3.5 text-gray-500 text-xs">{student.nationality || '—'}</td>
-                            <td className="px-6 py-3.5">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${student.schoolStatus === 'Active' ? 'bg-emerald-50 text-emerald-700' : student.schoolStatus === 'Inactive' ? 'bg-gray-100 text-gray-600' : 'bg-amber-50 text-amber-700'}`}>
-                                {student.schoolStatus || 'Active'}
-                              </span>
+                              <td className="px-8 py-5">
+                              {(() => {
+                                const status = student.schoolStatus || "Active";
+                                return (
+                                  <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                                    status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 
+                                    status === 'Inactive' ? 'bg-gray-100 text-gray-600' : 
+                                    'bg-amber-50 text-amber-700'
+                                  }`}>
+                                    {status === 'Active' && <CheckCircle2 className="w-3 h-3 text-emerald-400 mr-1.5" />}
+                                    {status === 'Inactive' && <X className="w-3 h-3 text-gray-400 mr-1.5" />}
+                                    {status === 'At Risk' && <AlertCircle className="w-3 h-3 text-amber-400 mr-1.5" />}
+                                    {status}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className="px-6 py-3.5 text-right">
                               <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1019,7 +1032,7 @@ export default function ClassesPage() {
             <FormField label="Program"><input type="text" value={editingStudent.program || ''} onChange={e => setEditingStudent(p => p ? { ...p, program: e.target.value } : null)} className={inputCls} /></FormField>
             <FormField label="Nationality"><input type="text" value={editingStudent.nationality || ''} onChange={e => setEditingStudent(p => p ? { ...p, nationality: e.target.value } : null)} className={inputCls} /></FormField>
             <FormField label="Status">
-              <select value={editingStudent.schoolStatus || 'Active'} onChange={e => setEditingStudent(p => p ? { ...p, schoolStatus: e.target.value } : null)} className={inputCls}>
+              <select value={editingStudent.schoolStatus} onChange={e => setEditingStudent(p => p ? { ...p, schoolStatus: e.target.value } : null)} className={inputCls}>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
                 <option value="Suspended">Suspended</option>
