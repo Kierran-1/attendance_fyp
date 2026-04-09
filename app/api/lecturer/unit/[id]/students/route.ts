@@ -33,9 +33,9 @@ export async function GET(
     where: {
       unitId: cs.unitRegistration.unitId,
       userStatus: UserStatus.STUDENT,
-      name: cs.groupNo ?? null,
+      name: cs.subcomponent ?? cs.groupNo ?? null,
     },
-    include: { user: { select: { id: true, name: true, email: true, programName: true, nationality: true } } },
+    include: { user: { select: { id: true, name: true, email: true, programName: true } } },
   });
 
   return NextResponse.json(studentRegistrations.map((reg) => ({
@@ -43,7 +43,6 @@ export async function GET(
     studentNumber: reg.user.email?.split('@')[0] ?? '—',
     name: reg.user.name ?? 'Unknown',
     program: reg.user.programName ?? '',
-    nationality: reg.user.nationality ?? '',
     email: reg.user.email,
   })));
 }
@@ -61,34 +60,25 @@ export async function POST(
   const cs = await resolveSession(classSessionId, session.user.id);
   if (!cs) return NextResponse.json({ error: 'Class session not found' }, { status: 404 });
 
-  let body: { email?: string; name?: string; programName?: string; nationality?: string };
+  let body: { email?: string; name?: string };
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: 'Invalid request body' }, { status: 400 }); }
 
-  const { email, name, programName, nationality } = body;
+  const { email, name } = body;
   if (!email) return NextResponse.json({ error: 'email is required' }, { status: 400 });
 
   const unitId = cs.unitRegistration.unitId;
-  const groupNo = cs.groupNo ?? null;
+  // Use subcomponent (scopeKey like "LA1-01") if available, fall back to groupNo
+  const scopeKey = cs.subcomponent ?? cs.groupNo ?? null;
 
   const studentUser = await prisma.user.upsert({
     where: { email },
-    update: { 
-      ...(name ? { name } : {}),
-      ...(programName ? { programName } : {}),
-      ...(nationality ? { nationality } : {}),
-    },
-    create: { 
-      email, 
-      name: name ?? null, 
-      programName: programName ?? null,
-      nationality: nationality ?? null,
-      role: UserRole.STUDENT 
-    },
+    update: { ...(name ? { name } : {}) },
+    create: { email, name: name ?? null, role: UserRole.STUDENT },
   });
 
   const existing = await prisma.unitRegistration.findFirst({
-    where: { unitId, userId: studentUser.id, userStatus: UserStatus.STUDENT, name: groupNo },
+    where: { unitId, userId: studentUser.id, userStatus: UserStatus.STUDENT, name: scopeKey },
   });
   if (existing) return NextResponse.json({ error: 'Student already enrolled' }, { status: 409 });
 
@@ -99,7 +89,7 @@ export async function POST(
       userStatus: UserStatus.STUDENT,
       year: cs.unitRegistration.year,
       semester: cs.unitRegistration.semester,
-      name: groupNo,
+      name: scopeKey,
     },
     include: { user: { select: { id: true, name: true, email: true, programName: true } } },
   });

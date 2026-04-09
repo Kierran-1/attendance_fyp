@@ -28,14 +28,14 @@ export async function DELETE(
     if (cs.unitRegistration.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const unitId = cs.unitRegistration.unitId;
-    const groupNo = cs.groupNo;
+    const scopeKey = cs.subcomponent ?? cs.groupNo ?? null;
 
     // Delete the class session (cascades to attendance records/data)
     await prisma.classSession.delete({ where: { id: classSessionId } });
 
-    // Also remove student enrollments scoped to this group
+    // Also remove student enrollments scoped to this session type+group
     await prisma.unitRegistration.deleteMany({
-      where: { unitId, userStatus: UserStatus.STUDENT, name: groupNo },
+      where: { unitId, userStatus: UserStatus.STUDENT, name: scopeKey },
     });
 
     // If no more class sessions exist for this unit registration, delete it too

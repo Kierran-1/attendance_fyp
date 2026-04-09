@@ -7,8 +7,9 @@ import { UserRole, UserStatus, SessionName } from '@prisma/client';
 type StudentInput = {
   studentId: string;
   name: string;
-  programName?: string | null;
+  major?: string | null;
   nationality?: string | null;
+  programName?: string | null;
   schoolStatus?: string | null;
 };
 
@@ -21,7 +22,7 @@ type UnitInput = {
   groupNo?: string;     // e.g. "01", "02"
   day?: string;         // e.g. "Tue"
   time?: string;        // e.g. "13:00 - 15:00"
-  location?: string;
+  room?: string;
   lecturer?: string;
 };
 
@@ -94,6 +95,8 @@ export async function POST(request: NextRequest) {
   const groupNo = unitInput.groupNo?.trim() || '01';
   const sessionType = unitInput.sessionType?.trim() || 'LE';
   const sessionNameEnum = toSessionName(sessionType);
+  // scopeKey uniquely identifies this class group, e.g. "LA1-01", "LE1-02"
+  const scopeKey = `${sessionType}-${groupNo}`;
 
   // Upsert Unit
   const unit = await prisma.unit.upsert({
@@ -116,7 +119,6 @@ export async function POST(request: NextRequest) {
         year,
         semester,
         name: null,
-        
       },
     });
   }
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
       unitRegistrationId: lecturerReg.id,
       sessionName: sessionNameEnum,
       groupNo,
+      subcomponent: scopeKey,
     },
   });
 
@@ -143,7 +146,7 @@ export async function POST(request: NextRequest) {
         sessionTime,
         sessionDuration: durationMinutes,
         groupNo,
-        location: unitInput.location || '', // Added location here
+        subcomponent: scopeKey, // store "LA1-01" so GET can look up students correctly
       },
     });
   }
@@ -154,8 +157,8 @@ export async function POST(request: NextRequest) {
     email: `${s.studentId}@students.swinburne.edu.my`,
     name: s.name,
     role: UserRole.STUDENT,
-    programName: s.programName ?? null,
-    nationality: s.nationality ?? null,
+     nationality: s.nationality, 
+    programName: s.programName,
   }));
 
   try {
@@ -169,21 +172,10 @@ export async function POST(request: NextRequest) {
     where: { email: { in: emails } },
     select: { id: true, email: true },
   });
-  for (const s of validStudents) {
-  const email = `${s.studentId}@students.swinburne.edu.my`;
-
-  await prisma.user.update({
-    where: { email },
-    data: {
-      programName: s.programName ?? null,
-      nationality: s.nationality ?? null,
-    },
-  });
-  }
   const userMap = new Map(users.map((u) => [u.email, u.id]));
 
-  // Enroll students with name=groupNo to scope them to this session group.
-  // @@unique([unitId, userId, name]) allows same student in different groups.
+  // Enroll students with name=scopeKey (e.g. "LA1-01") so each session type+group
+  // gets its own separate student rows via @@unique([unitId, userId, name]).
   let enrolled = 0;
   const errors: string[] = [];
 
@@ -196,7 +188,9 @@ export async function POST(request: NextRequest) {
           unitId_userId_name: {
             unitId: unit.id,
             userId: studentUserId,
-            name: groupNo,
+            name: scopeKey,
+            nationality: s.nationality,
+            programName: s.programName,
           },
         },
         update: {},
@@ -206,7 +200,7 @@ export async function POST(request: NextRequest) {
           userStatus: UserStatus.STUDENT,
           year,
           semester,
-          name: groupNo,
+          name: scopeKey,
         },
       });
       enrolled++;

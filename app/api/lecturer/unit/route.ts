@@ -30,14 +30,16 @@ export async function GET() {
 
     for (const reg of lecturerRegistrations) {
       for (const cs of reg.classSessions) {
-        // Fetch all students enrolled in this unit
+        // Fetch students scoped to this session's scopeKey (e.g. "LA1-01")
+        // stored in subcomponent during import to uniquely identify session type+group
         const studentRegistrations = await prisma.unitRegistration.findMany({
           where: {
             unitId: reg.unitId,
             userStatus: UserStatus.STUDENT,
+            name: cs.subcomponent ?? cs.groupNo ?? null,
           },
           include: {
-            user: { select: { id: true, name: true, email: true, programName: true } },
+            user: { select: { id: true, name: true, email: true, programName: true, nationality: true } },
           },
         });
 
@@ -46,6 +48,7 @@ export async function GET() {
           studentNumber: sr.user.email?.split('@')[0] ?? '—',
           name: sr.user.name ?? 'Unknown',
           program: sr.user.programName ?? '',
+          nationality: sr.user.nationality ?? '',
         }));
 
         const presentCount = cs.attendanceRecords.filter(
@@ -80,8 +83,8 @@ export async function GET() {
           group: cs.groupNo ?? '',
           day,
           time,
-          location: cs.location || '',               
-          lecturer: session.user.name || '',               
+          location: '',               // not stored
+          lecturer: '',               // not stored
           students,
           sessions: [{
             id: cs.id,
@@ -98,8 +101,7 @@ export async function GET() {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching units:', error);
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: 'Failed to fetch units', detail: msg }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch units' }, { status: 500 });
   }
 }
 
