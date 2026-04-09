@@ -87,6 +87,7 @@ model UnitRegistration {
   unitId     String
   userId     String
   name       String?
+  termCode   String?
   year       Int
   semester   String
   userStatus UserStatus
@@ -128,14 +129,17 @@ model ClassSession {
 model ClassAttendanceData {
   id                String   @id @default(cuid())
   classSessionId    String
+  studentId         String?
   scanPayload       Json
   scanMethod        String?
   verificationStage String?
+  challengeToken    String?
   createdAt         DateTime @default(now())
 
   classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
 
   @@index([classSessionId])
+  @@index([studentId])
 }
 
 // ── Attendance Record (verified) ──────────────────────────────────

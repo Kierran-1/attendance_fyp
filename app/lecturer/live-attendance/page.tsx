@@ -98,7 +98,7 @@ export default function LiveAttendancePage() {
 
   // QR scanner
   const [scanning, setScanning]             = useState(false);
-  const [scanResult, setScanResult]         = useState<{ ok: boolean; message: string } | null>(null);
+  const [scanResult, setScanResult]         = useState<{ ok: boolean; stage?: number; message: string } | null>(null);
   const [manualToken, setManualToken]       = useState('');
   const [submittingManual, setSubmittingManual] = useState(false);
 
@@ -322,9 +322,18 @@ export default function LiveAttendancePage() {
       const data = await res.json();
 
       if (res.ok) {
-        setScanResult({ ok: true, message: 'Attendance marked ✓' });
-        // Immediately refresh check-ins
-        if (sessionIdRef.current) fetchCheckIns(sessionIdRef.current);
+        if (data.stage === 1) {
+          setScanResult({
+            ok: true,
+            stage: 1,
+            message: data.alreadyScanned
+              ? `Stage 1 already done — ask ${data.studentName ?? 'student'} to show Stage 2 QR`
+              : `Stage 1 ✓ — ${data.studentName ?? 'Student'} — ask them to refresh and show Stage 2 QR`,
+          });
+        } else {
+          setScanResult({ ok: true, stage: 2, message: 'Stage 2 verified — marked PRESENT ✓' });
+          if (sessionIdRef.current) fetchCheckIns(sessionIdRef.current);
+        }
       } else {
         setScanResult({ ok: false, message: data.error ?? 'Scan failed' });
       }
@@ -332,7 +341,7 @@ export default function LiveAttendancePage() {
       setScanResult({ ok: false, message: 'Network error — please try again.' });
     }
 
-    setTimeout(() => setScanResult(null), 3500);
+    setTimeout(() => setScanResult(null), 5000);
   }
 
   async function handleManualSubmit() {
@@ -608,9 +617,11 @@ export default function LiveAttendancePage() {
                 {/* Scan result */}
                 {scanResult && (
                   <div className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
-                    scanResult.ok
+                    !scanResult.ok
+                      ? 'border border-red-100 bg-red-50 text-red-700'
+                      : scanResult.stage === 2
                       ? 'border border-green-100 bg-green-50 text-green-700'
-                      : 'border border-red-100 bg-red-50 text-red-700'
+                      : 'border border-violet-100 bg-violet-50 text-violet-700'
                   }`}>
                     {scanResult.ok
                       ? <CheckCircle2 size={16} />
@@ -712,10 +723,12 @@ export default function LiveAttendancePage() {
                         ? 'border-green-100 bg-green-50 text-green-700'
                         : record.status === 'LATE'
                           ? 'border-amber-100 bg-amber-50 text-amber-700'
-                          : 'border-red-100 bg-red-50 text-red-600'
+                          : record.status === 'PENDING'
+                            ? 'border-violet-100 bg-violet-50 text-violet-700'
+                            : 'border-red-100 bg-red-50 text-red-600'
                     }`}>
                       {record.status === 'PRESENT' && <CheckCircle2 size={11} />}
-                      {record.status}
+                      {record.status === 'PENDING' ? 'Stage 1 ✓' : record.status}
                     </span>
                     <p className="mt-1 text-[10px] text-gray-400">{formatTime(record.checkInTime)}</p>
                   </div>
