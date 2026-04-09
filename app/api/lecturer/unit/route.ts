@@ -39,7 +39,7 @@ export async function GET() {
             name: cs.subcomponent ?? cs.groupNo ?? null,
           },
           include: {
-            user: { select: { id: true, name: true, email: true, programName: true, nationality: true } },
+            user: { select: { id: true, name: true, email: true, programName: true, nationality: true, schoolStatus: true } },
           },
         });
 
@@ -49,6 +49,7 @@ export async function GET() {
           name: sr.user.name ?? 'Unknown',
           program: sr.user.programName ?? '',
           nationality: sr.user.nationality ?? '',
+          schoolStatus: sr.user.schoolStatus ?? 'Active',  
         }));
 
         const presentCount = cs.attendanceRecords.filter(
@@ -83,7 +84,7 @@ export async function GET() {
           group: cs.groupNo ?? '',
           day,
           time,
-          location: '',               // not stored
+          location: cs.location ?? '',               // not stored
           lecturer: '',               // not stored
           students,
           sessions: [{

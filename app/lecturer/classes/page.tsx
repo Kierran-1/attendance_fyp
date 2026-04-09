@@ -352,62 +352,90 @@ export default function ClassesPage() {
   const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }, []);
 
   const confirmImport = async () => {
-    if (!columnMapping.studentId || !columnMapping.name) { alert('Please map at least Student ID and Name columns'); return; }
-    if (!uploadFile || parsedSheets.length === 0) return;
-    setLoading(true);
-    try {
-      let totalCreated = 0, totalEnrolled = 0;
-      for (const sheet of parsedSheets) {
-        const { metadata, students: studentData, columns } = sheet;
-        const studentNumberCol = columns.indexOf(columnMapping.studentId);
-        const nameCol = columns.indexOf(columnMapping.name);
-        const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
-        const nationalityCol = columns.indexOf('Nationality');
-        const statusCol = columns.indexOf('School Status');
-        const students = studentData
-          .filter((row: any[]) => row[studentNumberCol] != null && String(row[studentNumberCol]).trim() !== '')
-          .map((row: any[]) => {
-            const studentId = row[studentNumberCol]?.toString().trim() || '';
-            const name = row[nameCol]?.toString().trim() || '';
-            if (!studentId || !name) return null;
-            return { studentId, name, programName: programCol >= 0 ? row[programCol]?.toString().trim() || null : null, nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || null : null, schoolStatus: statusCol >= 0 ? row[statusCol]?.toString().trim() || null : null };
-          }).filter(Boolean);
-        const response = await fetch('/api/lecturer/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            unit: {
-              code: metadata.unitCode || 'UNKNOWN',
-              name: metadata.unitName || 'Imported Unit',
-              semester: metadata.term || '2026_MAR_S1',
-              sessionType: metadata.classType || '',
-              groupNo: metadata.group || '',
-              day: metadata.day || '',
-              time: metadata.time || '',
-              location: metadata.location || '',
-              sessionId: `${metadata.unitCode}-${metadata.term}-${metadata.classType}-${metadata.group}-${metadata.day}-${metadata.time}-${metadata.location}`
-            },
-            students
-          })
-        });
+  if (!columnMapping.studentId || !columnMapping.name) { alert('Please map at least Student ID and Name columns'); return; }
+  if (!uploadFile || parsedSheets.length === 0) return;
+  setLoading(true);
+  try {
+    let totalCreated = 0, totalEnrolled = 0;
 
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || `Failed to import sheet "${sheet.sheetName}"`);
-        }
-        const refreshed = await fetch('/api/lecturer/unit');
-        if (!refreshed.ok) throw new Error('Failed to refresh class list');
-        const data = await refreshed.json();
-        setClasses(data);
-        setExpandedUnits(new Set<string>(data.map((c: ClassData) => c.unitCode)));
-        setUploadFile(null); setUploadPreview([]); setUploadColumns([]);
-        setColumnMapping({ studentId: '', name: '', program: '' });
-        setParsedSheets([]); setUploadStep(1); setViewMode('list');
-        alert(`Import complete!\n${totalCreated} new students created\n${totalEnrolled} enrollments added`);
+    for (const sheet of parsedSheets) {
+      const { metadata, students: studentData, columns } = sheet;
+      const studentNumberCol = columns.indexOf(columnMapping.studentId);
+      const nameCol = columns.indexOf(columnMapping.name);
+      const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
+      const nationalityCol = columns.indexOf('Nationality');
+      const statusCol = columns.indexOf('School Status');
+
+      const students = studentData
+        .filter((row: any[]) => row[studentNumberCol] != null && String(row[studentNumberCol]).trim() !== '')
+        .map((row: any[]) => {
+          const studentId = row[studentNumberCol]?.toString().trim() || '';
+          const name = row[nameCol]?.toString().trim() || '';
+          if (!studentId || !name) return null;
+          return {
+            studentId,
+            name,
+            programName: programCol >= 0 ? row[programCol]?.toString().trim() || null : null,
+            nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || null : null,
+            schoolStatus: statusCol >= 0 ? row[statusCol]?.toString().trim() || null : null,
+          };
+        }).filter(Boolean);
+
+      const response = await fetch('/api/lecturer/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          unit: {
+            code: metadata.unitCode || 'UNKNOWN',
+            name: metadata.unitName || 'Imported Unit',
+            semester: metadata.term || '2026_MAR_S1',
+            sessionType: metadata.classType || '',
+            groupNo: metadata.group || '',
+            day: metadata.day || '',
+            time: metadata.time || '',
+            location: metadata.location || '',
+          },
+          students,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || `Failed to import sheet "${sheet.sheetName}"`);
       }
-    } catch (err) { console.error('Import error:', err); alert('Import failed: ' + (err instanceof Error ? err.message : JSON.stringify(err))); }
-    finally { setLoading(false); }
-  };
+
+      // ✅ Accumulate counts from each sheet's response
+      const result = await response.json();
+      totalCreated += result.created ?? 0;
+      totalEnrolled += result.enrolled ?? 0;
+    }
+
+    // ✅ Refresh once after ALL sheets are imported
+    const refreshed = await fetch('/api/lecturer/unit');
+    if (!refreshed.ok) throw new Error('Failed to refresh class list');
+    const data = await refreshed.json();
+    setClasses(data);
+    setExpandedUnits(new Set<string>(data.map((c: ClassData) => c.unitCode)));
+
+    // ✅ Reset state once after the loop
+    setUploadFile(null);
+    setUploadPreview([]);
+    setUploadColumns([]);
+    setColumnMapping({ studentId: '', name: '', program: '' });
+    setParsedSheets([]);
+    setUploadStep(1);
+    setViewMode('list');
+
+    // ✅ Alert once with correct totals
+    alert(`Import complete!\n${totalCreated} new students created\n${totalEnrolled} enrollments added`);
+
+  } catch (err) {
+    console.error('Import error:', err);
+    alert('Import failed: ' + (err instanceof Error ? err.message : JSON.stringify(err)));
+  } finally {
+    setLoading(false);
+  }
+};
 
     // ── Loading / error ────────────────────────────────────────────────────────
 

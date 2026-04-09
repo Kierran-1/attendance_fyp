@@ -55,6 +55,7 @@ export async function PUT(
       name: updatedUser.name ?? '',
       program: updatedUser.programName ?? '',
       nationality: updatedUser.nationality ?? '',
+      schoolStatus: 'Active',
     });
   } catch (error) {
     console.error('Error updating student:', error);
