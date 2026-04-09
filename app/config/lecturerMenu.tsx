@@ -38,15 +38,15 @@ export const lecturerMenu: {
             </svg>
           ),
         },
-        {
-          name: 'Attendance',
-          href: '/lecturer/attendance',
-          icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="none" viewBox="0 0 24 24">
-              <path stroke="#e4002b" strokeLinecap="round" strokeWidth="2" d="M3 9h18M7 3v2m10-2v2M6 12h2m3 0h2m3 0h2M6 15h2m3 0h2m3 0h2M6 18h2m3 0h2m3 0h2M6.2 21h11.6c1.1201 0 1.6802 0 2.108-.218a2 2 0 0 0 .874-.874C21 19.4802 21 18.9201 21 17.8V8.2c0-1.1201 0-1.6802-.218-2.108a2 2 0 0 0-.874-.874C19.4802 5 18.9201 5 17.8 5H6.2c-1.1201 0-1.6802 0-2.108.218a2 2 0 0 0-.874.874C3 6.5198 3 7.08 3 8.2v9.6c0 1.1201 0 1.6802.218 2.108.1917.3763.4977.6823.874.874C4.5198 21 5.08 21 6.2 21Z" />
-            </svg>
-          ),
-        },
+        // {
+        //   name: 'Attendance',
+        //   href: '/lecturer/attendance',
+        //   icon: (
+        //     <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="none" viewBox="0 0 24 24">
+        //       <path stroke="#e4002b" strokeLinecap="round" strokeWidth="2" d="M3 9h18M7 3v2m10-2v2M6 12h2m3 0h2m3 0h2M6 15h2m3 0h2m3 0h2M6 18h2m3 0h2m3 0h2M6.2 21h11.6c1.1201 0 1.6802 0 2.108-.218a2 2 0 0 0 .874-.874C21 19.4802 21 18.9201 21 17.8V8.2c0-1.1201 0-1.6802-.218-2.108a2 2 0 0 0-.874-.874C19.4802 5 18.9201 5 17.8 5H6.2c-1.1201 0-1.6802 0-2.108.218a2 2 0 0 0-.874.874C3 6.5198 3 7.08 3 8.2v9.6c0 1.1201 0 1.6802.218 2.108.1917.3763.4977.6823.874.874C4.5198 21 5.08 21 6.2 21Z" />
+        //     </svg>
+        //   ),
+        // },
         {
           name: 'Live Attendance',
           href: '/lecturer/live-attendance',
@@ -70,15 +70,15 @@ export const lecturerMenu: {
     {
       heading: 'Tools',
       items: [
-        {
-          name: 'Upload Roster',
-          href: '/lecturer/upload-roster',
-          icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="none" viewBox="0 0 24 24">
-              <path stroke="#e4002b" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16V6m0 0-3.5 3.5M12 6l3.5 3.5M4 16.8c0 1.1201 0 1.6802.218 2.108.1917.3763.4977.6823.874.874C5.5198 20 6.08 20 7.2 20h9.6c1.1201 0 1.6802 0 2.108-.218a2 2 0 0 0 .874-.874C20 18.4802 20 17.9201 20 16.8" />
-            </svg>
-          ),
-        },
+        // {
+        //   name: 'Upload Roster',
+        //   href: '/lecturer/upload-roster',
+        //   icon: (
+        //     <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="none" viewBox="0 0 24 24">
+        //       <path stroke="#e4002b" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16V6m0 0-3.5 3.5M12 6l3.5 3.5M4 16.8c0 1.1201 0 1.6802.218 2.108.1917.3763.4977.6823.874.874C5.5198 20 6.08 20 7.2 20h9.6c1.1201 0 1.6802 0 2.108-.218a2 2 0 0 0 .874-.874C20 18.4802 20 17.9201 20 16.8" />
+        //     </svg>
+        //   ),
+        // },
         {
           name: 'Alerts',
           href: '/lecturer/alerts',
