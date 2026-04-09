@@ -30,15 +30,14 @@ export async function GET() {
 
     for (const reg of lecturerRegistrations) {
       for (const cs of reg.classSessions) {
-        // Fetch students scoped to this session's groupNo
+        // Fetch all students enrolled in this unit
         const studentRegistrations = await prisma.unitRegistration.findMany({
           where: {
             unitId: reg.unitId,
             userStatus: UserStatus.STUDENT,
-            name: cs.groupNo ?? null,
           },
           include: {
-            user: { select: { id: true, name: true, email: true, programName: true, nationality: true, } },
+            user: { select: { id: true, name: true, email: true, programName: true } },
           },
         });
 
@@ -47,7 +46,6 @@ export async function GET() {
           studentNumber: sr.user.email?.split('@')[0] ?? '—',
           name: sr.user.name ?? 'Unknown',
           program: sr.user.programName ?? '',
-          nationality: sr.user.nationality ?? '',
         }));
 
         const presentCount = cs.attendanceRecords.filter(
@@ -100,7 +98,8 @@ export async function GET() {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching units:', error);
-    return NextResponse.json({ error: 'Failed to fetch units' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: 'Failed to fetch units', detail: msg }, { status: 500 });
   }
 }
 
