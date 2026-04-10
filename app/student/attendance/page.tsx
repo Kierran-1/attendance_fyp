@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  AlertCircle,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Loader2,
   Search,
   XCircle,
 } from 'lucide-react';
@@ -21,139 +23,198 @@ type AttendanceItem = {
   recordedAt: string | null;
 };
 
-function getStatusBadgeClasses(status: AttendanceStatus) {
-  if (status === 'Present') {
-    return 'border-green-100 bg-green-50 text-green-700';
-  }
+type AttendanceRecord = {
+  sessionId: string;
+  date: string;
+  unitId: string;
+  courseCode: string;
+  courseName: string;
+  sessionName: string;
+  sessionTime: string;
+  checkInTime: string | null;
+  status: string;
+};
 
-  return 'border-red-100 bg-red-50 text-red-600';
+type AttendanceApiResponse = {
+  records?: AttendanceRecord[];
+  courses?: Array<{
+    id: string;
+    code: string;
+    name: string;
+    total: number;
+    attended: number;
+  }>;
+  attendance?: AttendanceItem[];
+};
+
+function getStatusBadgeClasses(status: AttendanceStatus) {
+  return status === 'Present'
+    ? 'border-green-100 bg-green-50 text-green-700'
+    : 'border-red-100 bg-red-50 text-red-600';
+}
+
+function formatDateLabel(value: string) {
+  return new Date(value).toLocaleDateString('en-MY', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatTimeLabel(value: string) {
+  return new Date(value).toLocaleTimeString('en-MY', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function normaliseStatus(status: string): AttendanceStatus {
+  return status === 'ABSENT' ? 'Absent' : 'Present';
 }
 
 export default function StudentAttendancePage() {
-  const [attendance, setAttendance] = useState<AttendanceItem[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Absent'>('All');
 
   useEffect(() => {
+    async function loadAttendance() {
+      try {
+        setLoading(true);
+        setError('');
+
+        const res = await fetch('/api/student/attendance', {
+          cache: 'no-store',
+        });
+
+        if (res.status === 403) {
+          setError('This page is only available for student accounts.');
+          setRecords([]);
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error('Failed to load attendance.');
+        }
+
+        const data: AttendanceApiResponse = await res.json();
+        setRecords(Array.isArray(data.records) ? data.records : []);
+      } catch (err) {
+        console.error('Failed to load student attendance:', err);
+        setError('Unable to load attendance records right now.');
+        setRecords([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
     loadAttendance();
   }, []);
 
-  async function loadAttendance() {
-    try {
-      setLoading(true);
-      setError('');
-
-      /*Load attendance from the existing student attendance API*/
-      const res = await fetch('/api/student/attendance', {
-        cache: 'no-store',
-      });
-
-      if (res.status === 403) {
-        setError('This page is only available for student accounts.');
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error('Failed to load attendance.');
-      }
-
-      const data = await res.json();
-      setAttendance(data.attendance || []);
-    } catch (err) {
-      console.error('Failed to load student attendance:', err);
-      setError('Unable to load attendance records right now.');
-      setAttendance([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const filteredAttendance = useMemo(() => {
+  const filteredRecords = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
 
-    return attendance.filter((item) => {
+    return records.filter((item) => {
+      const status = normaliseStatus(item.status);
+
       const matchesSearch =
         !keyword ||
-        item.code.toLowerCase().includes(keyword) ||
-        item.session.toLowerCase().includes(keyword) ||
-        (item.recordedAt || '').toLowerCase().includes(keyword);
+        item.courseCode.toLowerCase().includes(keyword) ||
+        item.courseName.toLowerCase().includes(keyword) ||
+        item.sessionName.toLowerCase().includes(keyword) ||
+        formatDateLabel(item.date).toLowerCase().includes(keyword);
 
-      const matchesStatus =
-        statusFilter === 'All' || item.status === statusFilter;
+      const matchesStatus = statusFilter === 'All' || status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
-  }, [attendance, searchTerm, statusFilter]);
+  }, [records, searchTerm, statusFilter]);
 
-  const presentCount = attendance.filter((item) => item.status === 'Present').length;
-  const absentCount = attendance.filter((item) => item.status === 'Absent').length;
+  const presentCount = useMemo(
+    () => records.filter((item) => normaliseStatus(item.status) === 'Present').length,
+    [records]
+  );
+
+  const absentCount = useMemo(
+    () => records.filter((item) => normaliseStatus(item.status) === 'Absent').length,
+    [records]
+  );
 
   const attendanceRate = useMemo(() => {
-    if (!attendance.length) return 0;
-    return Math.round((presentCount / attendance.length) * 100);
-  }, [attendance, presentCount]);
+    if (!records.length) return 0;
+    return Math.round((presentCount / records.length) * 100);
+  }, [records, presentCount]);
 
   return (
-    <div className="space-y-6">
-      {/*Header*/}
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Student Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
-            Attendance History
+    <div className="mx-auto max-w-7xl space-y-8 pb-12">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span>Student</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Attendance</span>
+      </nav>
+
+      {/* Header */}
+      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+            Attendance <span className="text-red-600">History</span>
           </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
-            Review your attendance records and monitor your current progress.
+          <p className="max-w-2xl text-base text-gray-500">
+            Review your attendance records across all past sessions and track your current
+            progress by unit and session.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <Link
             href="/student/dashboard"
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-700 shadow-sm transition hover:border-red-100 hover:text-red-600"
           >
             <ChevronRight size={16} className="rotate-180" />
             Back to Dashboard
           </Link>
 
           <Link
-            href="/student/classes"
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026]"
+            href="/student/qrcode"
+            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 active:scale-95"
           >
             <CalendarDays size={16} />
-            View Classes
+            Open QR
           </Link>
         </div>
       </section>
 
-      {error && (
-        <section className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-          {error}
+      {error ? (
+        <section className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-bold">Attendance unavailable</p>
+            <p>{error}</p>
+          </div>
         </section>
-      )}
+      ) : null}
 
-      {/*Summary Cards*/}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Summary Cards */}
+      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Total Records
             </p>
             <CalendarDays size={18} className="text-gray-300" />
           </div>
           <p className="text-4xl font-black tracking-tight text-gray-900">
-            {loading ? '—' : attendance.length}
+            {loading ? '—' : records.length}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Captured attendance entries</p>
+          <p className="mt-2 text-xs text-gray-500">All recorded past sessions</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Present
             </p>
             <CheckCircle2 size={18} className="text-green-500" />
@@ -161,12 +222,12 @@ export default function StudentAttendancePage() {
           <p className="text-4xl font-black tracking-tight text-green-600">
             {loading ? '—' : presentCount}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Successful check-ins</p>
+          <p className="mt-2 text-xs text-gray-500">Successful attendance records</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Absent
             </p>
             <XCircle size={18} className="text-red-500" />
@@ -174,24 +235,24 @@ export default function StudentAttendancePage() {
           <p className="text-4xl font-black tracking-tight text-red-600">
             {loading ? '—' : absentCount}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Missing attendance records</p>
+          <p className="mt-2 text-xs text-gray-500">Sessions without a valid check-in</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Attendance Rate
             </p>
             <Clock3 size={18} className="text-gray-300" />
           </div>
-          <p className="text-4xl font-black tracking-tight text-[#E4002B]">
+          <p className="text-4xl font-black tracking-tight text-red-600">
             {loading ? '—' : `${attendanceRate}%`}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Overall current progress</p>
+          <p className="mt-2 text-xs text-gray-500">Current overall attendance</p>
         </div>
       </section>
 
-      {/*Search and Filter*/}
+      {/* Search and Filter */}
       <section className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
           <div className="relative">
@@ -201,10 +262,10 @@ export default function StudentAttendancePage() {
             />
             <input
               type="text"
-              placeholder="Search by unit code, session, or recorded time..."
+              placeholder="Search by unit code, unit name, or session..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm text-gray-700 outline-none transition focus:border-[#E4002B]/30 focus:bg-white"
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm text-gray-700 outline-none transition focus:border-red-200 focus:bg-white"
             />
           </div>
 
@@ -216,8 +277,8 @@ export default function StudentAttendancePage() {
                 onClick={() => setStatusFilter(status)}
                 className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                   statusFilter === status
-                    ? 'bg-[#E4002B] text-white'
-                    : 'border border-gray-200 bg-white text-gray-700 hover:border-[#E4002B]/20 hover:text-[#E4002B]'
+                    ? 'bg-red-600 text-white'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:border-red-100 hover:text-red-600'
                 }`}
               >
                 {status}
@@ -227,62 +288,103 @@ export default function StudentAttendancePage() {
         </div>
       </section>
 
-      {/*Attendance List*/}
-      <section className="rounded-3xl border border-gray-100 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+      {/* Attendance Table / Cards */}
+      <section className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-50 px-6 py-5">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Attendance Records</h2>
+            <h2 className="text-lg font-black text-gray-900">Attendance Records</h2>
+            <p className="text-sm text-gray-500">
+              {loading
+                ? 'Loading attendance records...'
+                : `${filteredRecords.length} visible record${filteredRecords.length === 1 ? '' : 's'}`}
+            </p>
           </div>
-
-          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">
-            {filteredAttendance.length} item{filteredAttendance.length === 1 ? '' : 's'}
-          </span>
         </div>
 
-        <div className="divide-y divide-gray-100">
-          {loading ? (
-            <div className="px-6 py-8 text-sm text-gray-500">
-              Loading attendance records...
-            </div>
-          ) : filteredAttendance.length > 0 ? (
-            filteredAttendance.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col gap-4 px-6 py-5 transition hover:bg-rose-50/40 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-[#E4002B]">
-                      {item.code}
-                    </span>
+        {loading ? (
+          <div className="flex items-center justify-center gap-3 px-6 py-16 text-sm text-gray-500">
+            <Loader2 size={18} className="animate-spin text-red-600" />
+            Loading attendance...
+          </div>
+        ) : filteredRecords.length === 0 ? (
+          <div className="px-6 py-16 text-center">
+            <p className="text-base font-bold text-gray-700">No attendance records found</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Try a different search or wait until sessions are recorded.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {filteredRecords.map((item) => {
+              const status = normaliseStatus(item.status);
 
-                    <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-bold text-gray-600">
-                      {item.session}
-                    </span>
+              return (
+                <div
+                  key={item.sessionId}
+                  className="flex flex-col gap-5 px-6 py-6 transition-colors hover:bg-gray-50/50 lg:flex-row lg:items-center lg:justify-between"
+                >
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-lg bg-gray-900 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+                        {item.courseCode}
+                      </span>
+
+                      <span className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500">
+                        {item.sessionName}
+                      </span>
+
+                      <span
+                        className={`rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${getStatusBadgeClasses(
+                          status
+                        )}`}
+                      >
+                        {status}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">{item.courseName}</h3>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-gray-400">
+                      <span className="flex items-center gap-1.5">
+                        <CalendarDays size={14} />
+                        {formatDateLabel(item.date)}
+                      </span>
+
+                      <span className="flex items-center gap-1.5">
+                        <Clock3 size={14} />
+                        {formatTimeLabel(item.sessionTime)}
+                      </span>
+
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 size={14} />
+                        {item.checkInTime ? formatTimeLabel(item.checkInTime) : 'No check-in recorded'}
+                      </span>
+                    </div>
                   </div>
 
-                  <p className="text-sm text-gray-500">
-                    {item.recordedAt
-                      ? `Recorded at ${item.recordedAt}`
-                      : 'No recorded time available'}
-                  </p>
-                </div>
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
+                    <Link
+                      href="/student/classes"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition hover:border-red-100 hover:text-red-600"
+                    >
+                      View Classes
+                    </Link>
 
-                <span
-                  className={`inline-flex self-start rounded-full border px-3 py-1 text-xs font-bold sm:self-center ${getStatusBadgeClasses(
-                    item.status
-                  )}`}
-                >
-                  {item.status}
-                </span>
-              </div>
-            ))
-          ) : (
-            <div className="px-6 py-8 text-sm text-gray-500">
-              No attendance records matched your current filter.
-            </div>
-          )}
-        </div>
+                    <Link
+                      href="/student/qrcode"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700 active:scale-95"
+                    >
+                      Open QR
+                      <ChevronRight size={16} />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );

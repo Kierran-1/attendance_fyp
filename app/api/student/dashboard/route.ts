@@ -1,136 +1,181 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { UserRole, UserStatus } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
+type ProfileResponse = {
+  studentId?: string;
+  program?: string;
+};
 
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+type StudentClass = {
+  id: string;
+  code: string;
+  name: string;
+  attendanceRate?: number | null;
+};
 
-  if (session.user.role !== UserRole.STUDENT) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+type ClassesResponse = {
+  classes?: StudentClass[];
+};
 
-  const userId = session.user.id;
-  const now = new Date();
+type AttendanceRecord = {
+  sessionId: string;
+  date: string;
+  unitId: string;
+  courseCode: string;
+  courseName: string;
+  sessionName: string;
+  sessionTime: string;
+  checkInTime: string | null;
+  status: string;
+};
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { email: true, name: true, programName: true },
-  });
+type AttendanceResponse = {
+  records?: AttendanceRecord[];
+};
 
-  const studentId = dbUser?.email?.split('@')[0] ?? '';
+function buildBaseUrl(req: NextRequest) {
+  const host = req.headers.get('host');
+  const protocol =
+    process.env.NODE_ENV === 'development' ? 'http' : 'https';
 
-  const studentRegistrations = await prisma.unitRegistration.findMany({
-    where: { userId, userStatus: UserStatus.STUDENT },
-    include: { unit: true },
-  });
+  return `${protocol}://${host}`;
+}
 
-  if (studentRegistrations.length === 0) {
-    return NextResponse.json({
-      profile: { studentId, programName: dbUser?.programName ?? null },
-      courses: [],
-      recentAttendance: [],
-      stats: { overallPct: null, enrolledCourses: 0, totalAbsent: 0 },
-    });
-  }
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
 
-  const unitIds = studentRegistrations.map((r) => r.unitId);
-
-  // Find lecturer registrations for same units
-  const lecturerRegistrations = await prisma.unitRegistration.findMany({
-    where: { unitId: { in: unitIds }, userStatus: UserStatus.LECTURER },
-    select: { id: true, unitId: true },
-  });
-
-  const lecturerRegIds = lecturerRegistrations.map((r) => r.id);
-
-  // Get all class sessions
-  const allSessions = await prisma.classSession.findMany({
-    where: {
-      unitRegistrationId: { in: lecturerRegIds },
-      sessionTime: { lte: now },
-    },
-    include: {
-      unitRegistration: { select: { unitId: true } },
-    },
-    orderBy: { sessionTime: 'desc' },
-  });
-
-  const allSessionIds = allSessions.map((s) => s.id);
-
-  // Get attendance records for this student
-  const attendanceRecords = await prisma.classAttendanceRecord.findMany({
-    where: {
-      studentId: userId,
-      classSessionId: { in: allSessionIds },
-    },
-    select: { classSessionId: true, status: true, verifiedAt: true },
-  });
-
-  const recordMap = new Map(attendanceRecords.map((r) => [r.classSessionId, r]));
-
-  // Per-unit totals
-  const sessionsByUnit = new Map<string, string[]>();
-  for (const s of allSessions) {
-    const uid = s.unitRegistration.unitId;
-    if (!sessionsByUnit.has(uid)) sessionsByUnit.set(uid, []);
-    sessionsByUnit.get(uid)!.push(s.id);
-  }
-
-  const attendedByUnit = new Map<string, number>();
-  for (const r of attendanceRecords) {
-    const sess = allSessions.find((s) => s.id === r.classSessionId);
-    if (!sess) continue;
-    const uid = sess.unitRegistration.unitId;
-    if (r.status !== 'ABSENT') {
-      attendedByUnit.set(uid, (attendedByUnit.get(uid) ?? 0) + 1);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    if (session.user.role !== UserRole.STUDENT) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const baseUrl = buildBaseUrl(req);
+    const cookie = req.headers.get('cookie') ?? '';
+
+    const [profileRes, classesRes, attendanceRes] = await Promise.all([
+      fetch(`${baseUrl}/api/student/profile?basic=1`, {
+        headers: { cookie },
+        cache: 'no-store',
+      }),
+      fetch(`${baseUrl}/api/student/classes`, {
+        headers: { cookie },
+        cache: 'no-store',
+      }),
+      fetch(`${baseUrl}/api/student/attendance`, {
+        headers: { cookie },
+        cache: 'no-store',
+      }),
+    ]);
+
+    const profileJson: ProfileResponse = profileRes.ok
+      ? await profileRes.json()
+      : {};
+
+    const classesJson: ClassesResponse = classesRes.ok
+      ? await classesRes.json()
+      : { classes: [] };
+
+    const attendanceJson: AttendanceResponse = attendanceRes.ok
+      ? await attendanceRes.json()
+      : { records: [] };
+
+    const classes = Array.isArray(classesJson.classes) ? classesJson.classes : [];
+    const records = Array.isArray(attendanceJson.records)
+      ? attendanceJson.records
+      : [];
+
+    const courseMap = new Map<
+      string,
+      {
+        id: string;
+        code: string;
+        name: string;
+        totalSessions: number;
+        attendedSessions: number;
+      }
+    >();
+
+    for (const cls of classes) {
+      courseMap.set(cls.id, {
+        id: cls.id,
+        code: cls.code,
+        name: cls.name,
+        totalSessions: 0,
+        attendedSessions: 0,
+      });
+    }
+
+    for (const record of records) {
+      const existing = courseMap.get(record.unitId);
+
+      if (!existing) {
+        courseMap.set(record.unitId, {
+          id: record.unitId,
+          code: record.courseCode,
+          name: record.courseName,
+          totalSessions: 1,
+          attendedSessions: record.status === 'ABSENT' ? 0 : 1,
+        });
+      } else {
+        existing.totalSessions += 1;
+        if (record.status !== 'ABSENT') {
+          existing.attendedSessions += 1;
+        }
+      }
+    }
+
+    const courses = Array.from(courseMap.values()).map((course) => ({
+      ...course,
+      semester: null,
+      year: null,
+    }));
+
+    const totalSessions = courses.reduce(
+      (sum, item) => sum + item.totalSessions,
+      0
+    );
+    const totalAttended = courses.reduce(
+      (sum, item) => sum + item.attendedSessions,
+      0
+    );
+    const totalAbsent = Math.max(totalSessions - totalAttended, 0);
+    const overallPct =
+      totalSessions > 0 ? Math.round((totalAttended / totalSessions) * 100) : null;
+
+    const recentAttendance = records.slice(0, 5).map((record) => ({
+      sessionId: record.sessionId,
+      date: record.date,
+      courseCode: record.courseCode,
+      courseName: record.courseName,
+      sessionName: record.sessionName,
+      checkInTime: record.checkInTime ?? null,
+      status: record.status ?? 'ABSENT',
+    }));
+
+    return NextResponse.json({
+      profile: {
+        studentId: profileJson.studentId ?? '',
+        programName: profileJson.program ?? null,
+      },
+      courses,
+      recentAttendance,
+      stats: {
+        overallPct,
+        enrolledCourses: courses.length,
+        totalAbsent,
+      },
+    });
+  } catch (error) {
+    console.error('[STUDENT_DASHBOARD_GET]', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
-
-  const courses = studentRegistrations.map((reg) => {
-    const totalSessions = sessionsByUnit.get(reg.unitId)?.length ?? 0;
-    const attendedSessions = attendedByUnit.get(reg.unitId) ?? 0;
-    return {
-      id: reg.unit.id,
-      code: reg.unit.code,
-      name: reg.unit.name,
-      semester: reg.semester,
-      year: reg.year,
-      totalSessions,
-      attendedSessions,
-    };
-  });
-
-  const totalSessions = courses.reduce((sum, c) => sum + c.totalSessions, 0);
-  const totalAttended = courses.reduce((sum, c) => sum + c.attendedSessions, 0);
-  const overallPct = totalSessions > 0 ? Math.round((totalAttended / totalSessions) * 100) : null;
-  const totalAbsent = totalSessions - totalAttended;
-
-  // Recent attendance (last 5 sessions)
-  const recentSessions = allSessions.slice(0, 5);
-  const recentAttendance = recentSessions.map((s) => {
-    const record = recordMap.get(s.id);
-    const unitReg = studentRegistrations.find((r) => r.unitId === s.unitRegistration.unitId);
-    return {
-      sessionId: s.id,
-      date: s.sessionTime,
-      courseCode: unitReg?.unit.code ?? '—',
-      courseName: unitReg?.unit.name ?? '—',
-      sessionName: s.sessionName,
-      checkInTime: record?.verifiedAt ?? null,
-      status: record?.status ?? 'ABSENT',
-    };
-  });
-
-  return NextResponse.json({
-    profile: { studentId, programName: dbUser?.programName ?? null },
-    courses,
-    recentAttendance,
-    stats: { overallPct, enrolledCourses: courses.length, totalAbsent },
-  });
 }
