@@ -2,7 +2,71 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole, UserStatus } from '@prisma/client';
+import {
+  AttendanceStatus,
+  SessionName,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
+
+type StudentSessionStatus = 'Active' | 'Upcoming' | 'Completed';
+
+type StudentSessionItem = {
+  id: string;
+  sessionName: string;
+  sessionTime: string;
+  day: string;
+  time: string;
+  location: string | null;
+  venue: string | null;
+  weekNumber: number | null;
+  groupNo: string | null;
+  subcomponent: string | null;
+  lecturer: string | null;
+  sessionDuration: number;
+  sessionStatus: StudentSessionStatus;
+  attendanceStatus: AttendanceStatus | 'ABSENT';
+  verifiedAt: string | null;
+};
+
+function formatSessionName(value: SessionName | string | null | undefined) {
+  if (!value) return 'Unknown';
+
+  const upper = String(value).toUpperCase();
+
+  if (upper === 'LECTURE' || upper === 'LE') return 'Lecture';
+  if (upper === 'TUTORIAL' || upper === 'TU') return 'Tutorial';
+  if (upper === 'LAB' || upper === 'LA') return 'Lab';
+
+  return String(value);
+}
+
+function getDisplayDay(sessionTime: Date) {
+  return new Intl.DateTimeFormat('en-MY', {
+    weekday: 'long',
+  }).format(sessionTime);
+}
+
+function getDisplayTime(sessionTime: Date) {
+  return new Intl.DateTimeFormat('en-MY', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(sessionTime);
+}
+
+function getSessionStatus(
+  sessionTime: Date,
+  durationMinutes: number
+): StudentSessionStatus {
+  const now = Date.now();
+  const start = sessionTime.getTime();
+  const end = start + durationMinutes * 60_000;
+
+  if (now >= start && now <= end) return 'Active';
+  if (now < start) return 'Upcoming';
+  return 'Completed';
+}
 
 export async function GET() {
   try {
@@ -19,88 +83,185 @@ export async function GET() {
     const userId = session.user.id;
 
     const studentRegistrations = await prisma.unitRegistration.findMany({
-      where: { userId, userStatus: UserStatus.STUDENT },
-      include: { unit: true },
+      where: {
+        userId,
+        userStatus: UserStatus.STUDENT,
+      },
+      include: {
+        unit: true,
+      },
+      orderBy: {
+        unit: {
+          code: 'asc',
+        },
+      },
     });
 
     if (studentRegistrations.length === 0) {
       return NextResponse.json({ classes: [] });
     }
 
-    const unitIds = studentRegistrations.map((r) => r.unitId);
+    const unitIds = studentRegistrations.map((item) => item.unitId);
 
-    // Find lecturer registrations for the same units to get ClassSessions
-    const lecturerRegistrations = await prisma.unitRegistration.findMany({
-      where: { unitId: { in: unitIds }, userStatus: UserStatus.LECTURER },
-      select: { id: true, unitId: true },
-    });
-
-    const lecturerRegIds = lecturerRegistrations.map((r) => r.id);
-
-    // Get all class sessions for those lecturer registrations
-    const allSessions = await prisma.classSession.findMany({
+    const teachingRegistrations = await prisma.unitRegistration.findMany({
       where: {
-        unitRegistrationId: { in: lecturerRegIds },
-        sessionTime: { lte: new Date() },
+        unitId: { in: unitIds },
+        userStatus: {
+          in: [UserStatus.LECTURER, UserStatus.TUTOR],
+        },
       },
-      select: {
-        id: true,
-        unitRegistration: { select: { unitId: true } },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+        unit: true,
       },
     });
 
-    // Count total sessions per unit
-    const sessionsByUnit = new Map<string, string[]>();
-    for (const s of allSessions) {
-      const uid = s.unitRegistration.unitId;
-      if (!sessionsByUnit.has(uid)) sessionsByUnit.set(uid, []);
-      sessionsByUnit.get(uid)!.push(s.id);
-    }
+    const teachingRegistrationIds = teachingRegistrations.map((item) => item.id);
 
-    const allSessionIds = allSessions.map((s) => s.id);
-
-    // Count attendance records for this student across all sessions
-    const attendedRecords = await prisma.classAttendanceRecord.findMany({
+    const classSessions = await prisma.classSession.findMany({
       where: {
-        studentId: userId,
-        classSessionId: { in: allSessionIds },
-        status: { not: 'ABSENT' },
+        unitRegistrationId: { in: teachingRegistrationIds },
       },
-      select: { classSessionId: true },
+      include: {
+        unitRegistration: {
+          include: {
+            unit: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ sessionTime: 'asc' }],
     });
 
-    const attendedSessionIds = new Set(attendedRecords.map((r) => r.classSessionId));
+    const sessionIds = classSessions.map((item) => item.id);
 
-    // Build per-unit attendance counts
-    const attendedByUnit = new Map<string, number>();
-    for (const s of allSessions) {
-      const uid = s.unitRegistration.unitId;
-      if (attendedSessionIds.has(s.id)) {
-        attendedByUnit.set(uid, (attendedByUnit.get(uid) ?? 0) + 1);
+    const attendanceRecords =
+      sessionIds.length > 0
+        ? await prisma.classAttendanceRecord.findMany({
+            where: {
+              studentId: userId,
+              classSessionId: { in: sessionIds },
+            },
+            select: {
+              classSessionId: true,
+              status: true,
+              verifiedAt: true,
+            },
+          })
+        : [];
+
+    const attendanceMap = new Map(
+      attendanceRecords.map((item) => [item.classSessionId, item])
+    );
+
+    const sessionsByUnit = new Map<string, StudentSessionItem[]>();
+
+    for (const item of classSessions) {
+      const unitId = item.unitRegistration.unitId;
+      const attendance = attendanceMap.get(item.id);
+
+      const mappedSession: StudentSessionItem = {
+        id: item.id,
+        sessionName: formatSessionName(item.sessionName),
+        sessionTime: item.sessionTime.toISOString(),
+        day: getDisplayDay(item.sessionTime),
+        time: getDisplayTime(item.sessionTime),
+        location: item.location ?? null,
+        venue: item.location ?? null,
+        weekNumber: item.weekNumber ?? null,
+        groupNo: item.groupNo ?? null,
+        subcomponent: item.subcomponent ?? null,
+        lecturer:
+          item.unitRegistration.user.name ??
+          item.unitRegistration.user.email ??
+          null,
+        sessionDuration: item.sessionDuration,
+        sessionStatus: getSessionStatus(
+          item.sessionTime,
+          item.sessionDuration
+        ),
+        attendanceStatus: attendance?.status ?? 'ABSENT',
+        verifiedAt: attendance?.verifiedAt?.toISOString() ?? null,
+      };
+
+      if (!sessionsByUnit.has(unitId)) {
+        sessionsByUnit.set(unitId, []);
       }
+
+      sessionsByUnit.get(unitId)!.push(mappedSession);
     }
 
-    const classes = studentRegistrations.map((reg) => {
-      const total = sessionsByUnit.get(reg.unitId)?.length ?? 0;
-      const attended = attendedByUnit.get(reg.unitId) ?? 0;
-      const attendanceRate = total > 0 ? Math.round((attended / total) * 100) : 0;
+    const now = Date.now();
+
+    const classes = studentRegistrations.map((registration) => {
+      const unitSessions = sessionsByUnit.get(registration.unitId) ?? [];
+
+      const completedSessions = unitSessions.filter(
+        (item) => new Date(item.sessionTime).getTime() <= now
+      );
+
+      const attendedSessions = completedSessions.filter(
+        (item) =>
+          item.attendanceStatus !== 'ABSENT' &&
+          item.attendanceStatus !== AttendanceStatus.PENDING
+      );
+
+      const attendanceRate =
+        completedSessions.length > 0
+          ? Math.round(
+              (attendedSessions.length / completedSessions.length) * 100
+            )
+          : 0;
+
+      const sessionTypes = Array.from(
+        new Set(unitSessions.map((item) => item.sessionName))
+      );
+
+      const lecturers = Array.from(
+        new Set(
+          unitSessions
+            .map((item) => item.lecturer)
+            .filter((value): value is string => Boolean(value))
+        )
+      );
+
+      const nextSession =
+        unitSessions.find((item) => item.sessionStatus !== 'Completed') ??
+        unitSessions[0] ??
+        null;
 
       return {
-        id: reg.unit.id,
-        code: reg.unit.code,
-        name: reg.unit.name,
-        lecturer: null,
-        day: null,
-        time: null,
-        venue: null,
-        sessionType: null,
+        id: registration.unit.id,
+        code: registration.unit.code,
+        name: registration.unit.name,
+        lecturer: lecturers.join(', ') || null,
+        day: nextSession?.day ?? null,
+        time: nextSession?.time ?? null,
+        venue: nextSession?.venue ?? null,
+        location: nextSession?.location ?? null,
+        sessionType: nextSession?.sessionName ?? null,
+        sessionTypes,
         attendanceRate,
+        sessions: unitSessions,
       };
     });
 
     return NextResponse.json({ classes });
   } catch (error) {
     console.error('[STUDENT_CLASSES_GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
