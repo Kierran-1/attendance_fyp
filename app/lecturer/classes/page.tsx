@@ -482,19 +482,23 @@ export default function ClassesPage() {
   const handleDrag = useCallback((e: React.DragEvent, active: boolean) => { e.preventDefault(); e.stopPropagation(); setIsDragging(active); }, []);
   const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }, []);
 
+  // ── Batch import ───────────────────────────────────────────────────────────
+
   const confirmImport = async () => {
     if (!columnMapping.studentId || !columnMapping.name) { alert('Please map at least Student ID and Name columns'); return; }
     if (!uploadFile || parsedSheets.length === 0) return;
     setLoading(true);
+
     try {
-      let totalCreated = 0, totalEnrolled = 0;
-      for (const sheet of parsedSheets) {
+      // Build the full batch payload — one entry per sheet
+      const batchPayload = parsedSheets.map(sheet => {
         const { metadata, students: studentData, columns } = sheet;
         const studentNumberCol = columns.indexOf(columnMapping.studentId);
         const nameCol = columns.indexOf(columnMapping.name);
         const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
         const nationalityCol = columns.indexOf('Nationality');
         const statusCol = columns.indexOf('School Status');
+
         const students = studentData
           .filter((row: any[]) => row[studentNumberCol] != null && String(row[studentNumberCol]).trim() !== '')
           .map((row: any[]) => {
@@ -508,37 +512,46 @@ export default function ClassesPage() {
               nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || null : null,
               schoolStatus: statusCol >= 0 ? row[statusCol]?.toString().trim() || null : null,
             };
-          }).filter(Boolean);
-        const response = await fetch('/api/lecturer/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            unit: {
-              code: metadata.unitCode || 'UNKNOWN',
-              name: metadata.unitName || 'Imported Unit',
-              semester: metadata.term || '2026_MAR_S1',
-              sessionType: metadata.classType || '',
-              groupNo: metadata.group || '',
-              day: metadata.day || '',
-              time: metadata.time || '',
-              location: metadata.location || '',
-            },
-            students,
-          }),
-        });
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || `Failed to import sheet "${sheet.sheetName}"`);
-        }
-        const result = await response.json();
-        totalCreated += result.created ?? 0;
-        totalEnrolled += result.enrolled ?? 0;
+          })
+          .filter(Boolean);
+
+        return {
+          unit: {
+            code: metadata.unitCode || 'UNKNOWN',
+            name: metadata.unitName || 'Imported Unit',
+            semester: metadata.term || '2026_MAR_S1',
+            sessionType: metadata.classType || '',
+            groupNo: metadata.group || '',
+            day: metadata.day || '',
+            time: metadata.time || '',
+            location: metadata.location || '',
+          },
+          students,
+        };
+      });
+
+      // Single batch request for all sheets
+      const response = await fetch('/api/lecturer/import/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batchPayload),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Batch import failed');
       }
+
+      const result = await response.json();
+
+      // Refresh class list
       const refreshed = await fetch('/api/lecturer/unit');
       if (!refreshed.ok) throw new Error('Failed to refresh class list');
       const data = await refreshed.json();
       setClasses(data);
       setExpandedUnits(new Set<string>(data.map((c: ClassData) => c.unitCode)));
+
+      // Reset upload state
       setUploadFile(null);
       setUploadPreview([]);
       setUploadColumns([]);
@@ -546,7 +559,8 @@ export default function ClassesPage() {
       setParsedSheets([]);
       setUploadStep(1);
       setViewMode('list');
-      alert(`Import complete!\n${totalCreated} new students created\n${totalEnrolled} enrollments added`);
+
+      alert(`Import complete!\n${result.totalCreated} new students created\n${result.totalEnrolled} enrollments added across ${result.sheets.length} class${result.sheets.length !== 1 ? 'es' : ''}`);
     } catch (err) {
       console.error('Import error:', err);
       alert('Import failed: ' + (err instanceof Error ? err.message : JSON.stringify(err)));
