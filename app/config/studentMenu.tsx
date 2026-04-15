@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   UserCircle2,
   QrCode,
+  ScanLine,
   Bell,
   FileText,
 } from 'lucide-react';
@@ -58,6 +59,11 @@ export const studentMenu: {
           name: 'QR Code',
           href: '/student/qrcode',
           icon: <QrCode size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
+        },
+        {
+          name: 'Scan QR',
+          href: '/student/scan',
+          icon: <ScanLine size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
         },
         {
           name: 'Alerts',

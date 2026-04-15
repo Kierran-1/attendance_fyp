@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Camera,
   CheckCircle2,
@@ -96,6 +97,12 @@ export default function LiveAttendancePage() {
   const [checkIns, setCheckIns]             = useState<CheckInRecord[]>([]);
   const [checkInsLoading, setCheckInsLoading] = useState(false);
 
+  // Session QR (shown to students)
+  const [sessionQRToken, setSessionQRToken]       = useState<string | null>(null);
+  const [sessionQRCountdown, setSessionQRCountdown] = useState(30);
+  const sessionQRIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionQRRotateRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // QR scanner
   const [scanning, setScanning]             = useState(false);
   const [scanResult, setScanResult]         = useState<{ ok: boolean; stage?: number; message: string } | null>(null);
@@ -152,6 +159,7 @@ export default function LiveAttendancePage() {
           sessionIdRef.current = s.id;
           startPolling(s.id);
           startTimer(new Date(s.sessionTime));
+          startSessionQRRotation(s.id);
         }
       } catch { /* silent */ }
     }
@@ -159,6 +167,7 @@ export default function LiveAttendancePage() {
     return () => {
       stopPolling();
       stopTimer();
+      stopSessionQRRotation();
     };
   }, []);
 
@@ -205,6 +214,48 @@ export default function LiveAttendancePage() {
     }
   }
 
+  // ── Session QR rotation ────────────────────────────────────────────────────
+
+  const fetchSessionQR = useCallback(async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/attendance/session-qr?sessionId=${sessionId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setSessionQRToken(data.token ?? null);
+      setSessionQRCountdown(data.expiresIn ?? 30);
+    } catch { /* silent */ }
+  }, []);
+
+  const startSessionQRRotation = useCallback((sessionId: string) => {
+    stopSessionQRRotation();
+    fetchSessionQR(sessionId);
+
+    sessionQRIntervalRef.current = setInterval(() => {
+      setSessionQRCountdown(prev => Math.max(0, prev - 1));
+    }, 1000);
+
+    function scheduleRotate() {
+      sessionQRRotateRef.current = setTimeout(async () => {
+        await fetchSessionQR(sessionId);
+        scheduleRotate();
+      }, 30_000);
+    }
+    scheduleRotate();
+  }, [fetchSessionQR]);
+
+  function stopSessionQRRotation() {
+    if (sessionQRIntervalRef.current) {
+      clearInterval(sessionQRIntervalRef.current);
+      sessionQRIntervalRef.current = null;
+    }
+    if (sessionQRRotateRef.current) {
+      clearTimeout(sessionQRRotateRef.current);
+      sessionQRRotateRef.current = null;
+    }
+    setSessionQRToken(null);
+    setSessionQRCountdown(30);
+  }
+
   // ── Start session ──────────────────────────────────────────────────────────
 
   async function handleStartSession() {
@@ -248,6 +299,7 @@ export default function LiveAttendancePage() {
       setElapsed(0);
       startTimer(new Date(s.sessionTime));
       startPolling(s.id);
+      startSessionQRRotation(s.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start session');
     } finally {
@@ -267,6 +319,7 @@ export default function LiveAttendancePage() {
       stopTimer();
       stopPolling();
       stopScanner();
+      stopSessionQRRotation();
       setActiveSession(null);
       sessionIdRef.current = null;
       setElapsed(0);
@@ -559,6 +612,58 @@ export default function LiveAttendancePage() {
                   : <><StopCircle size={16} /> End Session</>
                 }
               </button>
+            </div>
+          )}
+
+          {/* Session QR — shown to students to scan */}
+          {activeSession && (
+            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-1 text-base font-bold text-gray-900 flex items-center gap-2">
+                <QrCode size={18} className="text-[#E4002B]" />
+                Session QR Code
+              </h2>
+              <p className="mb-4 text-xs text-gray-400">
+                Display this on screen — students scan it to mark attendance instantly.
+              </p>
+
+              <div className="flex flex-col items-center">
+                <div className="flex h-56 w-56 items-center justify-center rounded-2xl bg-gray-50 p-3 ring-1 ring-gray-100">
+                  {sessionQRToken ? (
+                    <QRCodeSVG
+                      value={sessionQRToken}
+                      size={200}
+                      bgColor="#f9fafb"
+                      fgColor="#111111"
+                      level="M"
+                    />
+                  ) : (
+                    <Loader2 size={28} className="animate-spin text-gray-300" />
+                  )}
+                </div>
+
+                {sessionQRToken && (
+                  <div className="mt-4 w-56">
+                    <div className="mb-1 flex justify-between text-xs text-gray-400">
+                      <span>Rotates in</span>
+                      <span className="font-bold tabular-nums">{sessionQRCountdown}s</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                      <div
+                        className="h-full rounded-full bg-[#E4002B] transition-all duration-1000"
+                        style={{ width: `${(sessionQRCountdown / 30) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => sessionIdRef.current && fetchSessionQR(sessionIdRef.current)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                >
+                  <RefreshCw size={12} /> Refresh now
+                </button>
+              </div>
             </div>
           )}
 
