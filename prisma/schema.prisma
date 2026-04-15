@@ -8,28 +8,25 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ── Auth (NextAuth required models) ──────────────────────────────
-
 model User {
-  id            String    @id @default(cuid())
-  orgId         String?
-  email         String    @unique
-  emailVerified DateTime?
-  name          String?
-  image         String?
-  role          UserRole  @default(STUDENT)
-  programName   String?
-  nationality   String?
-  schoolStatus  String?   
-  qrState       String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  disabledAt    DateTime?
-
-  unitRegistrations UnitRegistration[]
-  ledSessions       ClassSession[]     @relation("LecturerSessions")
+  id                String             @id @default(cuid())
+  orgId             String?
+  email             String             @unique
+  emailVerified     DateTime?
+  name              String?
+  image             String?
+  role              UserRole           @default(STUDENT)
+  programName       String?
+  nationality       String?
+  schoolStatus      String?
+  qrState           String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  disabledAt        DateTime?
   accounts          Account[]
   sessions          Session[]
+  ledSessions       ClassSession[]     @relation("LecturerSessions")
+  unitRegistrations UnitRegistration[]
 }
 
 model Account {
@@ -46,8 +43,7 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -57,8 +53,7 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("AccountSession")
 }
@@ -71,41 +66,33 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// ── Units ─────────────────────────────────────────────────────────
-
 model Unit {
-  id   String @id @default(cuid())
-  code String @unique
-  name String
-
+  id                String             @id @default(cuid())
+  code              String             @unique
+  name              String
   unitRegistrations UnitRegistration[]
 }
 
-// ── Unit Registration ─────────────────────────────────────────────
-
 model UnitRegistration {
-  id         String     @id @default(cuid())
-  unitId     String
-  userId     String
-  name       String?
-  termCode   String?
-  year       Int
-  semester   String
-  userStatus UserStatus
-
+  id            String         @id @default(cuid())
+  unitId        String
+  userId        String
+  name          String?
+  termCode      String?
+  year          Int
+  semester      String
+  userStatus    UserStatus
+  classSessions ClassSession[]
   unit          Unit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  classSessions ClassSession[]
 
   @@unique([unitId, userId, name])
   @@index([userId])
   @@index([unitId])
 }
 
-// ── Class Sessions ────────────────────────────────────────────────
-
 model ClassSession {
-  id                 String      @id @default(cuid())
+  id                 String                  @id @default(cuid())
   unitRegistrationId String
   lecturerId         String
   sessionName        SessionName
@@ -115,70 +102,60 @@ model ClassSession {
   subcomponent       String?
   groupNo            String?
   location           String?
-
-  unitRegistration  UnitRegistration        @relation(fields: [unitRegistrationId], references: [id], onDelete: Cascade)
-  lecturer          User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
-  attendanceData    ClassAttendanceData[]
-  attendanceRecords ClassAttendanceRecord[]
+  day                String?
+  
+  attendanceData     ClassAttendanceData[]
+  attendanceRecords  ClassAttendanceRecord[]
+  lecturer           User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
+  unitRegistration   UnitRegistration        @relation(fields: [unitRegistrationId], references: [id], onDelete: Cascade)
 
   @@index([unitRegistrationId])
   @@index([lecturerId])
 }
 
-// ── Attendance Data (raw QR scan payloads) ────────────────────────
-
 model ClassAttendanceData {
-  id                String   @id @default(cuid())
+  id                String       @id @default(cuid())
   classSessionId    String
   studentId         String?
   scanPayload       Json
   scanMethod        String?
   verificationStage String?
   challengeToken    String?
-  createdAt         DateTime @default(now())
-
-  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  createdAt         DateTime     @default(now())
+  classSession      ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
 
   @@index([classSessionId])
   @@index([studentId])
 }
 
-// ── Attendance Record (verified) ──────────────────────────────────
-
 model ClassAttendanceRecord {
-  id                     String           @id @default(cuid())
+  id                     String               @id @default(cuid())
   classSessionId         String
   studentId              String
-  status                 AttendanceStatus @default(PENDING)
+  status                 AttendanceStatus     @default(PENDING)
   verifiedAt             DateTime?
   verificationConfidence Float?
-  createdAt              DateTime         @default(now())
-
-  classSession ClassSession         @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
-  evidence     AttendanceEvidence[]
+  createdAt              DateTime             @default(now())
+  evidence               AttendanceEvidence[]
+  classSession           ClassSession         @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
 
   @@unique([classSessionId, studentId])
   @@index([classSessionId])
   @@index([studentId])
 }
 
-// ── Attendance Evidence (MC / sick leave uploads) ─────────────────
-
 model AttendanceEvidence {
-  id                 String   @id @default(cuid())
+  id                 String                @id @default(cuid())
   attendanceRecordId String
   uploadedBy         String
   fileUrl            String
   reason             String?
-  uploadedAt         DateTime @default(now())
-  status             String   @default("PENDING")
-
-  attendanceRecord ClassAttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
+  uploadedAt         DateTime              @default(now())
+  status             String                @default("PENDING")
+  attendanceRecord   ClassAttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
 
   @@index([attendanceRecordId])
 }
-
-// ── Enums ─────────────────────────────────────────────────────────
 
 enum UserRole {
   STUDENT

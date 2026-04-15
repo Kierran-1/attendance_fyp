@@ -61,9 +61,8 @@ export async function GET() {
         const end = cs.sessionTime.getTime() + cs.sessionDuration * 60_000;
         const isActive = now >= cs.sessionTime.getTime() && now <= end;
 
-        // Derive day and time from sessionTime
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const day = days[cs.sessionTime.getDay()] ?? '';
+      
+
         const padTime = (h: number, m: number) =>
           `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         const startH = cs.sessionTime.getHours();
@@ -82,7 +81,7 @@ export async function GET() {
           year: reg.year,
           classType: cs.sessionName,   // "LAB" | "LECTURE" | "TUTORIAL"
           group: cs.groupNo ?? '',
-          day,
+          day: cs.day ?? '',
           time,
           location: cs.location ?? '',               // not stored
           lecturer: '',               // not stored

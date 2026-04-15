@@ -22,7 +22,7 @@ type UnitInput = {
   groupNo?: string;     // e.g. "01", "02"
   day?: string;         // e.g. "Tue"
   time?: string;        // e.g. "13:00 - 15:00"
-  room?: string;
+  location?: string;
   lecturer?: string;
 };
 
@@ -146,7 +146,9 @@ export async function POST(request: NextRequest) {
         sessionTime,
         sessionDuration: durationMinutes,
         groupNo,
-        subcomponent: scopeKey, // store "LA1-01" so GET can look up students correctly
+        subcomponent: scopeKey,
+        location: unitInput.location ?? null,
+        day: unitInput.day ?? null,
       },
     });
   }

@@ -62,24 +62,24 @@ const CLASS_TYPE_LABEL: Record<string, string> = {
   LA: 'Lab',
   TU: 'Tutorial',
   PR: 'Practical',
-  LECTURE:   'Lecture',
-  LAB:       'Lab',
-  TUTORIAL:  'Tutorial',
+  LECTURE: 'Lecture',
+  LAB: 'Lab',
+  TUTORIAL: 'Tutorial',
   PRACTICAL: 'Practical',
 };
 
 function getSessionBadgeClasses(type: string) {
   const label = CLASS_TYPE_LABEL[type] ?? type;
   switch (label) {
-    case 'Lecture':  return 'bg-blue-50 text-blue-700 border-blue-100';
+    case 'Lecture': return 'bg-blue-50 text-blue-700 border-blue-100';
     case 'Tutorial': return 'bg-rose-50 text-[#E4002B] border-rose-100';
-    case 'Lab':      return 'bg-purple-50 text-purple-700 border-purple-100';
-    default:         return 'bg-gray-50 text-gray-700 border-gray-100';
+    case 'Lab': return 'bg-purple-50 text-purple-700 border-purple-100';
+    default: return 'bg-gray-50 text-gray-700 border-gray-100';
   }
 }
 
 function getDayOrder(day: string): number {
-  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   return days.indexOf(day);
 }
 
@@ -110,11 +110,11 @@ const StatCard = ({ label, value, sub, icon: Icon, color, trend }: any) => (
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function LecturerDashboardPage() {
-  const [classes, setClasses]               = useState<ClassData[]>([]);
-  const [activeSession, setActiveSession]   = useState<ActiveSession>(null);
-  const [loading, setLoading]               = useState(true);
-  const [greeting, setGreeting]             = useState('');
-  const [expandedUnits, setExpandedUnits]   = useState<Record<string, boolean>>({});
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [activeSession, setActiveSession] = useState<ActiveSession>(null);
+  const [loading, setLoading] = useState(true);
+  const [greeting, setGreeting] = useState('');
+  const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -153,38 +153,46 @@ export default function LecturerDashboardPage() {
 
   // ── Derived state ────────────────────────────────────────────────────────────
 
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  // AFTER
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }); // e.g. "Tuesday"
 
-  const todaysClasses = useMemo(() => 
+  // Normalize stored day abbreviations ("Tue") to full names ("Tuesday")
+  const DAY_EXPAND: Record<string, string> = {
+    Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday',
+    Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday',
+  };
+  const normalizeDay = (d: string) => DAY_EXPAND[d] ?? d;
+
+  const todaysClasses = useMemo(() =>
     classes
-      .filter(c => c.day === today)
+      .filter(c => normalizeDay(c.day) === today)
       .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? '')),
     [classes, today]
   );
 
-  const upcomingClasses = useMemo(() => 
+  const upcomingClasses = useMemo(() =>
     classes
-      .filter(c => c.day !== today)
-      .sort((a, b) => getDayOrder(a.day) - getDayOrder(b.day))
+      .filter(c => normalizeDay(c.day) !== today)
+      .sort((a, b) => getDayOrder(normalizeDay(a.day)) - getDayOrder(normalizeDay(b.day)))
       .slice(0, 3),
     [classes, today]
   );
 
-  const totalStudents = useMemo(() => 
+  const totalStudents = useMemo(() =>
     new Set(classes.flatMap(c => c.students.map(s => s.id))).size,
     [classes]
   );
 
   const allSessions = useMemo(() => classes.flatMap(c => c.sessions), [classes]);
-  
-  const avgAttendance = useMemo(() => 
+
+  const avgAttendance = useMemo(() =>
     allSessions.length > 0
       ? Math.round(allSessions.reduce((sum, s) => sum + s.attendancePercentage, 0) / allSessions.length)
       : 0,
     [allSessions]
   );
 
-  const todayCheckedIn = useMemo(() => 
+  const todayCheckedIn = useMemo(() =>
     todaysClasses.reduce((sum, c) => {
       const latestSession = c.sessions.at(-1);
       return sum + (latestSession?.presentCount ?? 0);
@@ -195,16 +203,16 @@ export default function LecturerDashboardPage() {
   // Group classes by unit code for the attendance trends section
   const groupedUnitStats = useMemo(() => {
     const groups: Record<string, { code: string; name: string; avg: number; classes: any[] }> = {};
-    
+
     classes.forEach(c => {
       if (!groups[c.unitCode]) {
         groups[c.unitCode] = { code: c.unitCode, name: c.unitName, avg: 0, classes: [] };
       }
-      
+
       const classAvg = c.sessions.length > 0
         ? Math.round(c.sessions.reduce((s, sess) => s + sess.attendancePercentage, 0) / c.sessions.length)
         : 0;
-        
+
       groups[c.unitCode].classes.push({
         id: c.id,
         type: c.classType,
@@ -221,7 +229,7 @@ export default function LecturerDashboardPage() {
     }).sort((a, b) => b.avg - a.avg);
   }, [classes]);
 
-  const liveTotal = useMemo(() => 
+  const liveTotal = useMemo(() =>
     activeSession ? (classes.find(c => c.id === activeSession.unitId)?.students.length ?? 0) : 0,
     [activeSession, classes]
   );
@@ -249,7 +257,7 @@ export default function LecturerDashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-12">
-      
+
       {/* Top Navigation / Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
         <span className="hover:text-gray-600 cursor-default">Lecturer</span>
@@ -288,42 +296,42 @@ export default function LecturerDashboardPage() {
 
       {/* Key Metrics */}
       <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard 
-          label="Total Classes" 
-          value={classes.length} 
-          sub="Active units" 
-          icon={BookOpen} 
-          color="text-gray-900" 
+        <StatCard
+          label="Total Classes"
+          value={classes.length}
+          sub="Active units"
+          icon={BookOpen}
+          color="text-gray-900"
         />
-        <StatCard 
-          label="Today's Schedule" 
-          value={todaysClasses.length} 
-          sub={today} 
-          icon={CalendarDays} 
-          color="text-gray-900" 
+        <StatCard
+          label="Today's Schedule"
+          value={todaysClasses.length}
+          sub={today}
+          icon={CalendarDays}
+          color="text-gray-900"
         />
-        <StatCard 
-          label="Checked In Today" 
-          value={todayCheckedIn} 
-          sub="Total student records" 
-          icon={Users} 
-          color="text-emerald-600" 
+        <StatCard
+          label="Checked In Today"
+          value={todayCheckedIn}
+          sub="Total student records"
+          icon={Users}
+          color="text-emerald-600"
           trend="+12%"
         />
-        <StatCard 
-          label="Avg. Attendance" 
-          value={`${avgAttendance}%`} 
-          sub={`Across ${allSessions.length} sessions`} 
-          icon={BarChart3} 
-          color="text-red-600" 
+        <StatCard
+          label="Avg. Attendance"
+          value={`${avgAttendance}%`}
+          sub={`Across ${allSessions.length} sessions`}
+          icon={BarChart3}
+          color="text-red-600"
         />
       </section>
 
       <div className="grid gap-8 lg:grid-cols-3">
-        
+
         {/* Main Content Area (Left 2/3) */}
         <div className="lg:col-span-2 space-y-8">
-          
+
           {/* Today's Classes List */}
           <div className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-50 px-8 py-6">
@@ -368,7 +376,7 @@ export default function LecturerDashboardPage() {
                     </div>
                     <Link
                       href="/lecturer/classes"
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-5 py-3 text-xs font-bold text-gray-700 transition-all hover:bg-red-600 hover:text-white group-hover:shadow-md"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-3 text-xs font-bold text-white transition-all hover:bg-red-600 hover:text-white group-hover:shadow-md"
                     >
                       Manage Class <ArrowUpRight size={14} />
                     </Link>
@@ -397,7 +405,7 @@ export default function LecturerDashboardPage() {
                 groupedUnitStats.map(unit => (
                   <div key={unit.code} className="overflow-hidden rounded-2xl border border-gray-50 transition-all hover:border-gray-100">
                     {/* Unit Header (Clickable) */}
-                    <button 
+                    <button
                       onClick={() => toggleUnitExpand(unit.code)}
                       className="flex w-full items-center justify-between bg-gray-50/50 p-4 transition-colors hover:bg-gray-50"
                     >
@@ -412,9 +420,8 @@ export default function LecturerDashboardPage() {
                           </span>
                           <div className="h-1.5 w-20 overflow-hidden rounded-full bg-gray-200">
                             <div
-                              className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                                unit.avg >= 80 ? 'bg-emerald-500' : unit.avg >= 60 ? 'bg-amber-400' : 'bg-red-500'
-                              }`}
+                              className={`h-full rounded-full transition-all duration-1000 ease-out ${unit.avg >= 80 ? 'bg-emerald-500' : unit.avg >= 60 ? 'bg-amber-400' : 'bg-red-500'
+                                }`}
                               style={{ width: `${unit.avg}%` }}
                             />
                           </div>
@@ -439,9 +446,8 @@ export default function LecturerDashboardPage() {
                               </span>
                               <div className="h-1 w-16 overflow-hidden rounded-full bg-gray-100">
                                 <div
-                                  className={`h-full rounded-full ${
-                                    cls.avg >= 80 ? 'bg-emerald-500' : cls.avg >= 60 ? 'bg-amber-400' : 'bg-red-500'
-                                  }`}
+                                  className={`h-full rounded-full ${cls.avg >= 80 ? 'bg-emerald-500' : cls.avg >= 60 ? 'bg-amber-400' : 'bg-red-500'
+                                    }`}
                                   style={{ width: `${cls.avg}%` }}
                                 />
                               </div>
@@ -463,7 +469,7 @@ export default function LecturerDashboardPage() {
 
         {/* Sidebar (Right 1/3) */}
         <div className="space-y-8">
-          
+
           {/* Live Session Status */}
           <div className={`relative overflow-hidden rounded-[2rem] p-8 text-white shadow-xl transition-all ${activeSession ? 'bg-red-600 shadow-red-100' : 'bg-gray-900 shadow-gray-100'}`}>
             <div className="relative z-10 space-y-6">
@@ -481,7 +487,7 @@ export default function LecturerDashboardPage() {
                     <h3 className="text-2xl font-black tracking-tight">{activeSession.unit.code}</h3>
                     <p className="text-sm font-medium text-white/80 line-clamp-1">{activeSession.unit.name}</p>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4 rounded-2xl bg-white/10 p-4 backdrop-blur-sm">
                     <div className="space-y-1">
                       <p className="text-[10px] font-bold uppercase text-white/60">Type</p>
@@ -514,7 +520,7 @@ export default function LecturerDashboardPage() {
                 </>
               )}
             </div>
-            
+
             {/* Decorative Background Element */}
             <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5 blur-2xl" />
             <div className="absolute -bottom-8 -left-8 h-32 w-32 rounded-full bg-white/5 blur-2xl" />
@@ -525,8 +531,8 @@ export default function LecturerDashboardPage() {
             <h2 className="text-lg font-black text-gray-900 mb-6">Quick Actions</h2>
             <div className="grid gap-3">
               {[
-                { label: 'Live Attendance', icon: ScanLine, href: '/lecturer/live-attendance', color: 'text-red-600 bg-red-50' },
                 { label: 'Class Rosters', icon: Users, href: '/lecturer/classes', color: 'text-blue-600 bg-blue-50' },
+                { label: 'Live Attendance', icon: ScanLine, href: '/lecturer/live-attendance', color: 'text-red-600 bg-red-50' },
                 { label: 'Unit Reports', icon: BarChart3, href: '/lecturer/reports', color: 'text-amber-600 bg-amber-50' },
                 { label: 'Upload Data', icon: Upload, href: '/lecturer/classes', color: 'text-purple-600 bg-purple-50' },
               ].map((action) => (
