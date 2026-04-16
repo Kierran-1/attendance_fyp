@@ -7,7 +7,6 @@ import {
   QrCode,
   ScanLine,
   Bell,
-  FileText,
 } from 'lucide-react';
 
 type MenuItem = {
@@ -69,11 +68,6 @@ export const studentMenu: {
           name: 'Alerts',
           href: '/student/alerts',
           icon: <Bell size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
-        },
-        {
-          name: 'Absence Docs',
-          href: '/student/absences',
-          icon: <FileText size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
         },
       ],
     },
