@@ -14,7 +14,6 @@ import { signOut, useSession } from 'next-auth/react';
 import {
   ChevronDown,
   LogOut,
-  PanelLeftClose,
   PanelLeftOpen,
   UserCircle2,
   X,
@@ -51,14 +50,12 @@ export default function Sidebar({
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // Decide where the profile link should point based on current panel.
   const isStudentPanel = pathname.startsWith('/student');
   const profileHref = isStudentPanel ? '/student/profile' : '/lecturer/profile';
 
   const currentUserName = session?.user?.name ?? 'Loading...';
   const currentUserEmail = session?.user?.email ?? '';
 
-  // Show one initial in the avatar circle when no image is available.
   const userInitial = useMemo(() => {
     return (session?.user?.name?.trim()?.[0] ?? '?').toUpperCase();
   }, [session?.user?.name]);
@@ -68,13 +65,14 @@ export default function Sidebar({
   };
 
   useEffect(() => {
-    // Close the mobile drawer whenever the route changes.
-    onClose();
-    setAccountMenuOpen(false);
+    if (previousPathname.current !== pathname) {
+      onClose();
+      setAccountMenuOpen(false);
+      previousPathname.current = pathname;
+    }
   }, [pathname, onClose]);
 
   useEffect(() => {
-    // Stop body scrolling while the mobile sidebar is open.
     if (typeof document === 'undefined') return;
 
     if (isOpen) {
@@ -89,7 +87,6 @@ export default function Sidebar({
   }, [isOpen]);
 
   useEffect(() => {
-    // Close the account dropdown when the user clicks outside it.
     function handleOutsideClick(event: MouseEvent) {
       if (!accountMenuRef.current) return;
 
@@ -103,13 +100,11 @@ export default function Sidebar({
   }, []);
 
   function handleSidebarClick(event: ReactMouseEvent<HTMLDivElement>) {
-    // Prevent clicks inside the drawer from bubbling to the mobile backdrop.
     event.stopPropagation();
   }
 
   return (
     <>
-      {/* Mobile backdrop */}
       <div
         className={`fixed inset-0 z-[80] bg-slate-950/45 backdrop-blur-[2px] transition-all duration-300 lg:hidden ${
           isOpen
@@ -120,7 +115,6 @@ export default function Sidebar({
         aria-hidden="true"
       />
 
-      {/* Sidebar drawer */}
       <aside
         id="app-sidebar"
         aria-label={`${panelTitle} sidebar`}
@@ -129,7 +123,6 @@ export default function Sidebar({
         }`}
         onClick={handleSidebarClick}
       >
-        {/* Top branding section */}
         <div className="border-b border-slate-200/80 px-4 pb-4 pt-4">
           <div className="mb-4 flex items-center justify-between lg:hidden">
             <div className="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#E4002B]">
@@ -165,7 +158,6 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Main navigation area */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <div className="space-y-6">
             {menu.map((section) => (
@@ -190,7 +182,6 @@ export default function Sidebar({
                               : 'border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
                           }`}
                         >
-                          {/* Keep icon styling consistent for active and hover states */}
                           <span
                             className={`inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
                               active
@@ -212,7 +203,6 @@ export default function Sidebar({
           </div>
         </nav>
 
-        {/* Footer user account section */}
         <div className="border-t border-slate-200/80 p-3">
           <div ref={accountMenuRef} className="relative">
             <button
@@ -249,7 +239,6 @@ export default function Sidebar({
               />
             </button>
 
-            {/* Small dropdown for profile and sign out */}
             <div
               className={`absolute bottom-[calc(100%+0.6rem)] left-0 right-0 z-10 rounded-[1.25rem] border border-slate-200 bg-white p-2 shadow-[0_20px_50px_rgba(15,23,42,0.14)] transition-all ${
                 accountMenuOpen
