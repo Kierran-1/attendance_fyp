@@ -44,11 +44,6 @@ export const studentMenu: {
           href: '/student/attendance',
           icon: <ClipboardCheck size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
         },
-        {
-          name: 'Profile',
-          href: '/student/profile',
-          icon: <UserCircle2 size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
-        },
       ],
     },
     {
