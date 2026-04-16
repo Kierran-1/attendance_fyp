@@ -88,12 +88,6 @@ export default function StudentLayout({
                     <span className="truncate"> · {session.user.email}</span>
                   ) : null}
                 </div>
-
-                <div className="text-[#E4002B]">
-                  {pathname === '/student/dashboard'
-                    ? 'Student dashboard ready'
-                    : 'Student route protected'}
-                </div>
               </div>
             </div>
 
