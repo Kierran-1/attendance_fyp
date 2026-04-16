@@ -74,6 +74,26 @@ function getSessionChipClasses(sessionName: string) {
   return 'bg-gray-50 text-gray-700 border-gray-100';
 }
 
+function getSessionStatusClasses(status: SessionSummary['sessionStatus']) {
+  if (status === 'Active') return 'bg-green-50 text-green-700 border-green-100';
+  if (status === 'Upcoming') return 'bg-blue-50 text-blue-700 border-blue-100';
+  return 'bg-gray-50 text-gray-600 border-gray-200';
+}
+
+function getAttendanceStatusClasses(status: string) {
+  const upper = status.toUpperCase();
+
+  if (upper === 'PRESENT' || upper === 'LATE') {
+    return 'bg-green-50 text-green-700 border-green-100';
+  }
+
+  if (upper === 'PENDING') {
+    return 'bg-amber-50 text-amber-700 border-amber-100';
+  }
+
+  return 'bg-red-50 text-red-600 border-red-100';
+}
+
 export default function StudentClassesPage() {
   const [classes, setClasses] = useState<StudentClass[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,17 +135,27 @@ export default function StudentClassesPage() {
 
     return classes.filter((item) => {
       const lecturer = item.lecturer ?? '';
-      const venue = item.venue ?? '';
-      const location = item.location ?? '';
       const sessionTypes = item.sessionTypes.join(' ');
+      const sessionRows = item.sessions
+        .map((session) => {
+          return [
+            session.sessionName,
+            session.day,
+            session.time,
+            session.location ?? '',
+            session.groupNo ?? '',
+            session.subcomponent ?? '',
+            session.lecturer ?? '',
+          ].join(' ');
+        })
+        .join(' ');
 
       return (
         item.code.toLowerCase().includes(keyword) ||
         item.name.toLowerCase().includes(keyword) ||
         lecturer.toLowerCase().includes(keyword) ||
-        venue.toLowerCase().includes(keyword) ||
-        location.toLowerCase().includes(keyword) ||
-        sessionTypes.toLowerCase().includes(keyword)
+        sessionTypes.toLowerCase().includes(keyword) ||
+        sessionRows.toLowerCase().includes(keyword)
       );
     });
   }, [classes, searchTerm]);
@@ -161,7 +191,7 @@ export default function StudentClassesPage() {
             My <span className="text-red-600">Classes</span>
           </h1>
           <p className="max-w-2xl text-base text-gray-500">
-            Review your enrolled units and their real session rows created on the lecturer side.
+            Review your enrolled units together with the real session rows created on the lecturer side.
           </p>
         </div>
 
@@ -215,7 +245,7 @@ export default function StudentClassesPage() {
           <p className="text-4xl font-black tracking-tight text-red-600">
             {loading ? '—' : `${averageAttendance}%`}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Based on completed sessions only</p>
+          <p className="mt-2 text-xs text-gray-500">Based on completed session rows only</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -250,7 +280,7 @@ export default function StudentClassesPage() {
           <div>
             <p className="text-lg font-black text-gray-900">Search Classes</p>
             <p className="text-sm text-gray-500">
-              Search by unit code, unit name, lecturer, venue, or session type.
+              Search by unit, lecturer, session type, day, venue, or group.
             </p>
           </div>
 
@@ -288,6 +318,13 @@ export default function StudentClassesPage() {
         ) : (
           filteredClasses.map((item) => {
             const attendanceRate = item.attendanceRate ?? 0;
+            const upcomingSessions = item.sessions.filter(
+              (session) => session.sessionStatus !== 'Completed'
+            );
+            const previewSessions =
+              upcomingSessions.length > 0
+                ? upcomingSessions.slice(0, 4)
+                : item.sessions.slice(0, 4);
 
             return (
               <article
@@ -318,11 +355,11 @@ export default function StudentClassesPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.2fr_0.8fr]">
+                <div className="grid gap-6 px-6 py-6 lg:grid-cols-[0.9fr_1.1fr]">
                   <div className="space-y-5">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
-                        Session Types
+                        Session Types in This Unit
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {item.sessionTypes.length > 0 ? (
@@ -344,16 +381,16 @@ export default function StudentClassesPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div className="rounded-2xl bg-gray-50 p-4">
                         <div className="mb-2 flex items-center gap-2 text-gray-400">
                           <CalendarDays size={16} />
                           <span className="text-xs font-bold uppercase tracking-widest">
-                            Day
+                            Total Session Rows
                           </span>
                         </div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {item.day ?? 'Not scheduled'}
+                          {item.sessions.length}
                         </p>
                       </div>
 
@@ -361,62 +398,91 @@ export default function StudentClassesPage() {
                         <div className="mb-2 flex items-center gap-2 text-gray-400">
                           <Clock3 size={16} />
                           <span className="text-xs font-bold uppercase tracking-widest">
-                            Time
+                            Upcoming / Active
                           </span>
                         </div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {item.time ?? 'Not scheduled'}
+                          {upcomingSessions.length}
                         </p>
                       </div>
+                    </div>
 
-                      <div className="rounded-2xl bg-gray-50 p-4">
-                        <div className="mb-2 flex items-center gap-2 text-gray-400">
-                          <MapPin size={16} />
-                          <span className="text-xs font-bold uppercase tracking-widest">
-                            Venue
-                          </span>
-                        </div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {item.venue ?? 'Not set'}
-                        </p>
-                      </div>
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+                      The rows on the right are read from the backend class-session records, so students no longer need to guess or manually choose Lecture, Tutorial, or Lab.
                     </div>
                   </div>
 
                   <div className="rounded-3xl border border-gray-100 bg-gray-50/60 p-5">
-                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
-                      Session Preview
-                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                        Session Rows
+                      </p>
+                      <span className="text-xs font-bold text-gray-400">
+                        Showing up to 4
+                      </span>
+                    </div>
 
                     <div className="mt-4 space-y-3">
-                      {item.sessions.length > 0 ? (
-                        item.sessions.slice(0, 4).map((session) => (
+                      {previewSessions.length > 0 ? (
+                        previewSessions.map((session) => (
                           <div
                             key={session.id}
-                            className="rounded-2xl border border-white bg-white px-4 py-3 shadow-sm"
+                            className="rounded-2xl border border-white bg-white px-4 py-4 shadow-sm"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${getSessionChipClasses(
+                                      session.sessionName
+                                    )}`}
+                                  >
+                                    {session.sessionName}
+                                  </span>
+
+                                  <span
+                                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${getSessionStatusClasses(
+                                      session.sessionStatus
+                                    )}`}
+                                  >
+                                    {session.sessionStatus}
+                                  </span>
+
+                                  <span
+                                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${getAttendanceStatusClasses(
+                                      session.attendanceStatus
+                                    )}`}
+                                  >
+                                    {session.attendanceStatus}
+                                  </span>
+                                </div>
+
                                 <p className="text-sm font-bold text-gray-900">
-                                  {session.sessionName}
-                                </p>
-                                <p className="mt-1 text-xs text-gray-500">
                                   {session.day} · {session.time}
                                 </p>
-                                <p className="mt-1 text-xs text-gray-500">
+
+                                <p className="text-xs text-gray-500">
                                   {session.location ?? 'Venue not set'}
+                                  {session.groupNo ? ` · Group ${session.groupNo}` : ''}
+                                  {session.weekNumber ? ` · Week ${session.weekNumber}` : ''}
                                 </p>
+
+                                {session.lecturer ? (
+                                  <p className="text-xs text-gray-500">
+                                    Lecturer: {session.lecturer}
+                                  </p>
+                                ) : null}
                               </div>
 
-                              <span className="rounded-full bg-gray-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                                {session.sessionStatus}
-                              </span>
+                              <div className="text-right text-xs text-gray-400">
+                                {session.subcomponent || 'Session row'}
+                              </div>
                             </div>
                           </div>
                         ))
                       ) : (
                         <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
-                          No lecturer-created sessions available yet for this unit.
+                          No active sessions available yet for this unit.
                         </div>
                       )}
                     </div>
