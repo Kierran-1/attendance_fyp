@@ -13,7 +13,7 @@
     "prisma:migrate": "node -r dotenv/config node_modules/.bin/prisma migrate dev",
     "postinstall": "prisma generate"
   },
-"dependencies": {
+  "dependencies": {
     "@next-auth/prisma-adapter": "^1.0.0",
     "@prisma/client": "^6.19.3",
     "@supabase/supabase-js": "^2.38.0",
@@ -26,6 +26,7 @@
     "lucide-react": "^0.577.0",
     "next": "^16.1.6",
     "next-auth": "^4.24.0",
+    "ngrok": "^5.0.0-beta.2",
     "postcss": "^8.4.0",
     "preline": "^4.1.2",
     "qrcode.react": "^4.2.0",
