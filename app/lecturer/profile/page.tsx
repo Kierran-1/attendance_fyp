@@ -1,413 +1,244 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
-  BookOpen,
-  CalendarDays,
-  CheckCircle2,
-  Edit3,
-  KeyRound,
+  Briefcase,
+  Building2,
+  IdCard,
+  Loader2,
   Mail,
   Phone,
-  Save,
   ShieldCheck,
   UserCircle2,
+  type LucideIcon,
 } from 'lucide-react';
 
-/*
- * Later integration:
- * - load real lecturer info from Microsoft / backend
- * - save updates to database
- * - connect password/security actions to real auth flow
- */
-export default function LecturerProfilePage() {
-  const [profile, setProfile] = useState({
-    fullName: 'Dr. Mary Lee',
-    staffId: 'STAFF001',
-    email: 'marylee@swinburne.edu.my',
-    phone: '+60 13-888 1234',
-    faculty: 'Faculty of Engineering, Computing and Science',
-    role: 'Lecturer',
-    officeLocation: 'Swinburne Sarawak Campus',
-    bio: 'Lecturer account profile for attendance tracking, class management, reporting, and student communication workflows.',
-  });
+type LecturerProfileApiResponse = {
+  lecturerId?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string | null;
+  department?: string | null;
+  faculty?: string | null;
+};
 
-  const [saved, setSaved] = useState(false);
+type LecturerProfile = {
+  fullName: string;
+  lecturerId: string;
+  email: string;
+  phone: string;
+  department: string;
+  faculty: string;
+};
 
-  const profileStats = useMemo(
-    () => ({
-      totalUnits: 4,
-      activeStudents: 157,
-      sessionsHandled: 28,
-      alertsSent: 6,
-    }),
-    []
-  );
-
-  const handleChange = (field: keyof typeof profile, value: string) => {
-    setProfile((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-    setSaved(false);
-  };
-
-  const handleSave = () => {
-    try {
-      localStorage.setItem(
-        'lecturerProfileFrontend',
-        JSON.stringify(profile)
-      );
-      setSaved(true);
-
-      window.setTimeout(() => {
-        setSaved(false);
-      }, 1800);
-    } catch (error) {
-      console.error('Failed to save lecturer profile:', error);
-      window.alert('Saving profile failed in browser storage.');
-    }
-  };
-
-  const handleChangePassword = () => {
-    window.alert('Password update is frontend-only for now.');
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Lecturer Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
-            My Account
-          </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
-            View lecturer account details, update profile information, and review
-            access-related settings for the attendance system.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/lecturer/dashboard"
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-          >
-            <ArrowLeft size={16} />
-            Back to Dashboard
-          </Link>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
-          >
-            <Save size={16} />
-            Save Changes
-          </button>
-        </div>
-      </section>
-
-      {/* Summary cards */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          label="Units Managed"
-          value={profileStats.totalUnits}
-          note="Tracked lecturer units"
-          valueClassName="text-gray-900"
-          icon={<BookOpen size={18} className="text-gray-300" />}
-        />
-
-        <SummaryCard
-          label="Students"
-          value={profileStats.activeStudents}
-          note="Students across current classes"
-          valueClassName="text-gray-900"
-          icon={<UserCircle2 size={18} className="text-gray-300" />}
-        />
-
-        <SummaryCard
-          label="Sessions Handled"
-          value={profileStats.sessionsHandled}
-          note="Attendance sessions handled"
-          valueClassName="text-green-600"
-          icon={<CalendarDays size={18} className="text-green-500" />}
-        />
-
-        <SummaryCard
-          label="Alerts Sent"
-          value={profileStats.alertsSent}
-          note="Lecturer messages prepared"
-          valueClassName="text-[#E4002B]"
-          icon={<ShieldCheck size={18} className="text-[#E4002B]" />}
-        />
-      </section>
-
-      {/* Main content */}
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        {/* Left column */}
-        <div className="space-y-6">
-          <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
-            <div className="flex flex-col items-center text-center">
-              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-rose-50 text-[#E4002B]">
-                <UserCircle2 size={56} />
-              </div>
-
-              <h2 className="mt-5 text-2xl font-black tracking-tight text-gray-900">
-                {profile.fullName}
-              </h2>
-              <p className="mt-1 text-sm text-gray-500">{profile.staffId}</p>
-
-              <div className="mt-4 inline-flex rounded-full bg-rose-50 px-4 py-2 text-xs font-bold text-[#E4002B]">
-                {profile.role}
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-4">
-              <InfoPanel
-                icon={<Mail size={14} />}
-                label="Email"
-                value={profile.email}
-              />
-              <InfoPanel
-                icon={<Phone size={14} />}
-                label="Phone"
-                value={profile.phone}
-              />
-              <InfoPanel
-                icon={<BookOpen size={14} />}
-                label="Faculty"
-                value={profile.faculty}
-              />
-              <InfoPanel
-                icon={<ShieldCheck size={14} />}
-                label="Role Access"
-                value="Lecturer portal privileges active"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <ShieldCheck size={18} className="text-[#E4002B]" />
-              <h3 className="text-base font-bold text-gray-900">
-                Role-Based Access
-              </h3>
-            </div>
-
-            <p className="text-sm leading-7 text-gray-700">
-              This lecturer account is intended for attendance session control,
-              class management, roster upload, report viewing, and student alert
-              communication. This helps demonstrate the project’s role-based system
-              requirement between lecturer and student users.
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <KeyRound size={18} className="text-[#E4002B]" />
-              <h3 className="text-base font-bold text-gray-900">
-                Security Actions
-              </h3>
-            </div>
-
-            <p className="mb-4 text-sm leading-7 text-gray-600">
-              Password and account security actions are shown here as frontend UI
-              first, and can later be connected to the real authentication flow.
-            </p>
-
-            <button
-              type="button"
-              onClick={handleChangePassword}
-              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-            >
-              <KeyRound size={16} />
-              Change Password
-            </button>
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
-          <div className="mb-8 flex items-start gap-3">
-            <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-50 text-[#E4002B]">
-              <Edit3 size={18} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-                Profile Details
-              </p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-gray-900">
-                Update Lecturer Information
-              </h2>
-              <p className="mt-2 text-sm leading-7 text-gray-500">
-                Edit the lecturer profile layout here first. Later, this can be
-                connected to Microsoft identity data and the project database.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <FormField
-              label="Full Name"
-              value={profile.fullName}
-              onChange={(value) => handleChange('fullName', value)}
-            />
-
-            <FormField
-              label="Staff ID"
-              value={profile.staffId}
-              onChange={(value) => handleChange('staffId', value)}
-            />
-
-            <div className="sm:col-span-2">
-              <FormField
-                label="Email Address"
-                value={profile.email}
-                onChange={(value) => handleChange('email', value)}
-                type="email"
-              />
-            </div>
-
-            <FormField
-              label="Phone Number"
-              value={profile.phone}
-              onChange={(value) => handleChange('phone', value)}
-            />
-
-            <FormField
-              label="Role"
-              value={profile.role}
-              onChange={(value) => handleChange('role', value)}
-            />
-
-            <div className="sm:col-span-2">
-              <FormField
-                label="Faculty"
-                value={profile.faculty}
-                onChange={(value) => handleChange('faculty', value)}
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <FormField
-                label="Office / Campus Location"
-                value={profile.officeLocation}
-                onChange={(value) => handleChange('officeLocation', value)}
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="mb-2 block text-sm font-semibold text-gray-700">
-                Profile Description
-              </label>
-              <textarea
-                rows={5}
-                value={profile.bio}
-                onChange={(e) => handleChange('bio', e.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-              />
-            </div>
-          </div>
-
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleSave}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
-            >
-              <Save size={16} />
-              Save Changes
-            </button>
-
-            {saved && (
-              <div className="inline-flex items-center gap-2 rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">
-                <CheckCircle2 size={16} />
-                Profile saved in UI
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  note,
-  valueClassName,
-  icon,
-}: {
+type DetailCardProps = {
   label: string;
-  value: string | number;
-  note: string;
-  valueClassName: string;
-  icon: React.ReactNode;
-}) {
+  value: string;
+  icon: LucideIcon;
+};
+
+function DetailCard({ label, value, icon: Icon }: DetailCardProps) {
   return (
-    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-rose-100 hover:bg-rose-50/40">
+      <div className="mb-3 flex items-center gap-2">
+        <div className="rounded-xl bg-white p-2 text-[#E4002B] shadow-sm">
+          <Icon size={16} />
+        </div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
           {label}
         </p>
-        {icon}
       </div>
-      <p className={`text-4xl font-black tracking-tight ${valueClassName}`}>
-        {value}
-      </p>
-      <p className="mt-2 text-xs text-gray-500">{note}</p>
+
+      <p className="break-words text-sm font-semibold text-slate-800">{value}</p>
     </div>
   );
 }
 
-function InfoPanel({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl bg-gray-50 px-4 py-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
-        {icon}
-        {label}
-      </div>
-      <p className="text-sm font-semibold text-gray-800">{value}</p>
-    </div>
-  );
-}
+export default function LecturerProfilePage() {
+  const { data: session, status } = useSession();
 
-function FormField({
-  label,
-  value,
-  onChange,
-  type = 'text',
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-}) {
+  const [profile, setProfile] = useState<LecturerProfile>({
+    fullName: '',
+    lecturerId: '',
+    email: '',
+    phone: '',
+    department: '',
+    faculty: '',
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !session?.user) return;
+
+    async function loadProfile() {
+      try {
+        setLoading(true);
+        setError('');
+
+        const res = await fetch('/api/lecturer/profile', {
+          cache: 'no-store',
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to load lecturer profile.');
+        }
+
+        const data: LecturerProfileApiResponse = await res.json();
+
+        setProfile({
+          fullName: data.fullName ?? session.user.name ?? 'Lecturer',
+          lecturerId:
+            data.lecturerId ??
+            session.user.id ??
+            session.user.email?.split('@')[0] ??
+            'Not available',
+          email: data.email ?? session.user.email ?? 'Not available',
+          phone: data.phone?.trim() || 'Not available',
+          department: data.department?.trim() || 'Not available',
+          faculty: data.faculty?.trim() || 'Not available',
+        });
+      } catch (err) {
+        console.error('Failed to load lecturer profile:', err);
+        setError('Failed to load profile information.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProfile();
+  }, [session, status]);
+
+  const initials = useMemo(() => {
+    return (profile.fullName || session?.user?.name || 'L')
+      .trim()
+      .charAt(0)
+      .toUpperCase();
+  }, [profile.fullName, session?.user?.name]);
+
+  if (status === 'loading' || loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex items-center gap-3 rounded-[1.75rem] border border-slate-200 bg-white px-5 py-4 text-sm font-medium text-slate-600 shadow-sm">
+          <Loader2 size={18} className="animate-spin text-[#E4002B]" />
+          Loading profile...
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <label className="mb-2 block text-sm font-semibold text-gray-700">
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-      />
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+            Lecturer Portal
+          </p>
+          <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+            My <span className="text-[#E4002B]">Profile</span>
+          </h1>
+          <p className="mt-2 text-sm text-slate-500 sm:text-base">
+            View your lecturer account details and synced Microsoft sign-in information.
+          </p>
+        </div>
+
+        <Link
+          href="/lecturer/dashboard"
+          className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-rose-200 hover:bg-rose-50 hover:text-[#E4002B]"
+        >
+          <ArrowLeft size={16} />
+          Back to Dashboard
+        </Link>
+      </div>
+
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="grid gap-6 xl:grid-cols-[1.05fr_1.35fr]">
+        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-r from-[#E4002B] via-rose-500 to-rose-400 px-6 py-6 text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">
+              Account Overview
+            </p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight">
+              Lecturer Identity
+            </h2>
+            <p className="mt-2 max-w-md text-sm text-white/85">
+              This information is linked to your Microsoft sign-in and used across the attendance system.
+            </p>
+          </div>
+
+          <div className="px-6 pb-6 pt-16">
+            <div className="-mt-24 flex flex-col items-center text-center">
+              <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-white bg-white text-2xl font-black text-[#E4002B] shadow-[0_16px_40px_rgba(15,23,42,0.15)]">
+                {initials}
+              </div>
+
+              <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-900">
+                {profile.fullName}
+              </h3>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                {profile.lecturerId}
+              </p>
+
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                <ShieldCheck size={14} />
+                Active Lecturer Account
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Email Address
+                </p>
+                <p className="mt-1 break-words text-sm font-semibold text-slate-800">
+                  {profile.email}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Contact Number
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {profile.phone}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+          <div className="mb-6">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+              Academic Information
+            </p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+              Lecturer Details
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              These details identify your lecturer account inside the system.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DetailCard label="Full Name" value={profile.fullName} icon={UserCircle2} />
+            <DetailCard label="Lecturer ID" value={profile.lecturerId} icon={IdCard} />
+            <DetailCard label="Email" value={profile.email} icon={Mail} />
+            <DetailCard label="Phone" value={profile.phone} icon={Phone} />
+            <DetailCard label="Department" value={profile.department} icon={Briefcase} />
+            <DetailCard label="Faculty" value={profile.faculty} icon={Building2} />
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

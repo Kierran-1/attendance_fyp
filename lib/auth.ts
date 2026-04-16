@@ -7,6 +7,7 @@ import { UserRole } from '@prisma/client';
  * Email overrides — treat these student emails as LECTURER.
  */
 const LECTURER_EMAIL_OVERRIDES = new Set([
+  '102788832@students.swinburne.edu.my',
   '102785480@students.swinburne.edu.my',
   'dev-lecturer.swinburne@outlook.com'
 
