@@ -5,8 +5,8 @@ import {
   ClipboardCheck,
   UserCircle2,
   QrCode,
+  ScanLine,
   Bell,
-  FileText,
 } from 'lucide-react';
 
 type MenuItem = {
@@ -60,14 +60,14 @@ export const studentMenu: {
           icon: <QrCode size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
         },
         {
+          name: 'Scan QR',
+          href: '/student/scan',
+          icon: <ScanLine size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
+        },
+        {
           name: 'Alerts',
           href: '/student/alerts',
           icon: <Bell size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
-        },
-        {
-          name: 'Absence Docs',
-          href: '/student/absences',
-          icon: <FileText size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
         },
       ],
     },

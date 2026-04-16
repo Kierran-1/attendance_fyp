@@ -15,18 +15,37 @@ import {
   UserCircle2,
 } from 'lucide-react';
 
+type SessionSummary = {
+  id: string;
+  sessionName: string;
+  sessionTime: string;
+  day: string;
+  time: string;
+  location: string | null;
+  venue: string | null;
+  weekNumber: number | null;
+  groupNo: string | null;
+  subcomponent: string | null;
+  lecturer: string | null;
+  sessionDuration: number;
+  sessionStatus: 'Active' | 'Upcoming' | 'Completed';
+  attendanceStatus: string;
+  verifiedAt: string | null;
+};
+
 type StudentClass = {
   id: string;
   code: string;
   name: string;
   lecturer: string | null;
-  faculty?: string | null;
   day: string | null;
   time: string | null;
-  venue?: string | null;
-  location?: string | null;
-  sessionType?: string | null;
-  attendanceRate?: number | null;
+  venue: string | null;
+  location: string | null;
+  sessionType: string | null;
+  sessionTypes: string[];
+  attendanceRate: number | null;
+  sessions: SessionSummary[];
 };
 
 type ClassesApiResponse = {
@@ -45,17 +64,34 @@ function getAttendanceText(rate: number) {
   return 'Needs attention';
 }
 
-function normaliseSessionType(raw?: string | null) {
-  if (!raw) return 'Mixed';
+function getSessionChipClasses(sessionName: string) {
+  const upper = sessionName.toUpperCase();
 
-  const upper = raw.toUpperCase();
+  if (upper === 'LECTURE') return 'bg-blue-50 text-blue-700 border-blue-100';
+  if (upper === 'TUTORIAL') return 'bg-violet-50 text-violet-700 border-violet-100';
+  if (upper === 'LAB') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
 
-  if (upper === 'LE' || upper === 'LECTURE') return 'Lecture';
-  if (upper === 'LA' || upper === 'LAB') return 'Lab';
-  if (upper === 'TU' || upper === 'TUTORIAL') return 'Tutorial';
-  if (upper === 'PR' || upper === 'PRACTICAL') return 'Practical';
+  return 'bg-gray-50 text-gray-700 border-gray-100';
+}
 
-  return raw;
+function getSessionStatusClasses(status: SessionSummary['sessionStatus']) {
+  if (status === 'Active') return 'bg-green-50 text-green-700 border-green-100';
+  if (status === 'Upcoming') return 'bg-blue-50 text-blue-700 border-blue-100';
+  return 'bg-gray-50 text-gray-600 border-gray-200';
+}
+
+function getAttendanceStatusClasses(status: string) {
+  const upper = status.toUpperCase();
+
+  if (upper === 'PRESENT' || upper === 'LATE') {
+    return 'bg-green-50 text-green-700 border-green-100';
+  }
+
+  if (upper === 'PENDING') {
+    return 'bg-amber-50 text-amber-700 border-amber-100';
+  }
+
+  return 'bg-red-50 text-red-600 border-red-100';
 }
 
 export default function StudentClassesPage() {
@@ -99,17 +135,27 @@ export default function StudentClassesPage() {
 
     return classes.filter((item) => {
       const lecturer = item.lecturer ?? '';
-      const venue = item.venue ?? '';
-      const location = item.location ?? '';
-      const sessionType = item.sessionType ?? '';
+      const sessionTypes = item.sessionTypes.join(' ');
+      const sessionRows = item.sessions
+        .map((session) => {
+          return [
+            session.sessionName,
+            session.day,
+            session.time,
+            session.location ?? '',
+            session.groupNo ?? '',
+            session.subcomponent ?? '',
+            session.lecturer ?? '',
+          ].join(' ');
+        })
+        .join(' ');
 
       return (
         item.code.toLowerCase().includes(keyword) ||
         item.name.toLowerCase().includes(keyword) ||
         lecturer.toLowerCase().includes(keyword) ||
-        venue.toLowerCase().includes(keyword) ||
-        location.toLowerCase().includes(keyword) ||
-        sessionType.toLowerCase().includes(keyword)
+        sessionTypes.toLowerCase().includes(keyword) ||
+        sessionRows.toLowerCase().includes(keyword)
       );
     });
   }, [classes, searchTerm]);
@@ -119,10 +165,7 @@ export default function StudentClassesPage() {
   const averageAttendance = useMemo(() => {
     if (!classes.length) return 0;
 
-    const total = classes.reduce((sum, item) => {
-      return sum + (item.attendanceRate ?? 0);
-    }, 0);
-
+    const total = classes.reduce((sum, item) => sum + (item.attendanceRate ?? 0), 0);
     return Math.round(total / classes.length);
   }, [classes]);
 
@@ -136,22 +179,19 @@ export default function StudentClassesPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-12">
-      {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
         <span>Student</span>
         <ChevronRight size={12} />
         <span className="text-red-600">Classes</span>
       </nav>
 
-      {/* Header */}
       <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
             My <span className="text-red-600">Classes</span>
           </h1>
           <p className="max-w-2xl text-base text-gray-500">
-            Review your enrolled units, monitor attendance progress, and keep your
-            student panel aligned with the active lecturer attendance workflow.
+            Review your enrolled units together with the real session rows created on the lecturer side.
           </p>
         </div>
 
@@ -166,7 +206,7 @@ export default function StudentClassesPage() {
 
           <Link
             href="/student/attendance"
-            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700"
           >
             <CalendarDays size={16} />
             View Attendance
@@ -181,7 +221,6 @@ export default function StudentClassesPage() {
         </div>
       ) : null}
 
-      {/* Summary Cards */}
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
@@ -193,7 +232,7 @@ export default function StudentClassesPage() {
           <p className="text-4xl font-black tracking-tight text-gray-900">
             {loading ? '—' : totalClasses}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Units currently linked to your account</p>
+          <p className="mt-2 text-xs text-gray-500">Units linked to your student account</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -206,7 +245,7 @@ export default function StudentClassesPage() {
           <p className="text-4xl font-black tracking-tight text-red-600">
             {loading ? '—' : `${averageAttendance}%`}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Average across all enrolled units</p>
+          <p className="mt-2 text-xs text-gray-500">Based on completed session rows only</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -219,154 +258,239 @@ export default function StudentClassesPage() {
           <p className="text-4xl font-black tracking-tight text-gray-900">
             {loading ? '—' : strongAttendanceCount}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Units with attendance of 80% or higher</p>
+          <p className="mt-2 text-xs text-gray-500">Units with 80% attendance or above</p>
         </div>
 
         <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
-              Needs Attention
+              Need Attention
             </p>
-            <Clock3 size={18} className="text-gray-300" />
+            <UserCircle2 size={18} className="text-gray-300" />
           </div>
           <p className="text-4xl font-black tracking-tight text-gray-900">
             {loading ? '—' : supportNeededCount}
           </p>
-          <p className="mt-2 text-xs text-gray-500">Units currently below 60% attendance</p>
+          <p className="mt-2 text-xs text-gray-500">Units below 60% attendance</p>
         </div>
       </section>
 
-      {/* Search */}
-      <section className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div className="relative">
-          <Search
-            size={18}
-            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <input
-            type="text"
-            placeholder="Search by unit code, unit name, lecturer, venue, or session type..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm text-gray-700 outline-none transition focus:border-red-200 focus:bg-white"
-          />
-        </div>
-      </section>
-
-      {/* Classes List */}
-      <section className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-50 px-6 py-5">
+      <section className="rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-black text-gray-900">Enrolled Classes</h2>
+            <p className="text-lg font-black text-gray-900">Search Classes</p>
             <p className="text-sm text-gray-500">
-              {loading
-                ? 'Loading your class information...'
-                : `${filteredClasses.length} visible unit${filteredClasses.length === 1 ? '' : 's'}`}
+              Search by unit, lecturer, session type, day, venue, or group.
             </p>
           </div>
 
-          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">
-            Student view
-          </span>
+          <div className="relative w-full max-w-md">
+            <Search
+              size={18}
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <input
+              type="text"
+              placeholder="Search your classes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm text-gray-900 outline-none transition focus:border-red-200 focus:bg-white focus:ring-4 focus:ring-red-50"
+            />
+          </div>
         </div>
+      </section>
 
+      <section className="space-y-5">
         {loading ? (
-          <div className="flex items-center justify-center gap-3 px-6 py-16 text-sm text-gray-500">
-            <Loader2 size={18} className="animate-spin text-red-600" />
-            Loading your classes...
+          <div className="flex items-center justify-center rounded-[28px] border border-gray-100 bg-white px-6 py-16 shadow-sm">
+            <div className="flex items-center gap-3 text-gray-500">
+              <Loader2 size={18} className="animate-spin text-red-600" />
+              <span className="text-sm font-semibold">Loading classes...</span>
+            </div>
           </div>
         ) : filteredClasses.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-            <div className="mb-4 rounded-full bg-gray-50 p-4 text-gray-300">
-              <BookOpen size={32} />
-            </div>
-            <p className="text-base font-bold text-gray-700">No classes found</p>
-            <p className="mt-1 text-sm text-gray-500">
-              Try a different search keyword or wait until roster data is synced.
+          <div className="rounded-[28px] border border-dashed border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
+            <p className="text-lg font-black text-gray-900">No classes found</p>
+            <p className="mt-2 text-sm text-gray-500">
+              Try another search or wait until your lecturer-uploaded units appear.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {filteredClasses.map((item) => {
-              const attendanceRate = item.attendanceRate ?? 0;
-              const lecturerName = item.lecturer?.trim() || 'Not assigned yet';
-              const displayDay = item.day?.trim() || 'To be scheduled';
-              const displayTime = item.time?.trim() || 'Time not available';
-              const displayVenue =
-                item.venue?.trim() || item.location?.trim() || 'Venue not available';
-              const displayType = normaliseSessionType(item.sessionType);
+          filteredClasses.map((item) => {
+            const attendanceRate = item.attendanceRate ?? 0;
+            const upcomingSessions = item.sessions.filter(
+              (session) => session.sessionStatus !== 'Completed'
+            );
+            const previewSessions =
+              upcomingSessions.length > 0
+                ? upcomingSessions.slice(0, 4)
+                : item.sessions.slice(0, 4);
 
-              return (
-                <div
-                  key={item.id}
-                  className="flex flex-col gap-6 px-6 py-6 transition-colors hover:bg-gray-50/50 lg:flex-row lg:items-center lg:justify-between"
-                >
-                  <div className="min-w-0 flex-1 space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-lg bg-gray-900 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-                        {item.code}
-                      </span>
-
-                      <span className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500">
-                        {displayType}
-                      </span>
-
-                      <span
-                        className={`rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${getAttendanceTone(
-                          attendanceRate
-                        )}`}
-                      >
-                        {attendanceRate}% · {getAttendanceText(attendanceRate)}
-                      </span>
-                    </div>
-
+            return (
+              <article
+                key={item.id}
+                className="overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm transition hover:shadow-md"
+              >
+                <div className="border-b border-gray-100 px-6 py-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">{item.name}</h3>
-                      <p className="mt-1 flex items-center gap-2 text-sm text-gray-500">
-                        <UserCircle2 size={15} />
-                        {lecturerName}
+                      <div className="inline-flex rounded-full bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-red-600">
+                        {item.code}
+                      </div>
+                      <h2 className="mt-3 text-2xl font-black tracking-tight text-gray-900">
+                        {item.name}
+                      </h2>
+                      <p className="mt-2 text-sm text-gray-500">
+                        {item.lecturer || 'Lecturer not assigned yet'}
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-gray-400">
-                      <span className="flex items-center gap-1.5">
-                        <CalendarDays size={14} />
-                        {displayDay}
-                      </span>
+                    <div
+                      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-bold ${getAttendanceTone(
+                        attendanceRate
+                      )}`}
+                    >
+                      {attendanceRate}% · {getAttendanceText(attendanceRate)}
+                    </div>
+                  </div>
+                </div>
 
-                      <span className="flex items-center gap-1.5">
-                        <Clock3 size={14} />
-                        {displayTime}
-                      </span>
+                <div className="grid gap-6 px-6 py-6 lg:grid-cols-[0.9fr_1.1fr]">
+                  <div className="space-y-5">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                        Session Types in This Unit
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {item.sessionTypes.length > 0 ? (
+                          item.sessionTypes.map((sessionType) => (
+                            <span
+                              key={`${item.id}-${sessionType}`}
+                              className={`rounded-full border px-3 py-1 text-xs font-bold ${getSessionChipClasses(
+                                sessionType
+                              )}`}
+                            >
+                              {sessionType}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-bold text-gray-500">
+                            No sessions yet
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-                      <span className="flex items-center gap-1.5">
-                        <MapPin size={14} />
-                        {displayVenue}
-                      </span>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-gray-50 p-4">
+                        <div className="mb-2 flex items-center gap-2 text-gray-400">
+                          <CalendarDays size={16} />
+                          <span className="text-xs font-bold uppercase tracking-widest">
+                            Total Session Rows
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {item.sessions.length}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-gray-50 p-4">
+                        <div className="mb-2 flex items-center gap-2 text-gray-400">
+                          <Clock3 size={16} />
+                          <span className="text-xs font-bold uppercase tracking-widest">
+                            Upcoming / Active
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {upcomingSessions.length}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+                      The rows on the right are read from the backend class-session records, so students no longer need to guess or manually choose Lecture, Tutorial, or Lab.
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3 lg:justify-end">
-                    <Link
-                      href="/student/attendance"
-                      className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition hover:border-red-100 hover:text-red-600"
-                    >
-                      <CalendarDays size={16} />
-                      Attendance
-                    </Link>
+                  <div className="rounded-3xl border border-gray-100 bg-gray-50/60 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                        Session Rows
+                      </p>
+                      <span className="text-xs font-bold text-gray-400">
+                        Showing up to 4
+                      </span>
+                    </div>
 
-                    <Link
-                      href="/student/qrcode"
-                      className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700 active:scale-95"
-                    >
-                      Open QR
-                      <ChevronRight size={16} />
-                    </Link>
+                    <div className="mt-4 space-y-3">
+                      {previewSessions.length > 0 ? (
+                        previewSessions.map((session) => (
+                          <div
+                            key={session.id}
+                            className="rounded-2xl border border-white bg-white px-4 py-4 shadow-sm"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${getSessionChipClasses(
+                                      session.sessionName
+                                    )}`}
+                                  >
+                                    {session.sessionName}
+                                  </span>
+
+                                  <span
+                                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${getSessionStatusClasses(
+                                      session.sessionStatus
+                                    )}`}
+                                  >
+                                    {session.sessionStatus}
+                                  </span>
+
+                                  <span
+                                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${getAttendanceStatusClasses(
+                                      session.attendanceStatus
+                                    )}`}
+                                  >
+                                    {session.attendanceStatus}
+                                  </span>
+                                </div>
+
+                                <p className="text-sm font-bold text-gray-900">
+                                  {session.day} · {session.time}
+                                </p>
+
+                                <p className="text-xs text-gray-500">
+                                  {session.location ?? 'Venue not set'}
+                                  {session.groupNo ? ` · Group ${session.groupNo}` : ''}
+                                  {session.weekNumber ? ` · Week ${session.weekNumber}` : ''}
+                                </p>
+
+                                {session.lecturer ? (
+                                  <p className="text-xs text-gray-500">
+                                    Lecturer: {session.lecturer}
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <div className="text-right text-xs text-gray-400">
+                                {session.subcomponent || 'Session row'}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+                          No active sessions available yet for this unit.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </article>
+            );
+          })
         )}
       </section>
     </div>

@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+<<<<<<< HEAD
 import { useEffect, useState } from 'react';
+=======
+import { Bell, CalendarDays, Menu, PanelTopClose } from 'lucide-react';
+>>>>>>> 09cb0c9c7ab08b15a527a9c554f1b1b4e5b70292
 import { lecturerMenu } from '../config/lecturerMenu';
 import { studentMenu } from '../config/studentMenu';
 
@@ -14,7 +18,7 @@ export default function TopNavbar({ onMenuClick }: TopNavbarProps) {
   const pathname = usePathname();
   const [alertCount, setAlertCount] = useState(0);
 
-  // Detect which panel is currently active based on the route prefix
+  // Use the correct menu config so the page title matches the current route.
   const isStudentPanel = pathname.startsWith('/student');
   const activeMenu = isStudentPanel ? studentMenu : lecturerMenu;
   const alertsHref = isStudentPanel ? '/student/alerts' : '/lecturer/alerts';
@@ -97,23 +101,20 @@ export default function TopNavbar({ onMenuClick }: TopNavbarProps) {
   const visibleAlertCount = isAlertsPage ? 0 : alertCount;
   const showAlertBadge = visibleAlertCount > 0;
 
-  // Resolve the page title from the active role menu
-  const getPageTitle = () => {
+  function getPageTitle() {
     for (const section of activeMenu.sections) {
       for (const item of section.items) {
-        if (pathname.startsWith(item.href)) {
+        if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
           return item.name;
         }
       }
     }
 
-    // Fallback title if the page route is not listed in the menu config
     return isStudentPanel ? 'Student Panel' : 'Lecturer Panel';
-  };
+  }
 
   const pageTitle = getPageTitle();
 
-  // Localised current date for the header
   const today = new Date().toLocaleDateString('en-MY', {
     weekday: 'long',
     day: '2-digit',
@@ -122,23 +123,17 @@ export default function TopNavbar({ onMenuClick }: TopNavbarProps) {
   });
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-8">
-      {/* Left side: mobile menu button + page title */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onMenuClick}
-          className="rounded-lg border border-gray-200 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 lg:hidden"
-          aria-label="Open sidebar"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+    <header className="sticky top-0 z-[70] border-b border-white/70 bg-white/85 backdrop-blur-xl">
+      <div className="flex h-[4.6rem] items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          {/* Mobile menu button */}
+          <button
+            type="button"
+            onClick={onMenuClick}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-rose-200 hover:bg-rose-50 hover:text-[#E4002B] lg:hidden"
+            aria-label="Open sidebar"
           >
+<<<<<<< HEAD
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -188,6 +183,44 @@ export default function TopNavbar({ onMenuClick }: TopNavbarProps) {
             </span>
           )}
         </Link>
+=======
+            <Menu size={18} />
+          </button>
+
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#E4002B] sm:text-[11px]">
+                <PanelTopClose size={11} />
+                {isStudentPanel ? 'Student Panel' : 'Lecturer Panel'}
+              </span>
+            </div>
+
+            <h1 className="truncate text-lg font-black tracking-tight text-slate-900 sm:text-[1.35rem]">
+              {pageTitle}
+            </h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Desktop date display */}
+          <div className="hidden items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm md:flex">
+            <CalendarDays size={15} className="text-[#E4002B]" />
+            <span className="whitespace-nowrap">{today}</span>
+          </div>
+
+          {/* Alerts shortcut */}
+          <Link
+            href={alertsHref}
+            className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-rose-200 hover:bg-rose-50 hover:text-[#E4002B]"
+            aria-label="Open alerts"
+          >
+            <Bell size={18} />
+
+            {/* Red dot keeps the alert button visually noticeable */}
+            <span className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-[#E4002B] ring-2 ring-white" />
+          </Link>
+        </div>
+>>>>>>> 09cb0c9c7ab08b15a527a9c554f1b1b4e5b70292
       </div>
     </header>
   );
