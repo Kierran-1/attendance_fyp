@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import {
+  isDatabaseUnavailableError,
+  isStudentDbInCooldown,
+  markStudentDbUnavailable,
+} from '@/lib/student-compat';
 import { UserRole, UserStatus } from '@prisma/client';
 
 function isSessionActive(s: { sessionTime: Date; sessionDuration: number }): boolean {
@@ -11,84 +16,99 @@ function isSessionActive(s: { sessionTime: Date; sessionDuration: number }): boo
 }
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  try {
+    const session = await getServerSession(authOptions);
 
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const userId = session.user.id;
-  const role = session.user.role;
-
-  if (role === UserRole.STUDENT) {
-    // Get the unit IDs the student is enrolled in
-    const registrations = await prisma.unitRegistration.findMany({
-      where: { userId, userStatus: UserStatus.STUDENT },
-      select: { unitId: true },
-    });
-
-    if (registrations.length === 0) {
-      return NextResponse.json({ session: null });
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const unitIds = registrations.map((r) => r.unitId);
+    const userId = session.user.id;
+    const role = session.user.role;
 
-    // Find active sessions for any lecturer registration in those units
-    const classSessions = await prisma.classSession.findMany({
-      where: {
-        unitRegistration: {
-          unitId: { in: unitIds },
-          userStatus: UserStatus.LECTURER,
+    if (role === UserRole.STUDENT) {
+      if (isStudentDbInCooldown()) {
+        return NextResponse.json({ session: null, warning: 'Database unavailable' });
+      }
+
+      // Get the unit IDs the student is enrolled in
+      const registrations = await prisma.unitRegistration.findMany({
+        where: { userId, userStatus: UserStatus.STUDENT },
+        select: { unitId: true },
+      });
+
+      if (registrations.length === 0) {
+        return NextResponse.json({ session: null });
+      }
+
+      const unitIds = registrations.map((r) => r.unitId);
+
+      // Find active sessions for any lecturer registration in those units
+      const classSessions = await prisma.classSession.findMany({
+        where: {
+          unitRegistration: {
+            unitId: { in: unitIds },
+            userStatus: UserStatus.LECTURER,
+          },
         },
-      },
-      include: {
-        unitRegistration: {
-          include: { unit: true },
+        include: {
+          unitRegistration: {
+            include: { unit: true },
+          },
         },
-      },
-    });
+      });
 
-    const activeSession = classSessions.find(isSessionActive) ?? null;
+      const activeSession = classSessions.find(isSessionActive) ?? null;
 
-    if (!activeSession) {
-      return NextResponse.json({ session: null });
+      if (!activeSession) {
+        return NextResponse.json({ session: null });
+      }
+
+      return NextResponse.json({
+        session: {
+          id: activeSession.id,
+          unitId: activeSession.unitRegistration.unitId,
+          unit: activeSession.unitRegistration.unit,
+          sessionName: activeSession.sessionName,
+          sessionTime: activeSession.sessionTime,
+          sessionDuration: activeSession.sessionDuration,
+        },
+      });
     }
 
-    return NextResponse.json({
-      session: {
-        id: activeSession.id,
-        unitId: activeSession.unitRegistration.unitId,
-        unit: activeSession.unitRegistration.unit,
-        sessionName: activeSession.sessionName,
-        sessionTime: activeSession.sessionTime,
-        sessionDuration: activeSession.sessionDuration,
-      },
-    });
-  }
-
-  if (role === UserRole.LECTURER) {
-    const classSessions = await prisma.classSession.findMany({
-      where: { lecturerId: userId },
-      include: {
-        unitRegistration: {
-          include: { unit: true },
+    if (role === UserRole.LECTURER) {
+      const classSessions = await prisma.classSession.findMany({
+        where: { lecturerId: userId },
+        include: {
+          unitRegistration: {
+            include: { unit: true },
+          },
         },
-      },
-    });
+      });
 
-    const activeSessions = classSessions.filter(isSessionActive);
+      const activeSessions = classSessions.filter(isSessionActive);
 
-    return NextResponse.json({
-      sessions: activeSessions.map((s) => ({
-        id: s.id,
-        unitId: s.unitRegistration.unitId,
-        unit: s.unitRegistration.unit,
-        sessionName: s.sessionName,
-        sessionTime: s.sessionTime,
-        sessionDuration: s.sessionDuration,
-      })),
-    });
+      return NextResponse.json({
+        sessions: activeSessions.map((s) => ({
+          id: s.id,
+          unitId: s.unitRegistration.unitId,
+          unit: s.unitRegistration.unit,
+          sessionName: s.sessionName,
+          sessionTime: s.sessionTime,
+          sessionDuration: s.sessionDuration,
+        })),
+      });
+    }
+
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      markStudentDbUnavailable();
+      console.warn('[ACTIVE_SESSION_GET] Database unavailable, returning fallback session data');
+      return NextResponse.json({ session: null, sessions: [], warning: 'Database unavailable' });
+    }
+
+    console.error('[ACTIVE_SESSION_GET]', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }

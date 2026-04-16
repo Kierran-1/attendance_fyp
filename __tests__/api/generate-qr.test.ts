@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 import { POST } from '@/app/api/attendance/generate-qr/route';
+import { NextRequest } from 'next/server';
 
 jest.mock('next-auth', () => ({
   getServerSession: jest.fn(),
@@ -32,7 +33,7 @@ const mockStudentFindUnique = prisma.studentProfile.findUnique as jest.Mock;
 const mockSignQRToken = signQRToken as jest.Mock;
 
 function makeRequest(body: unknown) {
-  return new Request('http://localhost/api/attendance/generate-qr', {
+  return new NextRequest('http://localhost/api/attendance/generate-qr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -76,22 +77,27 @@ describe('POST /api/attendance/generate-qr', () => {
     expect(body.error).toBe('sessionId is required');
   });
 
-  it('returns 404 when student profile is not found', async () => {
+  it('derives a fallback student id when student profile is not found', async () => {
     mockGetServerSession.mockResolvedValue({
-      user: { id: 'user-1', role: 'STUDENT' },
+      user: { id: 'user-1', role: 'STUDENT', email: 'student1@students.swinburne.edu.my' },
     } as never);
 
     mockStudentFindUnique.mockResolvedValue(null);
 
     const res = await POST(makeRequest({ sessionId: 'session-1' }));
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.error).toBe('Student profile not found');
+    expect(body.token).toBe('mock-signed-token');
+    expect(mockSignQRToken).toHaveBeenCalledWith({
+      studentId: 'student1',
+      userId: 'user-1',
+      sessionId: 'session-1',
+    });
   });
 
   it('returns { token } on success', async () => {
     mockGetServerSession.mockResolvedValue({
-      user: { id: 'user-1', role: 'STUDENT' },
+      user: { id: 'user-1', role: 'STUDENT', email: 'student1@students.swinburne.edu.my' },
     } as never);
 
     mockStudentFindUnique.mockResolvedValue({

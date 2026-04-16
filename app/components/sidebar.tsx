@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
@@ -31,6 +31,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const previousPathname = useRef(pathname);
 
   // Determine current role panel by route prefix.
   const isStudentPanel = pathname.startsWith('/student');
@@ -45,9 +46,12 @@ export default function Sidebar({
     });
   }, []);
 
-  // Close sidebar automatically on route change for mobile UX.
+  // Close the mobile sidebar only after an actual route change.
   useEffect(() => {
-    onClose();
+    if (previousPathname.current !== pathname) {
+      onClose();
+      previousPathname.current = pathname;
+    }
   }, [pathname, onClose]);
 
   return (

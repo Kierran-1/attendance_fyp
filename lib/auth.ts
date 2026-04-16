@@ -1,6 +1,5 @@
 import { type AuthOptions } from 'next-auth';
 import AzureADProvider from 'next-auth/providers/azure-ad';
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
 
@@ -32,10 +31,86 @@ function getRoleFromEmail(email: string): UserRole {
   return UserRole.STUDENT;
 }
 
+function isDatabaseUnavailableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes("Can't reach database server") ||
+    message.includes('PrismaClientInitializationError') ||
+    message.includes('P1001')
+  );
+}
+
+async function syncUserAndAccount(params: {
+  email: string;
+  name?: string | null;
+  image?: string | null;
+  role: UserRole;
+  provider?: string;
+  providerAccountId?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  idToken?: string;
+  expiresAt?: number;
+  scope?: string;
+  tokenType?: string;
+  sessionState?: string;
+}) {
+  const user = await prisma.user.upsert({
+    where: { email: params.email },
+    update: {
+      name: params.name ?? null,
+      image: params.image ?? null,
+      role: params.role,
+    },
+    create: {
+      email: params.email,
+      name: params.name ?? null,
+      image: params.image ?? null,
+      role: params.role,
+    },
+  });
+
+  if (params.provider && params.providerAccountId) {
+    await prisma.account.upsert({
+      where: {
+        provider_providerAccountId: {
+          provider: params.provider,
+          providerAccountId: params.providerAccountId,
+        },
+      },
+      update: {
+        userId: user.id,
+        type: 'oauth',
+        access_token: params.accessToken ?? null,
+        refresh_token: params.refreshToken ?? null,
+        id_token: params.idToken ?? null,
+        expires_at: params.expiresAt ?? null,
+        scope: params.scope ?? null,
+        token_type: params.tokenType ?? null,
+        session_state: params.sessionState ?? null,
+      },
+      create: {
+        userId: user.id,
+        type: 'oauth',
+        provider: params.provider,
+        providerAccountId: params.providerAccountId,
+        access_token: params.accessToken ?? null,
+        refresh_token: params.refreshToken ?? null,
+        id_token: params.idToken ?? null,
+        expires_at: params.expiresAt ?? null,
+        scope: params.scope ?? null,
+        token_type: params.tokenType ?? null,
+        session_state: params.sessionState ?? null,
+      },
+    });
+  }
+
+  return user;
+}
+
 
 export const authOptions: AuthOptions = {
-  adapter: PrismaAdapter(prisma),
-
   providers: [
     AzureADProvider({
       clientId: process.env.MICROSOFT_CLIENT_ID!,
@@ -77,38 +152,76 @@ export const authOptions: AuthOptions = {
         userEmail: user.email,
       });
 
-      if (account?.provider !== 'azure-ad' || !user.email) {
+      if (!user.email) {
         return true;
       }
 
+      user.role = getRoleFromEmail(user.email);
+
       try {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: user.email },
+        const dbUser = await syncUserAndAccount({
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+          provider: account?.provider,
+          providerAccountId: account?.providerAccountId,
+          accessToken: account?.access_token,
+          refreshToken: account?.refresh_token,
+          idToken: account?.id_token,
+          expiresAt: account?.expires_at,
+          scope: account?.scope,
+          tokenType: account?.token_type,
+          sessionState: account?.session_state,
         });
 
-        if (!dbUser) {
-          console.log('[AUTH] New user — NextAuth will create the record');
-          return true;
+        if (dbUser?.id) {
+          user.id = dbUser.id;
         }
 
         console.log('[AUTH] Sign-in successful for:', user.email);
         return true;
       } catch (error) {
         console.error('[AUTH] signIn callback failed:', error);
-        return false;
+
+        if (isDatabaseUnavailableError(error)) {
+          console.warn('[AUTH] Continuing with JWT session while database is unavailable');
+        }
+
+        return true;
       }
     },
 
-    async session({ session, user }) {
+    async jwt({ token, user, account }) {
+      const email = user?.email ?? token.email ?? '';
+
+      if (email) {
+        token.role = user?.role ?? token.role ?? getRoleFromEmail(email);
+      }
+
+      if (user?.id) {
+        token.id = user.id;
+      } else if (typeof token.id !== 'string' || !token.id) {
+        token.id = (typeof token.sub === 'string' && token.sub) || account?.providerAccountId || '';
+      }
+
+      if (account?.access_token) {
+        token.accessToken = account.access_token;
+      }
+
+      if (account?.id_token) {
+        token.idToken = account.id_token;
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
       if (session.user) {
-        session.user.id = user.id;
-
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { role: true },
-        });
-
-        session.user.role = dbUser?.role ?? UserRole.STUDENT;
+        session.user.id = typeof token.id === 'string' ? token.id : '';
+        session.user.role = token.role ?? getRoleFromEmail(session.user.email ?? '');
+        session.accessToken = typeof token.accessToken === 'string' ? token.accessToken : undefined;
+        session.idToken = typeof token.idToken === 'string' ? token.idToken : undefined;
       }
 
       return session;
@@ -116,7 +229,13 @@ export const authOptions: AuthOptions = {
 
     async redirect({ url, baseUrl }) {
       if (url.startsWith('/')) return `${baseUrl}${url}`;
-      if (new URL(url).origin === baseUrl) return url;
+
+      try {
+        if (new URL(url).origin === baseUrl) return url;
+      } catch {
+        return `${baseUrl}/auth/redirect`;
+      }
+
       return `${baseUrl}/auth/redirect`;
     },
   },
@@ -127,7 +246,7 @@ export const authOptions: AuthOptions = {
   },
 
   session: {
-    strategy: 'database',
+    strategy: 'jwt',
   },
 
   debug: true,

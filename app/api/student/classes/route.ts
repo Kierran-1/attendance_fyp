@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import {
+  isDatabaseUnavailableError,
+  isStudentDbInCooldown,
+  markStudentDbUnavailable,
+} from '@/lib/student-compat';
 import { UserRole, UserStatus } from '@prisma/client';
 
 export async function GET() {
@@ -14,6 +19,13 @@ export async function GET() {
 
     if (session.user.role !== UserRole.STUDENT) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (isStudentDbInCooldown()) {
+      return NextResponse.json({
+        classes: [],
+        warning: 'Database unavailable',
+      });
     }
 
     const userId = session.user.id;
@@ -100,7 +112,17 @@ export async function GET() {
 
     return NextResponse.json({ classes });
   } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      markStudentDbUnavailable();
+      console.warn('[STUDENT_CLASSES_GET] Database unavailable, returning fallback classes');
+      return NextResponse.json({
+        classes: [],
+        warning: 'Database unavailable',
+      });
+    }
+
     console.error('[STUDENT_CLASSES_GET]', error);
+
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

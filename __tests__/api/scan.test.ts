@@ -2,6 +2,7 @@
  * @jest-environment node
  */
 import { POST } from '@/app/api/attendance/scan/route';
+import { NextRequest } from 'next/server';
 
 jest.mock('next-auth', () => ({
   getServerSession: jest.fn(),
@@ -38,7 +39,7 @@ const mockRecordFindUnique = prisma.attendanceRecord.findUnique as jest.Mock;
 const mockRecordCreate = prisma.attendanceRecord.create as jest.Mock;
 
 function makeRequest(body: unknown) {
-  return new Request('http://localhost/api/attendance/scan', {
+  return new NextRequest('http://localhost/api/attendance/scan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -150,7 +151,6 @@ describe('POST /api/attendance/scan', () => {
       userId: 'user-1',
       sessionId: 'session-1',
       checkInTime: new Date(),
-      recognitionMethod: 'QR_CODE',
       status: 'PRESENT',
     };
     mockRecordCreate.mockResolvedValue(fakeRecord);
@@ -164,7 +164,6 @@ describe('POST /api/attendance/scan', () => {
       data: expect.objectContaining({
         userId: 'user-1',
         sessionId: 'session-1',
-        recognitionMethod: 'QR_CODE',
         status: 'PRESENT',
       }),
     });

@@ -2,18 +2,22 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get('callbackUrl') ?? '/auth/redirect';
+  const error = searchParams.get('error');
 
   const handleMicrosoftLogin = async () => {
     setLoading(true);
 
     // Uses the existing Azure AD / Microsoft provider already set up in the project.
     // After successful login, user will continue to the redirect page.
-    await signIn('azure-ad', { callbackUrl: '/auth/redirect' });
+    await signIn('azure-ad', { callbackUrl });
   };
 
   return (
@@ -132,6 +136,12 @@ export default function LoginPage() {
               <p className="mt-3 text-base leading-8 text-gray-600">
                 Sign in with your Swinburne Microsoft account.
               </p>
+
+              {error && (
+                <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  Sign-in failed during the Microsoft callback. Please try again.
+                </div>
+              )}
 
               {/* Microsoft Sign In */}
               <button
