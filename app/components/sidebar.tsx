@@ -1,8 +1,5 @@
 'use client';
 
-<<<<<<< HEAD
-import { useEffect, useRef, type ReactNode } from 'react';
-=======
 import {
   useEffect,
   useMemo,
@@ -11,7 +8,6 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
->>>>>>> 09cb0c9c7ab08b15a527a9c554f1b1b4e5b70292
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
@@ -106,20 +102,10 @@ export default function Sidebar({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-<<<<<<< HEAD
-  // Close the mobile sidebar only after an actual route change.
-  useEffect(() => {
-    if (previousPathname.current !== pathname) {
-      onClose();
-      previousPathname.current = pathname;
-    }
-  }, [pathname, onClose]);
-=======
   function handleSidebarClick(event: ReactMouseEvent<HTMLDivElement>) {
     // Prevent clicks inside the drawer from bubbling to the mobile backdrop.
     event.stopPropagation();
   }
->>>>>>> 09cb0c9c7ab08b15a527a9c554f1b1b4e5b70292
 
   return (
     <>

@@ -3,13 +3,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import {
-<<<<<<< HEAD
   isDatabaseUnavailableError,
   isStudentDbInCooldown,
   markStudentDbUnavailable,
 } from '@/lib/student-compat';
-import { UserRole, UserStatus } from '@prisma/client';
-=======
+import {
   AttendanceStatus,
   SessionName,
   UserRole,
@@ -74,7 +72,6 @@ function getSessionStatus(
   if (now < start) return 'Upcoming';
   return 'Completed';
 }
->>>>>>> 09cb0c9c7ab08b15a527a9c554f1b1b4e5b70292
 
 export async function GET() {
   try {
@@ -275,7 +272,9 @@ export async function GET() {
   } catch (error) {
     if (isDatabaseUnavailableError(error)) {
       markStudentDbUnavailable();
-      console.warn('[STUDENT_CLASSES_GET] Database unavailable, returning fallback classes');
+      console.warn(
+        '[STUDENT_CLASSES_GET] Database unavailable, returning fallback classes'
+      );
       return NextResponse.json({
         classes: [],
         warning: 'Database unavailable',
@@ -283,14 +282,9 @@ export async function GET() {
     }
 
     console.error('[STUDENT_CLASSES_GET]', error);
-<<<<<<< HEAD
-
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-=======
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
->>>>>>> 09cb0c9c7ab08b15a527a9c554f1b1b4e5b70292
   }
 }
