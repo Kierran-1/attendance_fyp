@@ -6,8 +6,51 @@ import { UserRole, UserStatus } from '@prisma/client';
 
 function isSessionActive(s: { sessionTime: Date; sessionDuration: number }): boolean {
   const now = Date.now();
-  const end = s.sessionTime.getTime() + s.sessionDuration * 60_000;
-  return now >= s.sessionTime.getTime() && now <= end;
+  const start = s.sessionTime.getTime();
+  const end = start + s.sessionDuration * 60_000;
+
+  return now >= start && now <= end;
+}
+
+function mapSession(item: {
+  id: string;
+  sessionName: string;
+  sessionTime: Date;
+  sessionDuration: number;
+  location: string | null;
+  weekNumber: number | null;
+  groupNo: string | null;
+  unitRegistration: {
+    unitId: string;
+    unit: {
+      code: string;
+      name: string;
+    };
+    user: {
+      name: string | null;
+      email: string | null;
+    } | null;
+  };
+}) {
+  return {
+    id: item.id,
+    unitId: item.unitRegistration.unitId,
+    unit: {
+      code: item.unitRegistration.unit.code,
+      name: item.unitRegistration.unit.name,
+      venue: item.location,
+    },
+    sessionName: item.sessionName,
+    sessionTime: item.sessionTime,
+    sessionDuration: item.sessionDuration,
+    location: item.location,
+    weekNumber: item.weekNumber,
+    groupNo: item.groupNo,
+    lecturer:
+      item.unitRegistration.user?.name ??
+      item.unitRegistration.user?.email ??
+      null,
+  };
 }
 
 export async function GET() {
@@ -21,10 +64,15 @@ export async function GET() {
   const role = session.user.role;
 
   if (role === UserRole.STUDENT) {
-    // Get the unit IDs the student is enrolled in
+    // Get the unit IDs the student is enrolled in         
     const registrations = await prisma.unitRegistration.findMany({
-      where: { userId, userStatus: UserStatus.STUDENT },
-      select: { unitId: true },
+      where: {
+        userId,
+        userStatus: UserStatus.STUDENT,
+      },
+      select: {
+        unitId: true,
+      },
     });
 
     if (registrations.length === 0) {
@@ -38,55 +86,70 @@ export async function GET() {
       where: {
         unitRegistration: {
           unitId: { in: unitIds },
-          userStatus: UserStatus.LECTURER,
+          userStatus: {
+            in: [UserStatus.LECTURER, UserStatus.TUTOR],
+          },
         },
       },
       include: {
         unitRegistration: {
-          include: { unit: true },
+          include: {
+            unit: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+          },
         },
+      },
+      orderBy: {
+        sessionTime: 'asc',
       },
     });
 
-    const activeSession = classSessions.find(isSessionActive) ?? null;
+    const activeSessions = classSessions.filter(isSessionActive);
 
-    if (!activeSession) {
+    if (activeSessions.length === 0) {
       return NextResponse.json({ session: null });
     }
 
+    // Pick the earliest currently active session so the student view stays stable
+    const selectedSession = activeSessions[0];
+
     return NextResponse.json({
-      session: {
-        id: activeSession.id,
-        unitId: activeSession.unitRegistration.unitId,
-        unit: activeSession.unitRegistration.unit,
-        sessionName: activeSession.sessionName,
-        sessionTime: activeSession.sessionTime,
-        sessionDuration: activeSession.sessionDuration,
-      },
+      session: mapSession(selectedSession),
     });
   }
 
   if (role === UserRole.LECTURER) {
     const classSessions = await prisma.classSession.findMany({
-      where: { lecturerId: userId },
+      where: {
+        lecturerId: userId,
+      },
       include: {
         unitRegistration: {
-          include: { unit: true },
+          include: {
+            unit: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+          },
         },
+      },
+      orderBy: {
+        sessionTime: 'asc',
       },
     });
 
     const activeSessions = classSessions.filter(isSessionActive);
 
     return NextResponse.json({
-      sessions: activeSessions.map((s) => ({
-        id: s.id,
-        unitId: s.unitRegistration.unitId,
-        unit: s.unitRegistration.unit,
-        sessionName: s.sessionName,
-        sessionTime: s.sessionTime,
-        sessionDuration: s.sessionDuration,
-      })),
+      sessions: activeSessions.map(mapSession),
     });
   }
 
