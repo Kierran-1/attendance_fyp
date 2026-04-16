@@ -25,11 +25,13 @@ export default function StudentLayout({
   useEffect(() => {
     if (status === 'loading') return;
 
+    // Redirect unauthenticated users back to login.
     if (!session) {
       router.replace('/auth/login');
       return;
     }
 
+    // Redirect non-student users away from student routes.
     if (session.user.role !== 'STUDENT') {
       router.replace('/auth/redirect');
     }
@@ -40,19 +42,19 @@ export default function StudentLayout({
 
   if (status === 'loading' || !isAuthorisedStudent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border border-gray-100 bg-white px-8 py-10 text-center shadow-sm">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E4002B] text-lg font-black text-white">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-[2rem] border border-white/70 bg-white/90 px-8 py-10 text-center shadow-[0_25px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E4002B] text-lg font-black text-white shadow-[0_18px_34px_rgba(228,0,43,0.24)]">
             AS
           </div>
 
           <Loader2 size={26} className="animate-spin text-[#E4002B]" />
 
           <div className="space-y-1">
-            <p className="text-base font-bold text-gray-900">
+            <p className="text-base font-bold text-slate-900">
               Preparing student workspace
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-slate-500">
               Checking your sign-in session and student access.
             </p>
           </div>
@@ -62,7 +64,7 @@ export default function StudentLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <Sidebar
         panelTitle={studentMenu.panelTitle}
         menu={studentMenu.sections}
@@ -70,31 +72,35 @@ export default function StudentLayout({
         onClose={closeSidebar}
       />
 
-      <div className="flex min-h-screen flex-col lg:ml-64">
+      <div className="flex min-h-screen flex-col lg:ml-[17.5rem]">
         <TopNavbar onMenuClick={toggleSidebar} />
 
-        <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6">
-          <div className="mx-auto w-full max-w-7xl">
-            <div className="mb-4 hidden rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-500 shadow-sm md:block">
-              Signed in as{' '}
-              <span className="font-semibold text-gray-900">
-                {session.user.name ?? 'Student'}
-              </span>
-              {session.user.email ? (
-                <>
-                  {' '}·{' '}
-                  <span className="text-gray-600">{session.user.email}</span>
-                </>
-              ) : null}
-              {pathname !== '/student/dashboard' ? (
-                <>
-                  {' '}·{' '}
-                  <span className="text-[#E4002B]">Student route protected</span>
-                </>
-              ) : null}
+        <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl space-y-4">
+            {/* Small route status strip to make the shell feel more polished */}
+            <div className="rounded-[1.65rem] border border-white/80 bg-white/85 px-4 py-3 text-sm text-slate-500 shadow-sm backdrop-blur-xl">
+              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <span className="font-semibold text-slate-900">
+                    {session.user.name ?? 'Student'}
+                  </span>
+                  {session.user.email ? (
+                    <span className="truncate"> · {session.user.email}</span>
+                  ) : null}
+                </div>
+
+                <div className="text-[#E4002B]">
+                  {pathname === '/student/dashboard'
+                    ? 'Student dashboard ready'
+                    : 'Student route protected'}
+                </div>
+              </div>
             </div>
 
-            {children}
+            {/* Main white surface shared by all student pages */}
+            <div className="rounded-[2rem] border border-white/80 bg-white/78 p-4 shadow-[0_20px_70px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:p-5 lg:p-6">
+              {children}
+            </div>
           </div>
         </main>
       </div>
