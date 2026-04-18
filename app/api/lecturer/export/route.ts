@@ -6,6 +6,43 @@ import { UserRole, UserStatus } from '@prisma/client';
 import * as XLSX from 'xlsx';
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const type = searchParams.get('type');
+  const students = await prisma.user.findMany({
+    where: {
+      role: 'STUDENT',
+    },
+    include: {
+      unitRegistrations: true,
+    },
+  });
+  
+  const processedStudents = students.map((student) => {
+    const total = student.unitRegistrations.length;
+    const absent = student.unitRegistrations.filter(
+      (record) => record.userStatus === 'STUDENT'
+    ).length;
+    const present = total - absent;
+    const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+
+    return {
+      id: student.id,
+      name: student.name,
+      email: student.email,
+      absent,
+      present,
+      total,
+      rate,
+      isAtRisk: absent >= 3 || rate < 75,
+    };
+  });
+
+  if (type === 'risk') {
+    return Response.json({
+      students: processedStudents.filter((student) => student.isAtRisk),
+    });
+  }
+
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {

@@ -80,6 +80,9 @@ function sessionTypeBadge(name: string) {
 
 export default function LiveAttendancePage() {
 
+  // Modal
+  const [isQrModalOpen, setIsQrModalOpen]   = useState(false);
+
   // Units & selection
   const [units, setUnits]                   = useState<LecturerUnit[]>([]);
   const [unitsLoading, setUnitsLoading]     = useState(true);
@@ -627,7 +630,10 @@ export default function LiveAttendancePage() {
               </p>
 
               <div className="flex flex-col items-center">
-                <div className="flex h-56 w-56 items-center justify-center rounded-2xl bg-gray-50 p-3 ring-1 ring-gray-100">
+                <div
+                  onClick={() => sessionQRToken && setIsQrModalOpen(true)}
+                  className="flex h-56 w-56 items-center justify-center rounded-2xl border border-gray-200 bg-white cursor-pointer hover:scale-[1.03] transition"
+                >
                   {sessionQRToken ? (
                     <QRCodeSVG
                       value={sessionQRToken}
@@ -640,6 +646,10 @@ export default function LiveAttendancePage() {
                     <Loader2 size={28} className="animate-spin text-gray-300" />
                   )}
                 </div>
+
+                <p className="mt-2 text-xs text-gray-400">
+                  Click to enlarge
+                </p>
 
                 {sessionQRToken && (
                   <div className="mt-4 w-56">
@@ -853,6 +863,52 @@ export default function LiveAttendancePage() {
           )}
         </div>
       </section>
+
+      {/* QR Modal — outside the grid */}
+      {isQrModalOpen && sessionQRToken && (
+        <div
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70"
+          onClick={() => setIsQrModalOpen(false)}
+        >
+          <div
+            className="bg-white p-6 rounded-2xl shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-bold text-lg">Session QR Code</h2>
+              <button
+                onClick={() => setIsQrModalOpen(false)}
+                className="text-gray-500 hover:text-red-500"
+              >
+                ✕
+              </button>
+            </div>
+
+            <QRCodeSVG
+              value={sessionQRToken}
+              size={380}
+              bgColor="#ffffff"
+              fgColor="#111111"
+              level="M"
+            />
+
+            {sessionQRToken && (
+              <div className="mt-6">
+                <div className="mb-2 flex justify-between text-sm text-gray-500">
+                  <span>Rotates in</span>
+                  <span className="font-bold tabular-nums">{sessionQRCountdown}s</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div
+                    className="h-full rounded-full bg-[#E4002B] transition-all duration-1000"
+                    style={{ width: `${(sessionQRCountdown / 30) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
