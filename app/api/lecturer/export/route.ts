@@ -19,6 +19,28 @@ function formatStatus(status: string | null | undefined) {
   return status;
 }
 
+function buildTermCode(year: number | string | null | undefined, semester: string | number | null | undefined) {
+  const yearText = String(year ?? '').trim() || new Date().getFullYear().toString();
+  const semesterText = String(semester ?? '').trim();
+
+  if (!semesterText) {
+    return `${yearText}_MAR_S1`;
+  }
+
+  // If semester is already a formatted term string, keep it.
+  if (semesterText.includes('_')) {
+    return semesterText;
+  }
+
+  // If semester is a plain number like 1 / 2, format it safely.
+  if (/^\d+$/.test(semesterText)) {
+    return `${yearText}_MAR_S${semesterText}`;
+  }
+
+  // Fallback: keep it clean rather than duplicating weird text.
+  return `${yearText}_${semesterText.replace(/\s+/g, '_')}`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -42,7 +64,9 @@ export async function GET(request: NextRequest) {
       where: {
         unitId,
         userId,
-        userStatus: UserStatus.LECTURER,
+        userStatus: {
+          in: [UserStatus.LECTURER, UserStatus.TUTOR],
+        },
       },
       include: {
         unit: true,
@@ -58,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     const unit = lecturerReg.unit;
 
-    const studentRegistrations = await prisma.unitRegistration.findMany({
+    const studentRegistrationsRaw = await prisma.unitRegistration.findMany({
       where: {
         unitId,
         userStatus: UserStatus.STUDENT,
@@ -78,6 +102,19 @@ export async function GET(request: NextRequest) {
           name: 'asc',
         },
       },
+    });
+
+    // Remove duplicate students for the same unit.
+    const seenStudentIds = new Set<string>();
+    const studentRegistrations = studentRegistrationsRaw.filter((registration) => {
+      const studentId = registration.user.id;
+
+      if (seenStudentIds.has(studentId)) {
+        return false;
+      }
+
+      seenStudentIds.add(studentId);
+      return true;
     });
 
     const classSessions = await prisma.classSession.findMany({
@@ -117,7 +154,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const termCode = `${lecturerReg.year}_MAR_S${lecturerReg.semester}`;
+    const termCode = buildTermCode(lecturerReg.year, lecturerReg.semester);
 
     const rows: (string | number)[][] = [
       [
@@ -162,7 +199,7 @@ export async function GET(request: NextRequest) {
     worksheet['!cols'] = [
       { wch: 14 }, // CourseCode
       { wch: 16 }, // TermCode
-      { wch: 16 }, // Subcomponent
+      { wch: 18 }, // Subcomponent
       { wch: 10 }, // Group
       { wch: 14 }, // Date
       { wch: 28 }, // ProgramName
@@ -179,7 +216,7 @@ export async function GET(request: NextRequest) {
       bookType: 'xlsx',
     });
 
-    const filename = `Attendance_${unit.code}_${lecturerReg.semester}${lecturerReg.year}.xlsx`;
+    const filename = `Attendance_${unit.code}_${termCode}.xlsx`;
 
     return new NextResponse(buffer, {
       headers: {
