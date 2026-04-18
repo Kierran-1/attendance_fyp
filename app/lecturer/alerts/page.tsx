@@ -3,46 +3,53 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle,
   ArrowLeft,
   Bell,
-  CheckCircle2,
   ChevronRight,
-  Clock3,
-  FileWarning,
   Info,
+  Loader2,
   Search,
   Send,
   ShieldAlert,
+  Trash2,
   TriangleAlert,
-  UploadCloud,
   Users,
-  X,
 } from 'lucide-react';
 
 type AlertLevel = 'Critical' | 'Warning' | 'Info';
-type AlertType =
-  | 'Absent Students'
-  | 'Late Check-ins'
-  | 'At-Risk Students'
-  | 'Session Issue'
-  | 'Upload Status'
-  | 'System Info'
-  | 'Lecturer Message';
+type AlertTargetGroup =
+  | 'ALL_STUDENTS'
+  | 'ABSENT_STUDENTS'
+  | 'LATE_STUDENTS'
+  | 'AT_RISK_STUDENTS';
+
+type LecturerUnitOption = {
+  unitId: string;
+  unitCode: string;
+  unitName: string;
+};
 
 type LecturerAlert = {
   id: string;
   title: string;
   message: string;
   level: AlertLevel;
-  type: AlertType;
-  unitCode?: string;
-  unitName?: string;
-  time: string;
-  date: string;
-  actionLabel?: string;
-  actionHref?: string;
-  source?: 'system' | 'lecturer';
+  targetGroup: AlertTargetGroup;
+  unitCode: string;
+  unitName: string | null;
+  actionHref: string | null;
+  actionLabel: string | null;
+  createdByUserId: string;
+  createdByName: string | null;
+  createdAt: string;
+};
+
+type LecturerAlertsResponse = {
+  units?: LecturerUnitOption[];
+  alerts?: LecturerAlert[];
+  alert?: LecturerAlert; // fix: include single created alert response too
+  deleted?: number;
+  error?: string;
 };
 
 type NewAlertForm = {
@@ -50,296 +57,251 @@ type NewAlertForm = {
   message: string;
   level: AlertLevel;
   unitCode: string;
-  targetGroup: string;
+  targetGroup: AlertTargetGroup;
 };
-
-const lecturerAlerts: LecturerAlert[] = [
-  {
-    id: 'alert-1',
-    title: 'High absence detected',
-    message:
-      '8 students are currently absent in COS40005. Review the attendance session and follow up if needed.',
-    level: 'Critical',
-    type: 'Absent Students',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    date: '26 Mar 2026',
-    time: '10:05 AM',
-    actionLabel: 'Open Attendance',
-    actionHref: '/lecturer/attendance',
-    source: 'system',
-  },
-  {
-    id: 'alert-2',
-    title: 'Attendance session inactive',
-    message:
-      'No active attendance session is running for SWE30003 even though the scheduled time has started.',
-    level: 'Critical',
-    type: 'Session Issue',
-    unitCode: 'SWE30003',
-    unitName: 'Software Architecture and Design',
-    date: '26 Mar 2026',
-    time: '2:08 PM',
-    actionLabel: 'Start Live Attendance',
-    actionHref: '/lecturer/live-attendance',
-    source: 'system',
-  },
-  {
-    id: 'alert-3',
-    title: 'At-risk students detected',
-    message:
-      'Several students in COS30049 are below the recommended attendance threshold and may need early intervention.',
-    level: 'Warning',
-    type: 'At-Risk Students',
-    unitCode: 'COS30049',
-    unitName: 'Computing Technology Innovation Project',
-    date: '25 Mar 2026',
-    time: '4:15 PM',
-    actionLabel: 'View Reports',
-    actionHref: '/lecturer/reports',
-    source: 'system',
-  },
-  {
-    id: 'alert-4',
-    title: 'Late check-ins recorded',
-    message:
-      '3 late check-ins were recorded during the latest COS40005 session.',
-    level: 'Warning',
-    type: 'Late Check-ins',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    date: '25 Mar 2026',
-    time: '9:48 AM',
-    actionLabel: 'Open Attendance',
-    actionHref: '/lecturer/attendance',
-    source: 'system',
-  },
-  {
-    id: 'alert-5',
-    title: 'Roster uploaded successfully',
-    message:
-      'The roster file for COS30015 was uploaded and parsed successfully.',
-    level: 'Info',
-    type: 'Upload Status',
-    unitCode: 'COS30015',
-    unitName: 'IT Security',
-    date: '24 Mar 2026',
-    time: '11:10 AM',
-    actionLabel: 'View Classes',
-    actionHref: '/lecturer/classes',
-    source: 'system',
-  },
-  {
-    id: 'alert-6',
-    title: 'Attendance session started',
-    message:
-      'A live attendance session has started for COS40005 and is ready for QR-based check-in simulation.',
-    level: 'Info',
-    type: 'System Info',
-    unitCode: 'COS40005',
-    unitName: 'Computing Technology Project A',
-    date: '24 Mar 2026',
-    time: '9:00 AM',
-    actionLabel: 'Open Live Attendance',
-    actionHref: '/lecturer/live-attendance',
-    source: 'system',
-  },
-  {
-    id: 'alert-7',
-    title: 'Possible upload issue',
-    message:
-      'A previous roster file appears incomplete and may require rechecking column mappings.',
-    level: 'Warning',
-    type: 'Upload Status',
-    date: '23 Mar 2026',
-    time: '1:20 PM',
-    actionLabel: 'Upload Roster',
-    actionHref: '/lecturer/upload-roster',
-    source: 'system',
-  },
-];
 
 const INITIAL_FORM: NewAlertForm = {
   title: '',
   message: '',
   level: 'Warning',
   unitCode: '',
-  targetGroup: 'All Students',
+  targetGroup: 'ALL_STUDENTS',
 };
 
-function getLevelStyles(level: AlertLevel) {
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+
+  return {
+    date: parsed.toLocaleDateString('en-MY', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }),
+    time: parsed.toLocaleTimeString('en-MY', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  };
+}
+
+function getLevelBadge(level: AlertLevel) {
   switch (level) {
     case 'Critical':
       return 'border-red-100 bg-red-50 text-red-700';
     case 'Warning':
       return 'border-amber-100 bg-amber-50 text-amber-700';
-    case 'Info':
-      return 'border-blue-100 bg-blue-50 text-blue-700';
     default:
-      return 'border-gray-100 bg-gray-50 text-gray-700';
+      return 'border-blue-100 bg-blue-50 text-blue-700';
   }
 }
 
-function getTypeStyles(type: AlertType) {
-  switch (type) {
-    case 'Absent Students':
-    case 'Session Issue':
-      return 'border-red-100 bg-red-50 text-red-700';
-    case 'Late Check-ins':
-    case 'At-Risk Students':
-      return 'border-amber-100 bg-amber-50 text-amber-700';
-    case 'Upload Status':
-    case 'System Info':
-      return 'border-blue-100 bg-blue-50 text-blue-700';
-    case 'Lecturer Message':
-      return 'border-purple-100 bg-purple-50 text-purple-700';
-    default:
-      return 'border-gray-100 bg-gray-50 text-gray-700';
-  }
-}
-
-function getAlertIcon(level: AlertLevel) {
+function getLevelIcon(level: AlertLevel) {
   switch (level) {
     case 'Critical':
       return <ShieldAlert size={18} className="text-red-600" />;
     case 'Warning':
       return <TriangleAlert size={18} className="text-amber-600" />;
-    case 'Info':
-      return <Info size={18} className="text-blue-600" />;
     default:
-      return <Bell size={18} className="text-gray-600" />;
+      return <Info size={18} className="text-blue-600" />;
+  }
+}
+
+function getTargetGroupLabel(value: AlertTargetGroup) {
+  switch (value) {
+    case 'ABSENT_STUDENTS':
+      return 'Absent Students';
+    case 'LATE_STUDENTS':
+      return 'Late Students';
+    case 'AT_RISK_STUDENTS':
+      return 'At-Risk Students';
+    default:
+      return 'All Students';
   }
 }
 
 export default function LecturerAlertsPage() {
-  const [levelFilter, setLevelFilter] = useState<'All' | AlertLevel>('All');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sentAlerts, setSentAlerts] = useState<LecturerAlert[]>([]);
-  const [newAlert, setNewAlert] = useState<NewAlertForm>(INITIAL_FORM);
-  const [sendSuccess, setSendSuccess] = useState(false);
+  const [levelFilter, setLevelFilter] = useState<'ALL' | AlertLevel>('ALL');
+  const [units, setUnits] = useState<LecturerUnitOption[]>([]);
+  const [alerts, setAlerts] = useState<LecturerAlert[]>([]);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [form, setForm] = useState<NewAlertForm>(INITIAL_FORM);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('lecturerSentAlerts');
-      if (!saved) return;
+    async function loadData() {
+      try {
+        setLoading(true);
+        setError('');
 
-      const parsed: LecturerAlert[] = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        setSentAlerts(parsed);
+        const response = await fetch('/api/alerts', { cache: 'no-store' });
+        const json: LecturerAlertsResponse = await response.json();
+
+        if (!response.ok) {
+          throw new Error(json.error || 'Failed to load alerts');
+        }
+
+        const nextUnits = Array.isArray(json.units) ? json.units : [];
+        const nextAlerts = Array.isArray(json.alerts) ? json.alerts : [];
+
+        setUnits(nextUnits);
+        setAlerts(nextAlerts);
+
+        // Default the dropdown to first lecturer unit.
+        if (nextUnits.length > 0) {
+          setForm((prev) => ({
+            ...prev,
+            unitCode: prev.unitCode || nextUnits[0].unitCode,
+          }));
+        }
+      } catch (loadError) {
+        console.error('Failed to load lecturer alerts:', loadError);
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : 'Unable to load lecturer alerts.'
+        );
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to load sent lecturer alerts:', error);
     }
+
+    loadData();
   }, []);
 
-  const allAlerts = useMemo(() => {
-    return [...sentAlerts, ...lecturerAlerts];
-  }, [sentAlerts]);
-
   const filteredAlerts = useMemo(() => {
-    return allAlerts.filter((item) => {
+    const keyword = searchTerm.trim().toLowerCase();
+
+    return alerts.filter((item) => {
       const matchesLevel =
-        levelFilter === 'All' ? true : item.level === levelFilter;
+        levelFilter === 'ALL' ? true : item.level === levelFilter;
 
       const matchesSearch =
-        item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.unitCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.unitName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.type.toLowerCase().includes(searchTerm.toLowerCase());
+        !keyword ||
+        item.title.toLowerCase().includes(keyword) ||
+        item.message.toLowerCase().includes(keyword) ||
+        item.unitCode.toLowerCase().includes(keyword) ||
+        (item.unitName ?? '').toLowerCase().includes(keyword) ||
+        getTargetGroupLabel(item.targetGroup).toLowerCase().includes(keyword);
 
       return matchesLevel && matchesSearch;
     });
-  }, [allAlerts, levelFilter, searchTerm]);
+  }, [alerts, levelFilter, searchTerm]);
 
   const stats = useMemo(() => {
-    const critical = allAlerts.filter((item) => item.level === 'Critical').length;
-    const warning = allAlerts.filter((item) => item.level === 'Warning').length;
-    const info = allAlerts.filter((item) => item.level === 'Info').length;
-    const lecturerSent = allAlerts.filter(
-      (item) => item.source === 'lecturer'
-    ).length;
-
     return {
-      total: allAlerts.length,
-      critical,
-      warning,
-      info,
-      lecturerSent,
+      total: alerts.length,
+      critical: alerts.filter((item) => item.level === 'Critical').length,
+      warning: alerts.filter((item) => item.level === 'Warning').length,
+      info: alerts.filter((item) => item.level === 'Info').length,
     };
-  }, [allAlerts]);
+  }, [alerts]);
 
-  const handleSendAlert = () => {
-    if (!newAlert.title.trim() || !newAlert.message.trim()) {
-      window.alert('Please fill in the alert title and message.');
+  async function handleSendAlert() {
+    if (!form.title.trim() || !form.message.trim() || !form.unitCode) {
+      window.alert('Please fill in the title, message, and unit.');
       return;
     }
 
-    const now = new Date();
-
-    const createdAlert: LecturerAlert = {
-      id: `lecturer-alert-${Date.now()}`,
-      title: newAlert.title.trim(),
-      message: `${newAlert.message.trim()}${newAlert.targetGroup ? ` Target: ${newAlert.targetGroup}.` : ''}`,
-      level: newAlert.level,
-      type: 'Lecturer Message',
-      unitCode: newAlert.unitCode.trim() || undefined,
-      unitName: undefined,
-      date: now.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }),
-      time: now.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      actionLabel: 'View Classes',
-      actionHref: '/lecturer/classes',
-      source: 'lecturer',
-    };
-
-    const updatedAlerts = [createdAlert, ...sentAlerts];
-    setSentAlerts(updatedAlerts);
-
     try {
-      localStorage.setItem('lecturerSentAlerts', JSON.stringify(updatedAlerts));
-    } catch (error) {
-      console.error('Failed to save lecturer sent alerts:', error);
+      setSubmitting(true);
+      setSuccessMessage('');
+
+      const response = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: form.title.trim(),
+          message: form.message.trim(),
+          level: form.level,
+          unitCode: form.unitCode,
+          targetGroup: form.targetGroup,
+        }),
+      });
+
+      const json: LecturerAlertsResponse = await response.json();
+
+      if (!response.ok || !json.alert) {
+        console.error('Create alert response:', json);
+        throw new Error(json.error || 'Failed to send alert');
+      }
+
+      setAlerts((prev) => [json.alert as LecturerAlert, ...prev]);
+      setForm((prev) => ({
+        ...INITIAL_FORM,
+        unitCode: prev.unitCode,
+      }));
+      setSuccessMessage('Alert sent successfully.');
+    } catch (submitError) {
+      console.error('Failed to send lecturer alert:', submitError);
+      window.alert(
+        submitError instanceof Error
+          ? submitError.message
+          : 'Failed to send alert.'
+      );
+    } finally {
+      setSubmitting(false);
     }
+  }
 
-    setNewAlert(INITIAL_FORM);
-    setSendSuccess(true);
-
-    window.setTimeout(() => {
-      setSendSuccess(false);
-    }, 2000);
-  };
-
-  const handleClearSentAlerts = () => {
+  async function handleClearAlerts() {
     const confirmed = window.confirm(
-      'Clear all lecturer-sent alerts from browser storage?'
+      'Clear all alerts sent from this lecturer account?'
     );
     if (!confirmed) return;
 
-    setSentAlerts([]);
-    localStorage.removeItem('lecturerSentAlerts');
-  };
+    try {
+      setClearing(true);
+      setSuccessMessage('');
+
+      const response = await fetch('/api/alerts', {
+        method: 'DELETE',
+      });
+
+      const json: LecturerAlertsResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json.error || 'Failed to clear alerts');
+      }
+
+      setAlerts([]);
+      setSuccessMessage('All lecturer alerts cleared.');
+    } catch (clearError) {
+      console.error('Failed to clear lecturer alerts:', clearError);
+      window.alert(
+        clearError instanceof Error
+          ? clearError.message
+          : 'Failed to clear alerts.'
+      );
+    } finally {
+      setClearing(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span>Lecturer</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Alerts</span>
+      </nav>
+
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
             Lecturer Panel
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
+          <h1 className="mt-2 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
             Alerts
           </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
-            Real-time warnings and notifications related to attendance tracking,
-            at-risk students, upload issues, session activity, and lecturer-sent
-            student messages.
+          <p className="mt-2 max-w-3xl text-base text-gray-500">
+            Send class-based alerts using only the real units linked to this
+            lecturer account.
           </p>
         </div>
 
@@ -352,46 +314,66 @@ export default function LecturerAlertsPage() {
         </Link>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard
-          label="Total Alerts"
-          value={stats.total}
-          note="All current lecturer notifications"
-          icon={<Bell size={18} className="text-gray-300" />}
-          valueClassName="text-gray-900"
-        />
+      {error ? (
+        <section className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </section>
+      ) : null}
 
-        <SummaryCard
-          label="Critical Alerts"
-          value={stats.critical}
-          note="Absent students and session issues"
-          icon={<ShieldAlert size={18} className="text-red-500" />}
-          valueClassName="text-red-600"
-        />
+      {successMessage ? (
+        <section className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">
+          {successMessage}
+        </section>
+      ) : null}
 
-        <SummaryCard
-          label="Warnings"
-          value={stats.warning}
-          note="At-risk students and late check-ins"
-          icon={<TriangleAlert size={18} className="text-amber-500" />}
-          valueClassName="text-amber-600"
-        />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Total Alerts
+            </p>
+            <Bell size={18} className="text-gray-300" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-gray-900">
+            {loading ? '—' : stats.total}
+          </p>
+        </div>
 
-        <SummaryCard
-          label="Info"
-          value={stats.info}
-          note="Session and upload updates"
-          icon={<Info size={18} className="text-blue-500" />}
-          valueClassName="text-blue-600"
-        />
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Critical
+            </p>
+            <ShieldAlert size={18} className="text-red-500" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-red-600">
+            {loading ? '—' : stats.critical}
+          </p>
+        </div>
 
-        <SummaryCard
-          label="Lecturer Sent"
-          value={stats.lecturerSent}
-          note="Messages created from this page"
-          icon={<Send size={18} className="text-purple-500" />}
-          valueClassName="text-purple-600"
-        />
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Warning
+            </p>
+            <TriangleAlert size={18} className="text-amber-500" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-amber-600">
+            {loading ? '—' : stats.warning}
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
+              Info
+            </p>
+            <Info size={18} className="text-blue-500" />
+          </div>
+          <p className="text-4xl font-black tracking-tight text-blue-600">
+            {loading ? '—' : stats.info}
+          </p>
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
@@ -405,73 +387,43 @@ export default function LecturerAlertsPage() {
                 Send Alert to Students
               </h2>
               <p className="mt-1 text-sm leading-7 text-gray-500">
-                Create a lecturer message for students without backend first. This
-                is saved in browser storage for frontend demonstration.
+                Unit selection is taken from the lecturer&apos;s real class list.
               </p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label
-                htmlFor="alert-title"
-                className="mb-2 block text-sm font-semibold text-gray-700"
-              >
-                Alert Title
-              </label>
-              <input
-                id="alert-title"
-                type="text"
-                value={newAlert.title}
-                onChange={(e) =>
-                  setNewAlert((prev) => ({ ...prev, title: e.target.value }))
-                }
-                placeholder="Example: Attendance reminder for tomorrow"
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-              />
+          {loading ? (
+            <div className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-10 text-sm text-gray-500">
+              <Loader2 size={18} className="animate-spin text-red-600" />
+              Loading units...
             </div>
-
-            <div>
-              <label
-                htmlFor="alert-message"
-                className="mb-2 block text-sm font-semibold text-gray-700"
-              >
-                Alert Message
-              </label>
-              <textarea
-                id="alert-message"
-                rows={5}
-                value={newAlert.message}
-                onChange={(e) =>
-                  setNewAlert((prev) => ({ ...prev, message: e.target.value }))
-                }
-                placeholder="Write the lecturer alert message here..."
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-              />
+          ) : units.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-sm text-gray-500">
+              No lecturer units found yet. Upload roster data first so the alert
+              page can map alerts to real classes.
             </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
+          ) : (
+            <div className="space-y-4">
               <div>
                 <label
-                  htmlFor="alert-level"
+                  htmlFor="alert-unit"
                   className="mb-2 block text-sm font-semibold text-gray-700"
                 >
-                  Alert Level
+                  Unit
                 </label>
                 <select
-                  id="alert-level"
-                  value={newAlert.level}
+                  id="alert-unit"
+                  value={form.unitCode}
                   onChange={(e) =>
-                    setNewAlert((prev) => ({
-                      ...prev,
-                      level: e.target.value as AlertLevel,
-                    }))
+                    setForm((prev) => ({ ...prev, unitCode: e.target.value }))
                   }
                   className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
                 >
-                  <option value="Critical">Critical</option>
-                  <option value="Warning">Warning</option>
-                  <option value="Info">Info</option>
+                  {units.map((unit) => (
+                    <option key={unit.unitCode} value={unit.unitCode}>
+                      {unit.unitCode} — {unit.unitName}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -484,354 +436,259 @@ export default function LecturerAlertsPage() {
                 </label>
                 <select
                   id="alert-target-group"
-                  value={newAlert.targetGroup}
+                  value={form.targetGroup}
                   onChange={(e) =>
-                    setNewAlert((prev) => ({
+                    setForm((prev) => ({
                       ...prev,
-                      targetGroup: e.target.value,
+                      targetGroup: e.target.value as AlertTargetGroup,
                     }))
                   }
                   className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
                 >
-                  <option>All Students</option>
-                  <option>Absent Students</option>
-                  <option>Late Students</option>
-                  <option>At-Risk Students</option>
-                  <option>Selected Class Only</option>
+                  <option value="ALL_STUDENTS">All Students</option>
+                  <option value="ABSENT_STUDENTS">Absent Students</option>
+                  <option value="LATE_STUDENTS">Late Students</option>
+                  <option value="AT_RISK_STUDENTS">At-Risk Students</option>
                 </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="alert-title"
+                  className="mb-2 block text-sm font-semibold text-gray-700"
+                >
+                  Alert Title
+                </label>
+                <input
+                  id="alert-title"
+                  type="text"
+                  value={form.title}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, title: e.target.value }))
+                  }
+                  placeholder="Example: Attendance reminder"
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="alert-message"
+                  className="mb-2 block text-sm font-semibold text-gray-700"
+                >
+                  Alert Message
+                </label>
+                <textarea
+                  id="alert-message"
+                  rows={5}
+                  value={form.message}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, message: e.target.value }))
+                  }
+                  placeholder="Write the lecturer alert message here..."
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="alert-level"
+                  className="mb-2 block text-sm font-semibold text-gray-700"
+                >
+                  Alert Level
+                </label>
+                <select
+                  id="alert-level"
+                  value={form.level}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      level: e.target.value as AlertLevel,
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                >
+                  <option value="Critical">Critical</option>
+                  <option value="Warning">Warning</option>
+                  <option value="Info">Info</option>
+                </select>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSendAlert}
+                  disabled={submitting}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#c2183a] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {submitting ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Send size={16} />
+                  )}
+                  Send Alert
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearAlerts}
+                  disabled={clearing}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-red-200 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {clearing ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={16} />
+                  )}
+                  Clear My Alerts
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-start gap-3">
+            <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+              <Users size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Sent Alerts</h2>
+              <p className="mt-1 text-sm leading-7 text-gray-500">
+                These are the alerts created from this lecturer account.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-[1.4fr_220px]">
+            <div>
+              <label
+                htmlFor="alert-search"
+                className="mb-2 block text-sm font-semibold text-gray-700"
+              >
+                Search alerts
+              </label>
+              <div className="relative">
+                <Search
+                  size={18}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  id="alert-search"
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by title, message, or unit"
+                  className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                />
               </div>
             </div>
 
             <div>
               <label
-                htmlFor="alert-unit-code"
+                htmlFor="alert-level-filter"
                 className="mb-2 block text-sm font-semibold text-gray-700"
               >
-                Unit Code
+                Filter by level
               </label>
-              <input
-                id="alert-unit-code"
-                type="text"
-                value={newAlert.unitCode}
+              <select
+                id="alert-level-filter"
+                value={levelFilter}
                 onChange={(e) =>
-                  setNewAlert((prev) => ({ ...prev, unitCode: e.target.value }))
+                  setLevelFilter(e.target.value as 'ALL' | AlertLevel)
                 }
-                placeholder="Example: COS40005"
                 className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleSendAlert}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
               >
-                <Send size={16} />
-                Send Alert
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setNewAlert(INITIAL_FORM)}
-                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-              >
-                <X size={16} />
-                Clear Form
-              </button>
-
-              <button
-                type="button"
-                onClick={handleClearSentAlerts}
-                className="inline-flex items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-5 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-100"
-              >
-                <X size={16} />
-                Clear Sent Alerts
-              </button>
+                <option value="ALL">All</option>
+                <option value="Critical">Critical</option>
+                <option value="Warning">Warning</option>
+                <option value="Info">Info</option>
+              </select>
             </div>
           </div>
-        </div>
 
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-red-100 bg-red-50/60 p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <ShieldAlert size={18} className="text-red-600" />
-              <h2 className="text-base font-bold text-red-700">Critical Alerts</h2>
-            </div>
-            <p className="mt-2 text-sm leading-7 text-gray-700">
-              Absent students and session-related problems that need immediate lecturer attention.
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-amber-100 bg-amber-50/60 p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <TriangleAlert size={18} className="text-amber-600" />
-              <h2 className="text-base font-bold text-amber-700">Warnings</h2>
-            </div>
-            <p className="mt-2 text-sm leading-7 text-gray-700">
-              Low attendance trends, late arrivals, and upload situations that may need review.
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Info size={18} className="text-blue-600" />
-              <h2 className="text-base font-bold text-blue-700">Info</h2>
-            </div>
-            <p className="mt-2 text-sm leading-7 text-gray-700">
-              Session started messages, successful roster uploads, and general system notices.
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-purple-100 bg-purple-50/60 p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Send size={18} className="text-purple-600" />
-              <h2 className="text-base font-bold text-purple-700">Lecturer Messages</h2>
-            </div>
-            <p className="mt-2 text-sm leading-7 text-gray-700">
-              Lecturer-created alerts can be prepared here first before real student-side delivery is connected.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {sendSuccess && (
-        <section className="rounded-3xl border border-green-100 bg-green-50 p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 size={18} className="mt-1 text-green-700" />
-            <div>
-              <p className="text-sm font-bold text-green-700">
-                Alert sent successfully
-              </p>
-              <p className="mt-2 text-sm leading-7 text-gray-700">
-                The lecturer alert was saved in browser storage and added to the alerts list.
-              </p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section className="grid gap-4 lg:grid-cols-[1fr_220px] rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-        <div>
-          <label
-            htmlFor="alert-search"
-            className="mb-2 block text-sm font-semibold text-gray-700"
-          >
-            Search alerts
-          </label>
-          <div className="relative">
-            <Search
-              size={18}
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              id="alert-search"
-              type="text"
-              placeholder="Search by title, unit, type, or message"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label
-            htmlFor="level-filter"
-            className="mb-2 block text-sm font-semibold text-gray-700"
-          >
-            Filter by level
-          </label>
-          <select
-            id="level-filter"
-            value={levelFilter}
-            onChange={(e) =>
-              setLevelFilter(e.target.value as 'All' | AlertLevel)
-            }
-            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
-          >
-            <option value="All">All</option>
-            <option value="Critical">Critical</option>
-            <option value="Warning">Warning</option>
-            <option value="Info">Info</option>
-          </select>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        {filteredAlerts.length > 0 ? (
-          filteredAlerts.map((item) => (
-            <article
-              key={item.id}
-              className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm transition hover:shadow-md"
-            >
-              <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getLevelStyles(
-                        item.level
-                      )}`}
-                    >
-                      {item.level}
-                    </span>
-
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getTypeStyles(
-                        item.type
-                      )}`}
-                    >
-                      {item.type}
-                    </span>
-
-                    {item.source === 'lecturer' && (
-                      <span className="inline-flex rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-xs font-bold text-purple-700">
-                        Sent by Lecturer
-                      </span>
-                    )}
-
-                    <span className="text-xs text-gray-400">
-                      {item.date} · {item.time}
-                    </span>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <div className="mt-1">{getAlertIcon(item.level)}</div>
-
-                    <div className="min-w-0">
-                      <h2 className="text-xl font-black tracking-tight text-gray-900">
-                        {item.title}
-                      </h2>
-
-                      {(item.unitCode || item.unitName) && (
-                        <p className="mt-2 text-sm font-semibold text-[#E4002B]">
-                          {item.unitCode ? `${item.unitCode}` : ''}
-                          {item.unitName ? ` · ${item.unitName}` : ''}
-                        </p>
-                      )}
-
-                      <p className="mt-3 max-w-3xl text-sm leading-7 text-gray-600">
-                        {item.message}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="w-full xl:w-[240px]">
-                  <div className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-                      Recommended Action
-                    </p>
-
-                    <div className="mt-4 space-y-3">
-                      {item.actionHref && item.actionLabel ? (
-                        <Link
-                          href={item.actionHref}
-                          className="flex items-center justify-between rounded-2xl border border-white bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-                        >
-                          <span>{item.actionLabel}</span>
-                          <ChevronRight size={16} />
-                        </Link>
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-3 text-sm text-gray-500">
-                          No action linked
-                        </div>
-                      )}
-
-                      <Link
-                        href="/lecturer/dashboard"
-                        className="flex items-center justify-between rounded-2xl border border-white bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
-                      >
-                        <span>Go to Dashboard</span>
-                        <ChevronRight size={16} />
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+          <div className="mt-6 space-y-4">
+            {loading ? (
+              <div className="flex items-center justify-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-6 py-14 text-sm text-gray-500">
+                <Loader2 size={18} className="animate-spin text-red-600" />
+                Loading alerts...
               </div>
-            </article>
-          ))
-        ) : (
-          <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-10 text-center shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900">No alerts found</h2>
-            <p className="mt-3 text-sm leading-7 text-gray-500">
-              Try changing the search or alert level filter.
-            </p>
+            ) : filteredAlerts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-6 py-14 text-center">
+                <h3 className="text-lg font-bold text-gray-900">No alerts found</h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  Send your first unit-based alert from the form on the left.
+                </p>
+              </div>
+            ) : (
+              filteredAlerts.map((item) => {
+                const stamp = formatDateTime(item.createdAt);
+
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5 transition hover:border-gray-200 hover:bg-white"
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1 flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+                          {getLevelIcon(item.level)}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${getLevelBadge(
+                                item.level
+                              )}`}
+                            >
+                              {item.level}
+                            </span>
+
+                            <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-600">
+                              {getTargetGroupLabel(item.targetGroup)}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900">
+                              {item.title}
+                            </h3>
+                            <p className="mt-1 text-sm leading-7 text-gray-500">
+                              {item.message}
+                            </p>
+                          </div>
+
+                          <p className="text-sm font-semibold text-gray-600">
+                            {item.unitCode}
+                            {item.unitName ? ` — ${item.unitName}` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-start gap-3 sm:items-end">
+                        <div className="text-sm text-gray-500">
+                          <p className="font-semibold text-gray-700">{stamp.date}</p>
+                          <p>{stamp.time}</p>
+                        </div>
+
+                        {item.actionHref ? (
+                          <Link
+                            href={item.actionHref}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                          >
+                            {item.actionLabel ?? 'Open'}
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            )}
           </div>
-        )}
+        </div>
       </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <InsightCard
-          icon={<Users size={18} className="text-red-600" />}
-          title="Absent students"
-          text="Critical alerts highlight classes where absent counts may require immediate lecturer follow-up."
-          theme="border-red-100 bg-red-50"
-        />
-        <InsightCard
-          icon={<Clock3 size={18} className="text-amber-600" />}
-          title="Late and low attendance"
-          text="Warnings help detect patterns such as frequent late arrivals and students nearing risk thresholds."
-          theme="border-amber-100 bg-amber-50"
-        />
-        <InsightCard
-          icon={<UploadCloud size={18} className="text-blue-600" />}
-          title="System updates"
-          text="Info alerts keep lecturers aware of successful uploads, started sessions, and general workflow status."
-          theme="border-blue-100 bg-blue-50"
-        />
-      </section>
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  note,
-  icon,
-  valueClassName,
-}: {
-  label: string;
-  value: string | number;
-  note: string;
-  icon: React.ReactNode;
-  valueClassName: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-          {label}
-        </p>
-        {icon}
-      </div>
-      <p className={`text-4xl font-black tracking-tight ${valueClassName}`}>
-        {value}
-      </p>
-      <p className="mt-2 text-xs text-gray-500">{note}</p>
-    </div>
-  );
-}
-
-function InsightCard({
-  icon,
-  title,
-  text,
-  theme,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
-  theme: string;
-}) {
-  return (
-    <div className={`rounded-3xl border p-5 shadow-sm ${theme}`}>
-      <div className="flex items-center gap-2">
-        {icon}
-        <p className="text-base font-bold text-gray-900">{title}</p>
-      </div>
-      <p className="mt-3 text-sm leading-7 text-gray-700">{text}</p>
     </div>
   );
 }
