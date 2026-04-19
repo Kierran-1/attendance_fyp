@@ -217,7 +217,8 @@ export default function StudentQRCodePage() {
             return;
           }
 
-          if (data.challengeToken && data.challengeToken !== challengeToken) {
+          // Update challenge token if a new one is received
+          if (data.challengeToken) {
             setChallengeToken(data.challengeToken);
             setVerificationStage('STAGE_2');
             setQrVersion((prev) => prev + 1);
@@ -239,7 +240,7 @@ export default function StudentQRCodePage() {
         }
       }, CHALLENGE_POLL_MS);
     },
-    [challengeToken, clearTimers, stopChallengePoll]
+    [clearTimers, stopChallengePoll]
   );
 
   const scheduleAutoRefresh = useCallback(

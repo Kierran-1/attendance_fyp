@@ -125,9 +125,11 @@ model ClassAttendanceData {
   scanMethod        String?
   verificationStage String?
   challengeToken    String?
+  usedAt            DateTime?    // Mark when challenge token was used to prevent reuse
   createdAt         DateTime     @default(now())
   classSession      ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
 
+  @@unique([classSessionId, studentId, verificationStage]) // Prevent duplicate stage records
   @@index([classSessionId])
   @@index([studentId])
 }

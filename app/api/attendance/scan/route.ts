@@ -80,10 +80,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Session is no longer active' }, { status: 400 });
     }
 
+    // Check if challenge token was already used (prevent reuse)
+    if (stage1Data.usedAt) {
+      return NextResponse.json({ error: 'Challenge token already used' }, { status: 409 });
+    }
+
     const now = new Date();
 
     // Record Stage 2 raw scan
-    await prisma.classAttendanceData.create({
+    const stage2Record = await prisma.classAttendanceData.create({
       data: {
         classSessionId: stage1Data.classSessionId,
         studentId: payload.studentId,
@@ -91,6 +96,12 @@ export async function POST(request: NextRequest) {
         scanMethod: 'QR',
         verificationStage: 'STAGE_2',
       },
+    });
+
+    // Mark Stage 1 challenge token as used to prevent replay attacks
+    await prisma.classAttendanceData.update({
+      where: { id: stage1Data.id },
+      data: { usedAt: now },
     });
 
     // Confirm attendance
@@ -170,21 +181,47 @@ export async function POST(request: NextRequest) {
       stage: 1,
       alreadyScanned: true,
       message: 'Stage 1 already complete — ask student to show Stage 2 QR',
+      studentId: payload.userId,
     }, { status: 200 });
   }
 
   const now = new Date();
 
   // Generate challenge token (we need the data record id, so create the record first)
-  const stage1Record = await prisma.classAttendanceData.create({
-    data: {
-      classSessionId: classSession.id,
-      studentId: payload.userId,
-      scanPayload: { token, timestamp: now.toISOString() },
-      scanMethod: 'QR',
-      verificationStage: 'STAGE_1',
-    },
-  });
+  // Using upsert with unique constraint prevents race condition of duplicate Stage 1 records
+  let stage1Record;
+  try {
+    stage1Record = await prisma.classAttendanceData.create({
+      data: {
+        classSessionId: classSession.id,
+        studentId: payload.userId,
+        scanPayload: { token, timestamp: now.toISOString() },
+        scanMethod: 'QR',
+        verificationStage: 'STAGE_1',
+      },
+    });
+  } catch (err: any) {
+    // Handle unique constraint violation - Stage 1 already exists due to concurrent request
+    if (err.code === 'P2002') {
+      const existing = await prisma.classAttendanceData.findFirst({
+        where: {
+          classSessionId: classSession.id,
+          studentId: payload.userId,
+          verificationStage: 'STAGE_1',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing && existing.challengeToken) {
+        return NextResponse.json({
+          stage: 1,
+          alreadyScanned: true,
+          message: 'Stage 1 already complete — ask student to show Stage 2 QR',
+          studentId: payload.userId,
+        }, { status: 200 });
+      }
+    }
+    throw err;
+  }
 
   const challengeToken = signChallengeToken({
     studentId: payload.userId,

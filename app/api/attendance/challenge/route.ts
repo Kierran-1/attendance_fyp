@@ -42,6 +42,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ challengeToken: null }, { status: 200 });
   }
 
+  // Check if challenge token was already used (prevent reuse)
+  if (stage1.usedAt) {
+    return NextResponse.json({ challengeToken: null }, { status: 200 });
+  }
+
+  // Check if session is still active (challenge should be invalidated if session ended)
+  const classSession = await prisma.classSession.findUnique({
+    where: { id: sessionId },
+  });
+
+  if (!classSession) {
+    return NextResponse.json({ challengeToken: null }, { status: 200 });
+  }
+
+  const now = Date.now();
+  const sessionEnd = classSession.sessionTime.getTime() + classSession.sessionDuration * 60_000;
+  if (now > sessionEnd) {
+    return NextResponse.json({ challengeToken: null }, { status: 200 });
+  }
+
   // Check if Stage 2 is already done for this record
   const stage2Done = await prisma.classAttendanceData.findFirst({
     where: {
