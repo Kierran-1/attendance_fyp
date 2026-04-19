@@ -30,6 +30,9 @@ type LecturerUnit = {
   unitName: string;
   semester: string;
   year: number;
+  classType: string;
+  group: string;
+  subcomponent: string;
   students: { id: string; studentNumber: string; name: string }[];
   sessions: { id: string; status: string; presentCount: number; absentCount: number }[];
 };
@@ -84,7 +87,6 @@ export default function LiveAttendancePage() {
   const [units, setUnits]                   = useState<LecturerUnit[]>([]);
   const [unitsLoading, setUnitsLoading]     = useState(true);
   const [selectedUnitId, setSelectedUnitId] = useState('');
-  const [sessionType, setSessionType]       = useState<SessionName>('LECTURE');
   const [duration, setDuration]             = useState(60);
 
   // Active session
@@ -128,7 +130,7 @@ export default function LiveAttendancePage() {
         if (!res.ok) throw new Error('Failed to load units');
         const data: LecturerUnit[] = await res.json();
         setUnits(data);
-        if (data.length > 0) setSelectedUnitId(data[0].unitId);
+        if (data.length > 0) setSelectedUnitId(data[0].id);
       } catch {
         setError('Unable to load your units. Please refresh.');
       } finally {
@@ -264,13 +266,16 @@ export default function LiveAttendancePage() {
     setStarting(true);
 
     try {
+      const selectedCard = units.find(u => u.id === selectedUnitId);
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          unitId: selectedUnitId,
-          sessionName: sessionType,
+          unitId: selectedCard?.unitId,
+          sessionName: selectedCard?.classType ?? sessionType,
           durationMinutes: duration,
+          groupNo: selectedCard?.group,
+          subcomponent: selectedCard?.subcomponent,
         }),
       });
 
@@ -281,7 +286,7 @@ export default function LiveAttendancePage() {
 
       const data = await res.json();
       const s = data.session;
-      const unit = units.find(u => u.unitId === selectedUnitId);
+      const unit = selectedCard;
 
       const newSession: ActiveSession = {
         id: s.id,
@@ -407,7 +412,7 @@ export default function LiveAttendancePage() {
 
   // ── Derived stats ──────────────────────────────────────────────────────────
 
-  const selectedUnit    = units.find(u => u.unitId === selectedUnitId);
+  const selectedUnit    = units.find(u => u.id === selectedUnitId);
   const totalStudents   = selectedUnit?.students.length ?? 0;
   const presentCount    = checkIns.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
   const absentCount     = Math.max(0, totalStudents - presentCount);
@@ -482,8 +487,8 @@ export default function LiveAttendancePage() {
                         className="w-full appearance-none rounded-2xl border border-gray-200 bg-white py-3 pl-4 pr-10 text-sm font-semibold text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
                       >
                         {units.map(u => (
-                          <option key={u.id} value={u.unitId}>
-                            {u.unitCode} — {u.unitName}
+                          <option key={u.id} value={u.id}>
+                            {u.unitCode} — {u.unitName}{u.group ? ` (${u.classType} · ${u.group})` : ''}
                           </option>
                         ))}
                       </select>
@@ -496,28 +501,6 @@ export default function LiveAttendancePage() {
                     )}
                   </div>
 
-                  {/* Session type */}
-                  <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">
-                      Session Type
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {SESSION_TYPES.map(t => (
-                        <button
-                          key={t.value}
-                          type="button"
-                          onClick={() => setSessionType(t.value)}
-                          className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
-                            sessionType === t.value
-                              ? t.colour + ' ring-2 ring-offset-1 ring-[#E4002B]/30'
-                              : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300'
-                          }`}
-                        >
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
                   {/* Duration */}
                   <div>

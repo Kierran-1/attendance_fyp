@@ -82,6 +82,7 @@ interface ParsedSheet {
     location?: string;
     lecturer?: string;
   };
+  sessionDates: string[];
   students: any[];
   columns: string[];
 }
@@ -448,11 +449,25 @@ export default function ClassesPage() {
     const time = classParts[3] || "";
     const location = classParts[4] || "";
     const lecturer = classParts[5] || "";
+    const termYear = parseInt((term || '').split('_')[0], 10) || new Date().getFullYear();
+    const dateRow: any[] = allData[5] ?? [];
+    const sessionDates: string[] = [];
+    for (const cell of dateRow) {
+      const val = String(cell ?? '').trim();
+      const m = val.match(/^(\d{1,2})\/(\d{1,2})$/);
+      if (m) {
+        const mm = +m[1], dd = +m[2];
+        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+          sessionDates.push(new Date(termYear, mm - 1, dd).toISOString());
+        }
+      }
+    }
+    console.log(`[parseSheet] ${sheetName}: extracted ${sessionDates.length} dates`, sessionDates.slice(0, 5));
     const coreHeaders = ["Sl.No", "Student Number", "Empty", "Student Name", "Program", "Registered Course", "Nationality", "School Status"];
     const studentData = allData.slice(7)
       .map((row: any[]) => { const p = [...row]; while (p.length < 8) p.push(''); return p.slice(0, 8); })
       .filter((row: any[]) => { const s = String(row[1]).trim(); return row[1] != null && s !== '' && !/^\D/.test(s); });
-    return { sheetName, metadata: { term, unitCode, unitName, classType, group, day, time, location, lecturer }, students: studentData, columns: coreHeaders };
+    return { sheetName, metadata: { term, unitCode, unitName, classType, group, day, time, location, lecturer }, sessionDates, students: studentData, columns: coreHeaders };
   };
 
   const handleFileUpload = (file: File) => {
@@ -492,7 +507,7 @@ export default function ClassesPage() {
     try {
       // Build the full batch payload — one entry per sheet
       const batchPayload = parsedSheets.map(sheet => {
-        const { metadata, students: studentData, columns } = sheet;
+        const { metadata, sessionDates, students: studentData, columns } = sheet;
         const studentNumberCol = columns.indexOf(columnMapping.studentId);
         const nameCol = columns.indexOf(columnMapping.name);
         const programCol = columnMapping.program ? columns.indexOf(columnMapping.program) : -1;
@@ -525,6 +540,7 @@ export default function ClassesPage() {
             day: metadata.day || '',
             time: metadata.time || '',
             location: metadata.location || '',
+            sessionDates: sessionDates.length > 0 ? sessionDates : undefined,
           },
           students,
         };

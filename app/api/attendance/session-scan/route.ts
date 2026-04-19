@@ -5,7 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { UserRole, UserStatus, AttendanceStatus } from '@prisma/client';
 import { verifySessionQRToken } from '@/lib/qr';
 
-function isSessionActive(s: { sessionTime: Date; sessionDuration: number }): boolean {
+function isSessionActive(s: { sessionTime: Date | null; sessionDuration: number | null }): boolean {
+  if (!s.sessionTime || s.sessionDuration === null) return false;
   const now = Date.now();
   const end = s.sessionTime.getTime() + s.sessionDuration * 60_000;
   return now >= s.sessionTime.getTime() && now <= end;
@@ -43,11 +44,6 @@ export async function POST(request: NextRequest) {
 
   const classSession = await prisma.classSession.findUnique({
     where: { id: payload.sessionId },
-    include: {
-      unitRegistration: {
-        include: { unit: true },
-      },
-    },
   });
 
   if (!classSession) {
@@ -58,8 +54,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Session is no longer active' }, { status: 400 });
   }
 
+  // Look up the unit registration separately to get the unitId
+  if (!classSession.unitRegistrationId) {
+    return NextResponse.json({ error: 'Session data is incomplete — ask your lecturer to start a new session' }, { status: 400 });
+  }
+
+  const unitRegistration = await prisma.unitRegistration.findUnique({
+    where: { id: classSession.unitRegistrationId },
+    include: { unit: true },
+  });
+
+  if (!unitRegistration) {
+    return NextResponse.json({ error: 'Session unit not found' }, { status: 404 });
+  }
+
+  const unitId = unitRegistration.unitId;
+
   // Verify student is enrolled in the unit
-  const unitId = classSession.unitRegistration.unitId;
   const enrollment = await prisma.unitRegistration.findFirst({
     where: {
       userId: session.user.id,
@@ -126,8 +137,8 @@ export async function POST(request: NextRequest) {
     success: true,
     message: 'Attendance marked — you are present!',
     sessionId: classSession.id,
-    unitCode: classSession.unitRegistration.unit.code,
-    unitName: classSession.unitRegistration.unit.name,
+    unitCode: unitRegistration.unit.code,
+    unitName: unitRegistration.unit.name,
     record,
   });
 }

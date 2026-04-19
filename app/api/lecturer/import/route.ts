@@ -18,12 +18,13 @@ type UnitInput = {
   name: string;
   semester: string;
   year?: number;
-  sessionType?: string; // e.g. "LA1", "LE1", "TU1"
-  groupNo?: string;     // e.g. "01", "02"
-  day?: string;         // e.g. "Tue"
-  time?: string;        // e.g. "13:00 - 15:00"
+  sessionType?: string;    // e.g. "LA1", "LE1", "TU1"
+  groupNo?: string;        // e.g. "01", "02"
+  day?: string;            // e.g. "Tue"
+  time?: string;           // e.g. "13:00 - 15:00"
   location?: string;
   lecturer?: string;
+  sessionDates?: string[]; // ISO date strings from Excel columns
 };
 
 // Map Excel session prefix to Prisma SessionName enum
@@ -47,19 +48,21 @@ function parseTime(timeStr: string): { startHour: number; startMin: number; dura
   return { startHour, startMin, durationMinutes: durationMinutes > 0 ? durationMinutes : 120 };
 }
 
-// Build a representative sessionTime DateTime for the given day/time
-// Uses the semester year and finds the first matching weekday
-function buildSessionTime(day: string, startHour: number, startMin: number, year: number): Date {
+// Build 12 weekly session dates starting from the first matching weekday of the year
+function buildSessionDates(day: string, startHour: number, startMin: number, year: number, count = 12): Date[] {
   const dayMap: Record<string, number> = {
     sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
   };
   const targetDay = dayMap[day.trim().toLowerCase().slice(0, 3)] ?? 1;
-  // Start from Jan 1 of the given year and find the first matching weekday
-  const date = new Date(year, 0, 1, startHour, startMin, 0, 0);
-  while (date.getDay() !== targetDay) {
-    date.setDate(date.getDate() + 1);
+  const first = new Date(year, 0, 1, startHour, startMin, 0, 0);
+  while (first.getDay() !== targetDay) {
+    first.setDate(first.getDate() + 1);
   }
-  return date;
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(first);
+    d.setDate(d.getDate() + i * 7);
+    return d;
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -123,9 +126,11 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Create a ClassSession for this schedule slot if it doesn't exist yet
-  // Identified by sessionName + groupNo on this unit registration
-  let classSession = await prisma.classSession.findFirst({
+  const { startHour, startMin } = parseTime(unitInput.time || '08:00 - 10:00');
+  console.log('[import] sessionDates received:', unitInput.sessionDates);
+  const hasExplicitDates = unitInput.sessionDates && unitInput.sessionDates.length > 0;
+
+  const existingSession = await prisma.classSession.findFirst({
     where: {
       unitRegistrationId: lecturerReg.id,
       sessionName: sessionNameEnum,
@@ -134,22 +139,40 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  if (!classSession) {
-    const { startHour, startMin, durationMinutes } = parseTime(unitInput.time || '08:00 - 10:00');
-    const sessionTime = buildSessionTime(unitInput.day || 'Mon', startHour, startMin, year);
-
-    classSession = await prisma.classSession.create({
-      data: {
+  // If explicit dates come from the Excel file, always recreate to get correct dates.
+  // If no explicit dates, only create if none exist yet.
+  if (existingSession && hasExplicitDates) {
+    await prisma.classSession.deleteMany({
+      where: {
         unitRegistrationId: lecturerReg.id,
+        sessionName: sessionNameEnum,
+        groupNo,
+        subcomponent: scopeKey,
+      },
+    });
+  }
+
+  if (!existingSession || hasExplicitDates) {
+    const scheduledDates: Date[] = hasExplicitDates
+      ? unitInput.sessionDates!.map((iso) => {
+          const d = new Date(iso);
+          d.setHours(startHour, startMin, 0, 0);
+          return d;
+        })
+      : buildSessionDates(unitInput.day || 'Mon', startHour, startMin, year);
+
+    await prisma.classSession.createMany({
+      data: scheduledDates.map((scheduledDate) => ({
+        unitRegistrationId: lecturerReg.id,
+        unitId: unit.id,
         lecturerId: userId,
         sessionName: sessionNameEnum,
-        sessionTime,
-        sessionDuration: durationMinutes,
+        scheduledDate,
         groupNo,
         subcomponent: scopeKey,
         location: unitInput.location ?? null,
         day: unitInput.day ?? null,
-      },
+      })),
     });
   }
 
@@ -213,7 +236,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     unitId: unit.id,
     registrationId: lecturerReg.id,
-    classSessionId: classSession.id,
     created: userData.length,
     enrolled,
     skipped: validStudents.length - enrolled,

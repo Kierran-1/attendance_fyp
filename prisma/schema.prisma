@@ -71,6 +71,7 @@ model Unit {
   code              String             @unique
   name              String
   unitRegistrations UnitRegistration[]
+  classSessions     ClassSession[]
 }
 
 model UnitRegistration {
@@ -93,24 +94,27 @@ model UnitRegistration {
 
 model ClassSession {
   id                 String                  @id @default(cuid())
-  unitRegistrationId String
+  unitRegistrationId String?
+  unitId             String?
   lecturerId         String
   sessionName        SessionName
-  sessionTime        DateTime
-  sessionDuration    Int
-  weekNumber         Int?
+  scheduledDate      DateTime?
+  sessionTime        DateTime?
+  sessionDuration    Int?
   subcomponent       String?
   groupNo            String?
   location           String?
   day                String?
-  
+
   attendanceData     ClassAttendanceData[]
   attendanceRecords  ClassAttendanceRecord[]
   lecturer           User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
-  unitRegistration   UnitRegistration        @relation(fields: [unitRegistrationId], references: [id], onDelete: Cascade)
+  unitRegistration   UnitRegistration?       @relation(fields: [unitRegistrationId], references: [id], onDelete: SetNull)
+  unit               Unit?                   @relation(fields: [unitId], references: [id])
 
   @@index([unitRegistrationId])
   @@index([lecturerId])
+  @@index([unitId])
 }
 
 model ClassAttendanceData {

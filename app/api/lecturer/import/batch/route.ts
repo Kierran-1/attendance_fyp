@@ -24,6 +24,7 @@ type UnitInput = {
   time?: string;
   location?: string;
   lecturer?: string;
+  sessionDates?: string[];
 };
 
 type SheetPayload = {
@@ -50,16 +51,20 @@ function parseTime(timeStr: string): { startHour: number; startMin: number; dura
   return { startHour, startMin, durationMinutes: durationMinutes > 0 ? durationMinutes : 120 };
 }
 
-function buildSessionTime(day: string, startHour: number, startMin: number, year: number): Date {
+function buildSessionDates(day: string, startHour: number, startMin: number, year: number, count = 12): Date[] {
   const dayMap: Record<string, number> = {
     sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
   };
   const targetDay = dayMap[day.trim().toLowerCase().slice(0, 3)] ?? 1;
-  const date = new Date(year, 0, 1, startHour, startMin, 0, 0);
-  while (date.getDay() !== targetDay) {
-    date.setDate(date.getDate() + 1);
+  const first = new Date(year, 0, 1, startHour, startMin, 0, 0);
+  while (first.getDay() !== targetDay) {
+    first.setDate(first.getDate() + 1);
   }
-  return date;
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(first);
+    d.setDate(d.getDate() + i * 7);
+    return d;
+  });
 }
 
 async function importSheet(
@@ -98,7 +103,10 @@ async function importSheet(
     });
   }
 
-  let classSession = await prisma.classSession.findFirst({
+  const { startHour, startMin } = parseTime(unitInput.time || '08:00 - 10:00');
+  const hasExplicitDates = unitInput.sessionDates && unitInput.sessionDates.length > 0;
+
+  const existingSession = await prisma.classSession.findFirst({
     where: {
       unitRegistrationId: lecturerReg.id,
       sessionName: sessionNameEnum,
@@ -107,22 +115,38 @@ async function importSheet(
     },
   });
 
-  if (!classSession) {
-    const { startHour, startMin, durationMinutes } = parseTime(unitInput.time || '08:00 - 10:00');
-    const sessionTime = buildSessionTime(unitInput.day || 'Mon', startHour, startMin, year);
-
-    classSession = await prisma.classSession.create({
-      data: {
+  if (existingSession && hasExplicitDates) {
+    await prisma.classSession.deleteMany({
+      where: {
         unitRegistrationId: lecturerReg.id,
+        sessionName: sessionNameEnum,
+        groupNo,
+        subcomponent: scopeKey,
+      },
+    });
+  }
+
+  if (!existingSession || hasExplicitDates) {
+    const scheduledDates: Date[] = hasExplicitDates
+      ? unitInput.sessionDates!.map((iso) => {
+          const d = new Date(iso);
+          d.setHours(startHour, startMin, 0, 0);
+          return d;
+        })
+      : buildSessionDates(unitInput.day || 'Mon', startHour, startMin, year);
+
+    await prisma.classSession.createMany({
+      data: scheduledDates.map((scheduledDate) => ({
+        unitRegistrationId: lecturerReg.id,
+        unitId: unit.id,
         lecturerId: userId,
         sessionName: sessionNameEnum,
-        sessionTime,
-        sessionDuration: durationMinutes,
+        scheduledDate,
         groupNo,
         subcomponent: scopeKey,
         location: unitInput.location ?? null,
         day: unitInput.day ?? null,
-      },
+      })),
     });
   }
 
