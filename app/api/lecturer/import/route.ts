@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole, UserStatus, SessionName } from '@prisma/client';
+import { SessionName, UserRole, UserStatus } from '@prisma/client';
 
 type StudentInput = {
   studentId: string;
@@ -18,16 +18,15 @@ type UnitInput = {
   name: string;
   semester: string;
   year?: number;
-  sessionType?: string;    // e.g. "LA1", "LE1", "TU1"
-  groupNo?: string;        // e.g. "01", "02"
-  day?: string;            // e.g. "Tue"
-  time?: string;           // e.g. "13:00 - 15:00"
+  sessionType?: string;
+  groupNo?: string;
+  day?: string;
+  time?: string;
   location?: string;
   lecturerName?: string;
-  sessionDates?: string[]; // ISO date strings from Excel columns
+  sessionDates?: string[];
 };
 
-// Map Excel session prefix to Prisma SessionName enum
 function toSessionName(sessionType: string): SessionName {
   const prefix = sessionType.slice(0, 2).toUpperCase();
   if (prefix === 'LA') return SessionName.LAB;
@@ -35,29 +34,50 @@ function toSessionName(sessionType: string): SessionName {
   return SessionName.LECTURE;
 }
 
-// Parse "13:00 - 15:00" into { startHour, startMin, durationMinutes }
-function parseTime(timeStr: string): { startHour: number; startMin: number; durationMinutes: number } {
-  const parts = timeStr.split('-').map(s => s.trim());
+function parseTime(timeStr: string): {
+  startHour: number;
+  startMin: number;
+  durationMinutes: number;
+} {
+  const parts = timeStr.split('-').map((s) => s.trim());
   const [sh, sm] = (parts[0] || '00:00').split(':').map(Number);
   const [eh, em] = (parts[1] || parts[0] || '00:00').split(':').map(Number);
   const startHour = isNaN(sh) ? 0 : sh;
   const startMin = isNaN(sm) ? 0 : sm;
   const endHour = isNaN(eh) ? startHour + 2 : eh;
   const endMin = isNaN(em) ? 0 : em;
-  const durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
-  return { startHour, startMin, durationMinutes: durationMinutes > 0 ? durationMinutes : 120 };
+  const durationMinutes = endHour * 60 + endMin - (startHour * 60 + startMin);
+
+  return {
+    startHour,
+    startMin,
+    durationMinutes: durationMinutes > 0 ? durationMinutes : 120,
+  };
 }
 
-// Build 12 weekly session dates starting from the first matching weekday of the year
-function buildSessionDates(day: string, startHour: number, startMin: number, year: number, count = 12): Date[] {
+function buildSessionDates(
+  day: string,
+  startHour: number,
+  startMin: number,
+  year: number,
+  count = 12
+): Date[] {
   const dayMap: Record<string, number> = {
-    sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+    sun: 0,
+    mon: 1,
+    tue: 2,
+    wed: 3,
+    thu: 4,
+    fri: 5,
+    sat: 6,
   };
   const targetDay = dayMap[day.trim().toLowerCase().slice(0, 3)] ?? 1;
   const first = new Date(year, 0, 1, startHour, startMin, 0, 0);
+
   while (first.getDay() !== targetDay) {
     first.setDate(first.getDate() + 1);
   }
+
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(first);
     d.setDate(d.getDate() + i * 7);
@@ -99,15 +119,15 @@ export async function POST(request: NextRequest) {
   const sessionType = unitInput.sessionType?.trim() || 'LE';
   const sessionNameEnum = toSessionName(sessionType);
   const scopeKey = `${sessionType}-${groupNo}`;
+  const { startHour, startMin, durationMinutes } = parseTime(unitInput.time || '08:00 - 10:00');
+  const hasExplicitDates = Boolean(unitInput.sessionDates?.length);
 
-  // Upsert Unit
   const unit = await prisma.unit.upsert({
     where: { code: unitInput.code },
     update: { name: unitInput.name },
     create: { code: unitInput.code, name: unitInput.name },
   });
 
-  // One UnitRegistration per lecturer per unit
   let lecturerReg = await prisma.unitRegistration.findFirst({
     where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER },
   });
@@ -125,11 +145,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const { startHour, startMin } = parseTime(unitInput.time || '08:00 - 10:00');
-  console.log('[import] sessionDates received:', unitInput.sessionDates);
-  const hasExplicitDates = unitInput.sessionDates && unitInput.sessionDates.length > 0;
-
-  const existingSession = await prisma.classSession.findFirst({
+  let existingSession = await prisma.classSession.findFirst({
     where: {
       unitRegistrationId: lecturerReg.id,
       sessionName: sessionNameEnum,
@@ -138,8 +154,6 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // If explicit dates come from the Excel file, always recreate to get correct dates.
-  // If no explicit dates, only create if none exist yet.
   if (existingSession && hasExplicitDates) {
     await prisma.classSession.deleteMany({
       where: {
@@ -149,11 +163,12 @@ export async function POST(request: NextRequest) {
         subcomponent: scopeKey,
       },
     });
+    existingSession = null;
   }
 
-  if (!existingSession || hasExplicitDates) {
-    const scheduledDates: Date[] = hasExplicitDates
-      ? unitInput.sessionDates!.map((iso) => {
+  if (!existingSession) {
+    const sessionTimes = hasExplicitDates
+      ? (unitInput.sessionDates ?? []).map((iso) => {
           const d = new Date(iso);
           d.setHours(startHour, startMin, 0, 0);
           return d;
@@ -161,28 +176,32 @@ export async function POST(request: NextRequest) {
       : buildSessionDates(unitInput.day || 'Mon', startHour, startMin, year);
 
     await prisma.classSession.createMany({
-      data: scheduledDates.map((scheduledDate) => ({
+      data: sessionTimes.map((sessionTime) => ({
         unitRegistrationId: lecturerReg.id,
-        unitId: unit.id,
         lecturerId: userId,
         sessionName: sessionNameEnum,
-        scheduledDate,
+        sessionTime,
+        sessionDuration: durationMinutes,
         groupNo,
         subcomponent: scopeKey,
         location: unitInput.location ?? null,
         day: unitInput.day ?? null,
-        lecturerName: unitInput.lecturerName ?? null,  // ← save lecturer name from Excel
-      },
+        lecturerName: unitInput.lecturerName ?? null,
+      })),
     });
-  } else if (unitInput.lecturerName && !classSession.lecturerName) {
-    // Backfill lecturerName if the session already exists but has no name stored yet
-    classSession = await prisma.classSession.update({
-      where: { id: classSession.id },
+  } else if (unitInput.lecturerName && !existingSession.lecturerName) {
+    await prisma.classSession.updateMany({
+      where: {
+        unitRegistrationId: lecturerReg.id,
+        sessionName: sessionNameEnum,
+        groupNo,
+        subcomponent: scopeKey,
+        lecturerName: null,
+      },
       data: { lecturerName: unitInput.lecturerName },
     });
   }
 
-  // Upsert user accounts for all students
   const validStudents = students.filter((s) => s.studentId && s.name);
   const userData = validStudents.map((s) => ({
     email: `${s.studentId}@students.swinburne.edu.my`,
@@ -212,6 +231,7 @@ export async function POST(request: NextRequest) {
   for (const s of validStudents) {
     const studentUserId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
     if (!studentUserId) continue;
+
     try {
       await prisma.unitRegistration.upsert({
         where: {
