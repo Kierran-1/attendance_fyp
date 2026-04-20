@@ -23,7 +23,7 @@ type UnitInput = {
   day?: string;
   time?: string;
   location?: string;
-  lecturer?: string;
+  lecturerName?: string;  // ← renamed from `lecturer` for consistency
 };
 
 type SheetPayload = {
@@ -122,7 +122,14 @@ async function importSheet(
         subcomponent: scopeKey,
         location: unitInput.location ?? null,
         day: unitInput.day ?? null,
+        lecturerName: unitInput.lecturerName ?? null,  // ← save lecturer name from Excel
       },
+    });
+  } else if (unitInput.lecturerName && !classSession.lecturerName) {
+    // Backfill lecturerName if the session already exists but has no name stored yet
+    classSession = await prisma.classSession.update({
+      where: { id: classSession.id },
+      data: { lecturerName: unitInput.lecturerName },
     });
   }
 
@@ -212,7 +219,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Expected a non-empty array of sheet payloads' }, { status: 400 });
   }
 
-  // Validate each sheet has the minimum required fields
   for (let i = 0; i < sheets.length; i++) {
     const { unit, students } = sheets[i];
     if (!unit?.code || !unit?.name || !Array.isArray(students)) {
@@ -236,6 +242,7 @@ export async function POST(request: NextRequest) {
         unitCode: payload.unit.code,
         sessionType: payload.unit.sessionType,
         groupNo: payload.unit.groupNo,
+        lecturerName: payload.unit.lecturerName ?? null,
         ...result,
       });
       totalCreated += result.created;
@@ -249,6 +256,7 @@ export async function POST(request: NextRequest) {
         unitCode: payload.unit.code,
         sessionType: payload.unit.sessionType,
         groupNo: payload.unit.groupNo,
+        lecturerName: payload.unit.lecturerName ?? null,
         created: 0,
         enrolled: 0,
         skipped: 0,

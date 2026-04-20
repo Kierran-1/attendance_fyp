@@ -23,7 +23,7 @@ type UnitInput = {
   day?: string;         // e.g. "Tue"
   time?: string;        // e.g. "13:00 - 15:00"
   location?: string;
-  lecturer?: string;
+  lecturerName?: string;
 };
 
 // Map Excel session prefix to Prisma SessionName enum
@@ -48,13 +48,11 @@ function parseTime(timeStr: string): { startHour: number; startMin: number; dura
 }
 
 // Build a representative sessionTime DateTime for the given day/time
-// Uses the semester year and finds the first matching weekday
 function buildSessionTime(day: string, startHour: number, startMin: number, year: number): Date {
   const dayMap: Record<string, number> = {
     sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
   };
   const targetDay = dayMap[day.trim().toLowerCase().slice(0, 3)] ?? 1;
-  // Start from Jan 1 of the given year and find the first matching weekday
   const date = new Date(year, 0, 1, startHour, startMin, 0, 0);
   while (date.getDay() !== targetDay) {
     date.setDate(date.getDate() + 1);
@@ -95,7 +93,6 @@ export async function POST(request: NextRequest) {
   const groupNo = unitInput.groupNo?.trim() || '01';
   const sessionType = unitInput.sessionType?.trim() || 'LE';
   const sessionNameEnum = toSessionName(sessionType);
-  // scopeKey uniquely identifies this class group, e.g. "LA1-01", "LE1-02"
   const scopeKey = `${sessionType}-${groupNo}`;
 
   // Upsert Unit
@@ -105,7 +102,7 @@ export async function POST(request: NextRequest) {
     create: { code: unitInput.code, name: unitInput.name },
   });
 
-  // One UnitRegistration per lecturer per unit (no splitting by group)
+  // One UnitRegistration per lecturer per unit
   let lecturerReg = await prisma.unitRegistration.findFirst({
     where: { unitId: unit.id, userId, userStatus: UserStatus.LECTURER },
   });
@@ -124,7 +121,6 @@ export async function POST(request: NextRequest) {
   }
 
   // Create a ClassSession for this schedule slot if it doesn't exist yet
-  // Identified by sessionName + groupNo on this unit registration
   let classSession = await prisma.classSession.findFirst({
     where: {
       unitRegistrationId: lecturerReg.id,
@@ -149,7 +145,14 @@ export async function POST(request: NextRequest) {
         subcomponent: scopeKey,
         location: unitInput.location ?? null,
         day: unitInput.day ?? null,
+        lecturerName: unitInput.lecturerName ?? null,  // ← save lecturer name from Excel
       },
+    });
+  } else if (unitInput.lecturerName && !classSession.lecturerName) {
+    // Backfill lecturerName if the session already exists but has no name stored yet
+    classSession = await prisma.classSession.update({
+      where: { id: classSession.id },
+      data: { lecturerName: unitInput.lecturerName },
     });
   }
 
@@ -177,8 +180,6 @@ export async function POST(request: NextRequest) {
   });
   const userMap = new Map(users.map((u) => [u.email, u.id]));
 
-  // Enroll students with name=scopeKey (e.g. "LA1-01") so each session type+group
-  // gets its own separate student rows via @@unique([unitId, userId, name]).
   let enrolled = 0;
   const errors: string[] = [];
 

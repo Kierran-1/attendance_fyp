@@ -49,7 +49,7 @@ export async function GET() {
           name: sr.user.name ?? 'Unknown',
           program: sr.user.programName ?? '',
           nationality: sr.user.nationality ?? '',
-          schoolStatus: sr.user.schoolStatus ?? 'Active',  
+          schoolStatus: sr.user.schoolStatus ?? 'Active',
         }));
 
         const presentCount = cs.attendanceRecords.filter(
@@ -61,8 +61,6 @@ export async function GET() {
         const end = cs.sessionTime.getTime() + cs.sessionDuration * 60_000;
         const isActive = now >= cs.sessionTime.getTime() && now <= end;
 
-      
-
         const padTime = (h: number, m: number) =>
           `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         const startH = cs.sessionTime.getHours();
@@ -71,7 +69,6 @@ export async function GET() {
         const time = `${padTime(startH, startM)} - ${padTime(endDate.getHours(), endDate.getMinutes())}`;
 
         result.push({
-          // Use classSessionId as the card id so the frontend can scope operations
           id: cs.id,
           unitRegistrationId: reg.id,
           unitId: reg.unitId,
@@ -79,12 +76,12 @@ export async function GET() {
           unitName: reg.unit.name,
           semester: reg.semester,
           year: reg.year,
-          classType: cs.sessionName,   // "LAB" | "LECTURE" | "TUTORIAL"
+          classType: cs.sessionName,
           group: cs.groupNo ?? '',
           day: cs.day ?? '',
           time,
-          location: cs.location ?? '',               // not stored
-          lecturer: '',               // not stored
+          location: cs.location ?? '',
+          lecturerName: cs.lecturerName ?? '',
           students,
           sessions: [{
             id: cs.id,

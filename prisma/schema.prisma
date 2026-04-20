@@ -103,7 +103,7 @@ model ClassSession {
   groupNo            String?
   location           String?
   day                String?
-  
+  lecturerName       String?
   attendanceData     ClassAttendanceData[]
   attendanceRecords  ClassAttendanceRecord[]
   lecturer           User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
@@ -121,11 +121,9 @@ model ClassAttendanceData {
   scanMethod        String?
   verificationStage String?
   challengeToken    String?
-  usedAt            DateTime?    // Mark when challenge token was used to prevent reuse
   createdAt         DateTime     @default(now())
   classSession      ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
 
-  @@unique([classSessionId, studentId, verificationStage]) // Prevent duplicate stage records
   @@index([classSessionId])
   @@index([studentId])
 }
@@ -157,6 +155,29 @@ model AttendanceEvidence {
   attendanceRecord   ClassAttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
 
   @@index([attendanceRecordId])
+}
+
+model AppAlert {
+  id              String   @id
+  title           String
+  message         String
+  level           String
+  type            String   @default("Lecturer Message")
+  audienceRole    String   @default("STUDENT")
+  targetGroup     String   @default("ALL_STUDENTS")
+  targetUserId    String?
+  unitCode        String
+  unitName        String?
+  actionHref      String?
+  actionLabel     String?
+  createdByUserId String
+  createdByName   String?
+  source          String   @default("lecturer")
+  createdAt       DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([createdAt(sort: Desc)], map: "idx_appalert_createdAt")
+  @@index([createdByUserId], map: "idx_appalert_createdByUserId")
+  @@index([unitCode], map: "idx_appalert_unitCode")
 }
 
 enum UserRole {
