@@ -9,52 +9,47 @@ import {
 } from '@/lib/student-compat';
 import { UserRole, UserStatus } from '@prisma/client';
 
-function isSessionActive(s: { sessionTime: Date; sessionDuration: number }): boolean {
+function isSessionActive(s: { sessionTime: Date | null; sessionDuration: number | null }): boolean {
+  if (!s.sessionTime || s.sessionDuration === null) return false;
   const now = Date.now();
   const start = s.sessionTime.getTime();
   const end = start + s.sessionDuration * 60_000;
-
   return now >= start && now <= end;
 }
 
 function mapSession(item: {
   id: string;
+  unitId: string | null;
   sessionName: string;
-  sessionTime: Date;
-  sessionDuration: number;
+  sessionTime: Date | null;
+  sessionDuration: number | null;
   location: string | null;
-  weekNumber: number | null;
   groupNo: string | null;
+  unit: { code: string; name: string } | null;
   unitRegistration: {
     unitId: string;
-    unit: {
-      code: string;
-      name: string;
-    };
-    user: {
-      name: string | null;
-      email: string | null;
-    } | null;
-  };
+    unit: { code: string; name: string };
+    user: { name: string | null; email: string | null } | null;
+  } | null;
 }) {
+  const resolvedUnitId = item.unitRegistration?.unitId ?? item.unitId ?? '';
+  const resolvedUnit = item.unitRegistration?.unit ?? item.unit;
+  const lecturer = item.unitRegistration?.user;
+
   return {
     id: item.id,
-    unitId: item.unitRegistration.unitId,
+    unitId: resolvedUnitId,
     unit: {
-      code: item.unitRegistration.unit.code,
-      name: item.unitRegistration.unit.name,
+      code: resolvedUnit?.code ?? '',
+      name: resolvedUnit?.name ?? '',
       venue: item.location,
     },
     sessionName: item.sessionName,
     sessionTime: item.sessionTime,
     sessionDuration: item.sessionDuration,
     location: item.location,
-    weekNumber: item.weekNumber,
     groupNo: item.groupNo,
-    lecturer:
-      item.unitRegistration.user?.name ??
-      item.unitRegistration.user?.email ??
-      null,
+    lecturer: lecturer?.name ?? lecturer?.email ?? null,
   };
 }
 
@@ -100,6 +95,7 @@ export async function GET() {
           },
         },
         include: {
+          unit: true,
           unitRegistration: {
             include: {
               unit: true,
@@ -113,7 +109,7 @@ export async function GET() {
           },
         },
         orderBy: {
-          sessionTime: 'asc',
+          scheduledDate: 'asc',
         },
       });
 
@@ -131,31 +127,10 @@ export async function GET() {
     }
 
     if (role === UserRole.LECTURER) {
-      const lecturerRegistrations = await prisma.unitRegistration.findMany({
-        where: {
-          userId,
-          userStatus: {
-            in: [UserStatus.LECTURER, UserStatus.TUTOR],
-          },
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      const registrationIds = lecturerRegistrations.map((registration) => registration.id);
-
-      if (registrationIds.length === 0) {
-        return NextResponse.json({ sessions: [] });
-      }
-
       const classSessions = await prisma.classSession.findMany({
-        where: {
-          unitRegistrationId: {
-            in: registrationIds,
-          },
-        },
+        where: { lecturerId: userId },
         include: {
+          unit: true,
           unitRegistration: {
             include: {
               unit: true,
@@ -169,7 +144,7 @@ export async function GET() {
           },
         },
         orderBy: {
-          sessionTime: 'asc',
+          scheduledDate: 'asc',
         },
       });
 

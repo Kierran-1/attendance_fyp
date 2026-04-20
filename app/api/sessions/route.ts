@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole, UserStatus, SessionName } from '@prisma/client';
+import { UserRole, SessionName } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
     courseId?: string;
     sessionName?: string;
     durationMinutes?: number;
-    weekNumber?: number;
     groupNo?: string;
     subcomponent?: string;
   };
@@ -32,9 +31,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  // Accept legacy courseId as alias for unitId
   const unitId = body.unitId ?? body.courseId;
-  const { sessionName, durationMinutes, weekNumber, groupNo, subcomponent } = body;
+  const { sessionName, durationMinutes, groupNo, subcomponent } = body;
 
   if (!unitId || !sessionName || !durationMinutes) {
     return NextResponse.json(
@@ -48,30 +46,51 @@ export async function POST(request: NextRequest) {
   }
 
   const unitRegistration = await prisma.unitRegistration.findFirst({
-    where: { unitId, userId, userStatus: UserStatus.LECTURER },
+    where: { unitId, userId, userStatus: 'LECTURER' },
   });
 
   if (!unitRegistration) {
     return NextResponse.json(
-      { error: 'Unit not found or not assigned to you' },
+      { error: 'You are not registered as a lecturer for this unit' },
       { status: 404 }
     );
   }
 
-  const now = new Date();
-
-  const classSession = await prisma.classSession.create({
-    data: {
+  // Find all pre-created sessions for this slot from the Excel upload
+  const candidates = await prisma.classSession.findMany({
+    where: {
       unitRegistrationId: unitRegistration.id,
-      lecturerId: userId,
       sessionName: sessionName as SessionName,
+      ...(groupNo ? { groupNo } : {}),
+      ...(subcomponent ? { subcomponent } : {}),
+    },
+    orderBy: { scheduledDate: 'asc' },
+  });
+
+  if (candidates.length === 0) {
+    return NextResponse.json(
+      { error: 'No pre-created sessions found for this slot. Please upload the class timetable first.' },
+      { status: 404 }
+    );
+  }
+
+  // Pick the session whose scheduled date is closest to today
+  const now = new Date();
+  const closest = candidates.reduce((best, s) =>
+    Math.abs((s.scheduledDate?.getTime() ?? 0) - now.getTime()) <
+    Math.abs((best.scheduledDate?.getTime() ?? 0) - now.getTime())
+      ? s
+      : best
+  );
+
+  // Activate the session: set sessionTime to now and record the chosen duration
+  const classSession = await prisma.classSession.update({
+    where: { id: closest.id },
+    data: {
       sessionTime: now,
       sessionDuration: durationMinutes,
-      weekNumber: weekNumber ?? null,
-      groupNo: groupNo ?? null,
-      subcomponent: subcomponent ?? null,
     },
   });
 
-  return NextResponse.json({ session: classSession }, { status: 201 });
+  return NextResponse.json({ session: classSession }, { status: 200 });
 }

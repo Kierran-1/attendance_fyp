@@ -24,19 +24,28 @@ export async function GET() {
       },
     });
 
-    // Each lecturer registration may have multiple class sessions (groups).
-    // Expand into one entry per ClassSession so the UI shows separate cards.
+    // Group ClassSessions by slot (sessionName + groupNo + subcomponent) so the UI
+    // shows one card per class group, with all 12 weekly sessions nested inside.
     const result: any[] = [];
 
     for (const reg of lecturerRegistrations) {
+      // Group sessions by their slot key
+      const slotMap = new Map<string, typeof reg.classSessions>();
       for (const cs of reg.classSessions) {
-        // Fetch students scoped to this session's scopeKey (e.g. "LA1-01")
-        // stored in subcomponent during import to uniquely identify session type+group
+        const key = `${cs.sessionName}:${cs.groupNo ?? ''}:${cs.subcomponent ?? ''}`;
+        if (!slotMap.has(key)) slotMap.set(key, []);
+        slotMap.get(key)!.push(cs);
+      }
+
+      for (const slotSessions of slotMap.values()) {
+        const first = slotSessions[0];
+
+        // Fetch students scoped to this slot's scopeKey (e.g. "LA1-01")
         const studentRegistrations = await prisma.unitRegistration.findMany({
           where: {
             unitId: reg.unitId,
             userStatus: UserStatus.STUDENT,
-            name: cs.subcomponent ?? cs.groupNo ?? null,
+            name: first.subcomponent ?? first.groupNo ?? null,
           },
           include: {
             user: { select: { id: true, name: true, email: true, programName: true, nationality: true, schoolStatus: true } },
@@ -52,45 +61,53 @@ export async function GET() {
           schoolStatus: sr.user.schoolStatus ?? 'Active',
         }));
 
-        const presentCount = cs.attendanceRecords.filter(
-          (r) => r.status === 'PRESENT' || r.status === 'LATE'
-        ).length;
-        const absentCount = cs.attendanceRecords.filter((r) => r.status === 'ABSENT').length;
-        const total = cs.attendanceRecords.length;
         const now = Date.now();
-        const end = cs.sessionTime.getTime() + cs.sessionDuration * 60_000;
-        const isActive = now >= cs.sessionTime.getTime() && now <= end;
 
         const padTime = (h: number, m: number) =>
           `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        const startH = cs.sessionTime.getHours();
-        const startM = cs.sessionTime.getMinutes();
-        const endDate = new Date(cs.sessionTime.getTime() + cs.sessionDuration * 60_000);
-        const time = `${padTime(startH, startM)} - ${padTime(endDate.getHours(), endDate.getMinutes())}`;
+        const startH = first.scheduledDate?.getHours() ?? 0;
+        const startM = first.scheduledDate?.getMinutes() ?? 0;
+        const time = first.scheduledDate ? padTime(startH, startM) : '—';
+
+        const sessions = slotSessions
+          .sort((a, b) => (a.scheduledDate?.getTime() ?? 0) - (b.scheduledDate?.getTime() ?? 0))
+          .map((cs) => {
+            const present = cs.attendanceRecords.filter(
+              (r) => r.status === 'PRESENT' || r.status === 'LATE'
+            ).length;
+            const absent = cs.attendanceRecords.filter((r) => r.status === 'ABSENT').length;
+            const total = cs.attendanceRecords.length;
+            const isActive = cs.sessionTime !== null && cs.sessionDuration !== null &&
+              now >= cs.sessionTime.getTime() &&
+              now <= cs.sessionTime.getTime() + cs.sessionDuration * 60_000;
+            const status = isActive ? 'Ongoing' : (cs.sessionTime !== null ? 'Completed' : 'Scheduled');
+            return {
+              id: cs.id,
+              date: cs.scheduledDate?.toISOString().split('T')[0] ?? '—',
+              attendancePercentage: total > 0 ? Math.round((present / total) * 100) : 0,
+              status,
+              presentCount: present,
+              absentCount: absent,
+            };
+          });
 
         result.push({
-          id: cs.id,
+          id: first.id,               // unique per slot (first session's id)
           unitRegistrationId: reg.id,
           unitId: reg.unitId,
           unitCode: reg.unit.code,
           unitName: reg.unit.name,
           semester: reg.semester,
           year: reg.year,
-          classType: cs.sessionName,
-          group: cs.groupNo ?? '',
-          day: cs.day ?? '',
+          classType: first.sessionName,
+          group: first.groupNo ?? '',
+          subcomponent: first.subcomponent ?? '',
+          day: first.day ?? '',
           time,
-          location: cs.location ?? '',
-          lecturerName: cs.lecturerName ?? '',
+          location: first.location ?? '',               // not stored
+          lecturerName: first.lecturerName ?? '',
           students,
-          sessions: [{
-            id: cs.id,
-            date: cs.sessionTime.toISOString().split('T')[0],
-            attendancePercentage: total > 0 ? Math.round((presentCount / total) * 100) : 0,
-            status: isActive ? 'Ongoing' : 'Completed',
-            presentCount,
-            absentCount,
-          }],
+          sessions,
         });
       }
     }
