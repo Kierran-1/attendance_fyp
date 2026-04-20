@@ -332,17 +332,6 @@ export default function StudentDashboardPage() {
             />
             View Attendance
           </Link>
-
-          <Link
-            href="/student/qrcode"
-            className="group flex items-center gap-2 rounded-2xl bg-red-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition-all hover:bg-red-700 hover:shadow-red-200 active:scale-95"
-          >
-            <QrCode
-              size={18}
-              className="transition-transform group-hover:scale-110"
-            />
-            Open My QR
-          </Link>
         </div>
       </header>
 
@@ -662,7 +651,7 @@ export default function StudentDashboardPage() {
 
           {/* Today Snapshot */}
           <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
-            <div className="mb-5 flex items-center gap-3">
+            <div className="mb-6 flex items-center gap-3">
               <div className="rounded-xl bg-red-50 p-2 text-red-600">
                 <Clock3 size={20} />
               </div>
@@ -713,7 +702,7 @@ export default function StudentDashboardPage() {
 
           {/* Quick Actions */}
           <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
-            <div className="mb-5 flex items-center gap-3">
+            <div className="mb-6 flex items-center gap-3">
               <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600">
                 <ScanLine size={20} />
               </div>
@@ -723,46 +712,46 @@ export default function StudentDashboardPage() {
             <div className="grid gap-3">
               <Link
                 href="/student/qrcode"
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="group flex items-center gap-4 rounded-2xl border border-transparent p-3 transition-all hover:border-gray-100 hover:bg-gray-50"
               >
-                <span className="flex items-center gap-2">
-                  <QrCode size={16} />
-                  Open QR Code
-                </span>
-                <ChevronRight size={16} />
+                <div className="rounded-xl p-2.5 transition-transform group-hover:scale-110 text-red-600 bg-red-50">
+                  <QrCode size={18} />
+                </div>
+                <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900">Open QR Code</span>
+                <ChevronRight size={14} className="ml-auto text-gray-300 transition-transform group-hover:translate-x-1" />
               </Link>
 
               <Link
                 href="/student/classes"
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="group flex items-center gap-4 rounded-2xl border border-transparent p-3 transition-all hover:border-gray-100 hover:bg-gray-50"
               >
-                <span className="flex items-center gap-2">
-                  <BookOpen size={16} />
-                  View My Classes
-                </span>
-                <ChevronRight size={16} />
+                <div className="rounded-xl p-2.5 transition-transform group-hover:scale-110 text-blue-600 bg-blue-50">
+                  <BookOpen size={18} />
+                </div>
+                <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900">View My Classes</span>
+                <ChevronRight size={14} className="ml-auto text-gray-300 transition-transform group-hover:translate-x-1" />
               </Link>
 
               <Link
                 href="/student/attendance"
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="group flex items-center gap-4 rounded-2xl border border-transparent p-3 transition-all hover:border-gray-100 hover:bg-gray-50"
               >
-                <span className="flex items-center gap-2">
-                  <CalendarDays size={16} />
-                  Review Attendance
-                </span>
-                <ChevronRight size={16} />
+                <div className="rounded-xl p-2.5 transition-transform group-hover:scale-110 text-amber-600 bg-amber-50">
+                  <CalendarDays size={18} />
+                </div>
+                <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900">Review Attendance</span>
+                <ChevronRight size={14} className="ml-auto text-gray-300 transition-transform group-hover:translate-x-1" />
               </Link>
 
               <Link
                 href="/student/profile"
-                className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="group flex items-center gap-4 rounded-2xl border border-transparent p-3 transition-all hover:border-gray-100 hover:bg-gray-50"
               >
-                <span className="flex items-center gap-2">
-                  <UserCircle2 size={16} />
-                  My Profile
-                </span>
-                <ChevronRight size={16} />
+                <div className="rounded-xl p-2.5 transition-transform group-hover:scale-110 text-purple-600 bg-purple-50">
+                  <UserCircle2 size={18} />
+                </div>
+                <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900">My Profile</span>
+                <ChevronRight size={14} className="ml-auto text-gray-300 transition-transform group-hover:translate-x-1" />
               </Link>
             </div>
           </div>
