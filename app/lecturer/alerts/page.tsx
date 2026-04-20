@@ -296,10 +296,10 @@ export default function LecturerAlertsPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
             Lecturer Panel
           </p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900 sm:text-4xl">
             Alerts
           </h1>
-          <p className="mt-2 max-w-3xl text-base text-gray-500">
+          <p className="mt-2 text-sm leading-7 text-gray-500">
             Send class-based alerts using only the real units linked to this
             lecturer account.
           </p>
@@ -627,7 +627,7 @@ export default function LecturerAlertsPage() {
                 return (
                   <article
                     key={item.id}
-                    className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5 transition hover:border-gray-200 hover:bg-white"
+                    className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-gray-200"
                   >
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-start gap-3">
