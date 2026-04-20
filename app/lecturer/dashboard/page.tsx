@@ -10,6 +10,7 @@ import {
   Clock3,
   Loader2,
   PlayCircle,
+  QrCode,
   ScanLine,
   Upload,
   Users,
@@ -478,7 +479,7 @@ export default function LecturerDashboardPage() {
                   <span className={`h-2 w-2 rounded-full ${activeSession ? 'bg-white animate-pulse' : 'bg-gray-500'}`} />
                   {activeSession ? 'Live Session' : 'No Active Session'}
                 </span>
-                <ScanLine size={20} className="text-white/50" />
+                <QrCode size={20} className="text-white/50" />
               </div>
 
               {activeSession ? (
@@ -528,7 +529,12 @@ export default function LecturerDashboardPage() {
 
           {/* Quick Actions */}
           <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
-            <h2 className="text-lg font-black text-gray-900 mb-6">Quick Actions</h2>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600">
+                <ScanLine size={20} />
+              </div>
+              <h2 className="text-lg font-black text-gray-900">Quick Actions</h2>
+            </div>
             <div className="grid gap-3">
               {[
                 { label: 'Class Rosters', icon: Users, href: '/lecturer/classes', color: 'text-blue-600 bg-blue-50' },
@@ -553,7 +559,12 @@ export default function LecturerDashboardPage() {
 
           {/* Upcoming Classes */}
           <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
-            <h2 className="text-lg font-black text-gray-900 mb-6">Upcoming</h2>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="rounded-xl bg-red-50 p-2 text-red-600">
+                <CalendarDays size={20} />
+              </div>
+              <h2 className="text-lg font-black text-gray-900">Upcoming</h2>
+            </div>
             {upcomingClasses.length === 0 ? (
               <div className="flex flex-col items-center py-6 text-center">
                 <AlertCircle size={24} className="text-gray-200 mb-2" />
