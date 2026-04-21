@@ -19,21 +19,19 @@ function isSessionActive(s: { sessionTime: Date | null; sessionDuration: number 
 
 function mapSession(item: {
   id: string;
-  unitId: string | null;
   sessionName: string;
   sessionTime: Date | null;
   sessionDuration: number | null;
   location: string | null;
   groupNo: string | null;
-  unit: { code: string; name: string } | null;
   unitRegistration: {
     unitId: string;
     unit: { code: string; name: string };
     user: { name: string | null; email: string | null } | null;
   } | null;
 }) {
-  const resolvedUnitId = item.unitRegistration?.unitId ?? item.unitId ?? '';
-  const resolvedUnit = item.unitRegistration?.unit ?? item.unit;
+  const resolvedUnitId = item.unitRegistration?.unitId ?? '';
+  const resolvedUnit = item.unitRegistration?.unit;
   const lecturer = item.unitRegistration?.user;
 
   return {
@@ -95,7 +93,6 @@ export async function GET() {
           },
         },
         include: {
-          unit: true,
           unitRegistration: {
             include: {
               unit: true,
@@ -109,7 +106,7 @@ export async function GET() {
           },
         },
         orderBy: {
-          scheduledDate: 'asc',
+          sessionTime: 'asc',
         },
       });
 
@@ -130,7 +127,6 @@ export async function GET() {
       const classSessions = await prisma.classSession.findMany({
         where: { lecturerId: userId },
         include: {
-          unit: true,
           unitRegistration: {
             include: {
               unit: true,
@@ -144,7 +140,7 @@ export async function GET() {
           },
         },
         orderBy: {
-          scheduledDate: 'asc',
+          sessionTime: 'asc',
         },
       });
 
