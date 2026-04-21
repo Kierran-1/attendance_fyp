@@ -41,6 +41,7 @@ export default function UploadRosterPage() {
     program: '',
   });
   const [parsedMetadata, setParsedMetadata] = useState<ParsedMetadata>({});
+  const [sessionDates, setSessionDates] = useState<string[]>([]);
   const [uploadStep, setUploadStep] = useState<1 | 2 | 3>(1);
   const [isDragging, setIsDragging] = useState(false);
   const [importedClassName, setImportedClassName] = useState<string>('');
@@ -54,6 +55,7 @@ export default function UploadRosterPage() {
     setUploadColumns([]);
     setColumnMapping({ studentId: '', name: '', program: '' });
     setParsedMetadata({});
+    setSessionDates([]);
     setUploadStep(1);
     setIsDragging(false);
     setImportedClassName('');
@@ -72,14 +74,14 @@ export default function UploadRosterPage() {
     reader.onload = (event) => {
       try {
         const data = event.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
 
         const allRows = XLSX.utils.sheet_to_json(worksheet, {
           header: 1,
           blankrows: false,
-        }) as (string | number | null)[][];
+        }) as (string | number | Date | null)[][];
 
         if (allRows.length < 7) {
           window.alert('The file does not contain enough rows for the attendance format.');
@@ -98,6 +100,7 @@ export default function UploadRosterPage() {
 
         const termMatch = row4Text.match(/Term\s*:\s*([^,]+)/i);
         const term = termMatch ? termMatch[1].trim() : '';
+        const termYear = parseInt((term || '').split('_')[0], 10) || new Date().getFullYear();
 
         let unitCode = '';
         let unitName = '';
@@ -113,12 +116,14 @@ export default function UploadRosterPage() {
           unitName = parts.slice(1).join('-').trim() || '';
         }
 
-        const classType = row5Parts[0] || '';
-        const group = row5Parts[1] || '';
-        const day = row5Parts[2] || '';
-        const time = row5Parts[3] || '';
-        const room = row5Parts[4] || '';
-        const lecturer = row5Parts[5] || '';
+        // row5 may have each field in a separate cell, or all comma-separated in one cell
+        const row5Single = row5Parts.length === 1 ? row5Parts[0].split(',').map(s => s.trim()) : row5Parts;
+        const classType = row5Single[0] || '';
+        const group = row5Single[1] || '';
+        const day = row5Single[2] || '';
+        const time = row5Single[3] || '';
+        const room = row5Single[4] || '';
+        const lecturer = row5Single[5] || '';
 
         const headers: string[] = [];
         const maxCols = Math.max(row6.length, row7.length);
@@ -161,6 +166,34 @@ export default function UploadRosterPage() {
           coreHeaders.find((header) =>
             patterns.some((pattern) => header.toLowerCase().includes(pattern.toLowerCase()))
           ) || '';
+
+        // Find the row with the most MM/DD date strings — that is the session header row.
+        function extractDatesFromRow(row: (string | number | Date | null)[]): string[] {
+          const results: string[] = [];
+          for (const cell of row) {
+            if (cell instanceof Date && !isNaN(cell.getTime())) {
+              results.push(cell.toISOString());
+            } else {
+              const val = String(cell ?? '').trim();
+              const m = val.match(/^(\d{1,2})\/(\d{1,2})$/);
+              if (m) {
+                const mm = +m[1], dd = +m[2];
+                if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+                  results.push(new Date(termYear, mm - 1, dd).toISOString());
+                }
+              }
+            }
+          }
+          return results;
+        }
+
+        let parsedDates: string[] = [];
+        for (const row of allRows) {
+          const dates = extractDatesFromRow(row);
+          if (dates.length > parsedDates.length) parsedDates = dates;
+        }
+        console.log(`[upload-roster] extracted ${parsedDates.length} session dates:`, parsedDates.slice(0, 5));
+        setSessionDates(parsedDates);
 
         setParsedMetadata({ term, unitCode, unitName, classType, group, day, time, room, lecturer });
         setImportedClassName([unitCode, unitName].filter(Boolean).join(' - ') || 'Imported Class');
@@ -212,27 +245,28 @@ export default function UploadRosterPage() {
     }
 
     const rawType = (parsedMetadata.classType || '').toUpperCase();
-    const sessionType = (['LECTURE', 'TUTORIAL', 'LAB', 'PRACTICAL'].includes(rawType)
-      ? rawType
-      : 'LECTURE') as 'LECTURE' | 'TUTORIAL' | 'LAB' | 'PRACTICAL';
+    const sessionType = (['LECTURE', 'TUTORIAL', 'LAB'].includes(rawType) ? rawType : 'LECTURE') as 'LECTURE' | 'TUTORIAL' | 'LAB';
+    const termYear = parseInt((parsedMetadata.term || '').split('_')[0], 10) || new Date().getFullYear();
 
     setImporting(true);
     setImportError(null);
 
     try {
-      const res = await fetch('/api/lecturer/import-excel', {
+      const res = await fetch('/api/lecturer/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          course: {
+          unit: {
             code: parsedMetadata.unitCode || 'IMPORTED',
             name: parsedMetadata.unitName || 'Imported Course',
             semester: parsedMetadata.term || 'Unknown',
+            year: termYear,
             sessionType,
-            classGroup: parsedMetadata.group || '01',
-            scheduleDay: parsedMetadata.day || 'TBA',
-            scheduleTime: parsedMetadata.time || 'TBA',
-            venue: parsedMetadata.room || 'TBA',
+            groupNo: parsedMetadata.group || '01',
+            day: parsedMetadata.day || '',
+            time: parsedMetadata.time || '',
+            location: parsedMetadata.room || '',
+            sessionDates: sessionDates.length > 0 ? sessionDates : undefined,
           },
           students,
         }),
@@ -341,6 +375,9 @@ export default function UploadRosterPage() {
             <div className="flex flex-col gap-3 rounded-3xl border border-gray-100 bg-gray-50/60 p-5">
               <p className="text-sm font-bold text-gray-900">Selected file</p>
               <p className="text-sm text-gray-600">{uploadFile?.name || 'No file selected'}</p>
+              <p className={`text-sm font-semibold ${sessionDates.length > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                Session dates parsed: {sessionDates.length} {sessionDates.length > 0 ? `(${new Date(sessionDates[0]).toLocaleDateString()} … ${new Date(sessionDates[sessionDates.length - 1]).toLocaleDateString()})` : '— will use weekly fallback'}
+              </p>
               <p className="text-sm text-gray-600">
                 Parsed class: {importedClassName || 'Imported Class'}
               </p>
