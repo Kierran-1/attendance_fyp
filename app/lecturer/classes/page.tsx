@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { useSession } from "next-auth/react";
 import {
   Plus,
   Upload,
@@ -94,6 +95,53 @@ type ViewMode = "list" | "upload" | "detail";
 const RED = "#e4002b";
 const RED_LIGHT = "#fff0f2";
 const RED_HOVER = "#c90025";
+
+// ─── Fuzzy lecturer matching ──────────────────────────────────────────────────
+
+/** Normalize a name: lowercase, strip punctuation, collapse spaces */
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/** Token-set similarity: what fraction of tokens in `a` appear in `b` */
+function tokenOverlap(a: string, b: string): number {
+  const ta = new Set(normalizeName(a).split(' ').filter(Boolean));
+  const tb = new Set(normalizeName(b).split(' ').filter(Boolean));
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let hits = 0;
+  ta.forEach(t => { if (tb.has(t)) hits++; });
+  // Use the smaller set as denominator so partial names still match
+  return hits / Math.min(ta.size, tb.size);
+}
+
+/** Bigram similarity between two strings (Sørensen–Dice on char bigrams) */
+function bigramSimilarity(a: string, b: string): number {
+  const bigrams = (s: string) => {
+    const n = normalizeName(s);
+    const bg = new Set<string>();
+    for (let i = 0; i < n.length - 1; i++) bg.add(n.slice(i, i + 2));
+    return bg;
+  };
+  const ba = bigrams(a), bb = bigrams(b);
+  if (ba.size === 0 || bb.size === 0) return 0;
+  let inter = 0;
+  ba.forEach(bg => { if (bb.has(bg)) inter++; });
+  return (2 * inter) / (ba.size + bb.size);
+}
+
+/**
+ * Returns true if `sheetLecturer` is likely the same person as `sessionName`.
+ * Uses combined token-overlap + bigram score with a 0.45 threshold.
+ * Handles Swinburne's SURNAME-in-ALL-CAPS convention, East/West name order
+ * differences, and middle names absent from the session profile.
+ */
+function lecturerMatchesUser(sheetLecturer: string, sessionName: string): boolean {
+  if (!sheetLecturer || !sessionName) return false;
+  const overlap = tokenOverlap(sheetLecturer, sessionName);
+  const bigram  = bigramSimilarity(sheetLecturer, sessionName);
+  const score   = Math.max(overlap, bigram);
+  return score >= 0.45;
+}
 
 // ─── Helper Components ────────────────────────────────────────────────────────
 
@@ -233,6 +281,8 @@ const EmptyState = ({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ClassesPage() {
+  const { data: session } = useSession();
+
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -249,6 +299,7 @@ export default function ClassesPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStep, setUploadStep] = useState<1 | 2>(1);
   const [parsedSheets, setParsedSheets] = useState<ParsedSheet[]>([]);
+  const [excludedSheets, setExcludedSheets] = useState<{ sheetName: string; lecturer: string }[]>([]);
 
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [newStudent, setNewStudent] = useState({
@@ -482,9 +533,39 @@ export default function ClassesPage() {
           if (parsed) allSheets.push(parsed);
         });
         if (allSheets.length === 0) { alert('No valid sheets found in the file.'); return; }
-        setParsedSheets(allSheets);
+
+        // ── Fuzzy lecturer filtering ───────────────────────────────────────
+        const userName = session?.user?.name ?? '';
+        const matchedSheets: ParsedSheet[] = [];
+        const skippedSheets: { sheetName: string; lecturer: string }[] = [];
+
+        for (const sheet of allSheets) {
+          const sheetLecturer = sheet.metadata.lecturer ?? '';
+          if (!userName || lecturerMatchesUser(sheetLecturer, userName)) {
+            matchedSheets.push(sheet);
+          } else {
+            skippedSheets.push({ sheetName: sheet.sheetName, lecturer: sheetLecturer });
+          }
+        }
+
+        if (matchedSheets.length === 0) {
+          // No matches — fall back to showing all sheets so the user isn't stranded
+          alert(
+            `No sheets matched your name (${userName || 'unknown'}).\n\n` +
+            `Lecturers found in this file:\n` +
+            skippedSheets.map(s => `  • ${s.sheetName}: ${s.lecturer || 'none listed'}`).join('\n') +
+            `\n\nLoading all ${allSheets.length} sheet(s) anyway so you can review them.`
+          );
+          setParsedSheets(allSheets);
+          setExcludedSheets([]);
+        } else {
+          setParsedSheets(matchedSheets);
+          setExcludedSheets(skippedSheets);
+        }
+        // ─────────────────────────────────────────────────────────────────
+
         setUploadColumns(allSheets[0].columns);
-        setUploadPreview(allSheets[0].students);
+        setUploadPreview((matchedSheets.length > 0 ? matchedSheets : allSheets)[0].students);
         setUploadFile(file);
         setUploadStep(2);
         const find = (patterns: string[]) => allSheets[0].columns.find(h => patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))) || "";
@@ -495,7 +576,7 @@ export default function ClassesPage() {
   };
 
   const handleDrag = useCallback((e: React.DragEvent, active: boolean) => { e.preventDefault(); e.stopPropagation(); setIsDragging(active); }, []);
-  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }, []);
+  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }, [session]);
 
   // ── Batch import ───────────────────────────────────────────────────────────
 
@@ -505,7 +586,6 @@ export default function ClassesPage() {
     setLoading(true);
 
     try {
-      // Build the full batch payload — one entry per sheet
       const batchPayload = parsedSheets.map(sheet => {
         const { metadata, sessionDates, students: studentData, columns } = sheet;
         const studentNumberCol = columns.indexOf(columnMapping.studentId);
@@ -546,7 +626,6 @@ export default function ClassesPage() {
         };
       });
 
-      // Single batch request for all sheets
       const response = await fetch('/api/lecturer/import/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -560,19 +639,18 @@ export default function ClassesPage() {
 
       const result = await response.json();
 
-      // Refresh class list
       const refreshed = await fetch('/api/lecturer/unit');
       if (!refreshed.ok) throw new Error('Failed to refresh class list');
       const data = await refreshed.json();
       setClasses(data);
       setExpandedUnits(new Set<string>(data.map((c: ClassData) => c.unitCode)));
 
-      // Reset upload state
       setUploadFile(null);
       setUploadPreview([]);
       setUploadColumns([]);
       setColumnMapping({ studentId: '', name: '', program: '' });
       setParsedSheets([]);
+      setExcludedSheets([]);
       setUploadStep(1);
       setViewMode('list');
 
@@ -783,7 +861,7 @@ export default function ClassesPage() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <button
-          onClick={() => { setViewMode("list"); setUploadStep(1); setUploadFile(null); setUploadPreview([]); setParsedSheets([]); }}
+          onClick={() => { setViewMode("list"); setUploadStep(1); setUploadFile(null); setUploadPreview([]); setParsedSheets([]); setExcludedSheets([]); }}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-4 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" /> Back to Classes
@@ -829,12 +907,13 @@ export default function ClassesPage() {
           </div>
         ) : (
           <div className="p-6 space-y-6">
+            {/* Matched sheets summary */}
             {parsedSheets.length > 0 && (
               <div className="rounded-xl border border-red-100 bg-red-50/50 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <CheckCircle2 className="w-4 h-4 text-[#e4002b]" />
                   <p className="text-sm font-semibold text-gray-900">
-                    Detected {parsedSheets.length} sheet{parsedSheets.length !== 1 ? 's' : ''} — <span className="text-[#e4002b]">{parsedSheets[0].metadata.unitCode}</span>
+                    {parsedSheets.length} sheet{parsedSheets.length !== 1 ? 's' : ''} matched — <span className="text-[#e4002b]">{parsedSheets[0].metadata.unitCode}</span>
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -846,6 +925,7 @@ export default function ClassesPage() {
                         <Badge variant="red">{sheet.metadata.classType}{sheet.metadata.group ? ` ${sheet.metadata.group}` : ''}</Badge>
                       </div>
                       <div className="flex items-center gap-3 text-gray-400">
+                        {sheet.metadata.lecturer && <span className="truncate max-w-[160px]">{sheet.metadata.lecturer}</span>}
                         {sheet.metadata.day && <span>{sheet.metadata.day}</span>}
                         {sheet.metadata.location && <span>{sheet.metadata.location}</span>}
                         <span className="font-medium text-gray-600">{sheet.students.length} students</span>
@@ -856,9 +936,33 @@ export default function ClassesPage() {
               </div>
             )}
 
+            {/* Excluded sheets warning */}
+            {excludedSheets.length > 0 && (
+              <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <p className="text-sm font-semibold text-gray-900">
+                    {excludedSheets.length} sheet{excludedSheets.length !== 1 ? 's' : ''} excluded — lecturer name didn't match yours
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  {excludedSheets.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-2 border border-amber-100">
+                      <span className="font-medium text-gray-600">{s.sheetName}</span>
+                      <span className="text-gray-400 truncate max-w-[200px]">{s.lecturer || 'No lecturer listed'}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-600 mt-2.5">
+                  These classes are taught by a different lecturer and will not be imported.
+                </p>
+              </div>
+            )}
+
+            {/* Column mapping */}
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-1">Map Columns</h3>
-              <p className="text-xs text-gray-400 mb-4">Applies to all sheets</p>
+              <p className="text-xs text-gray-400 mb-4">Applies to all matched sheets</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
                   { label: "Student ID", key: "studentId", required: true },
@@ -887,8 +991,9 @@ export default function ClassesPage() {
               </div>
             </div>
 
+            {/* Preview */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Preview (First Sheet)</h3>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Preview (First Matched Sheet)</h3>
               <div className="border border-gray-100 rounded-xl overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b border-gray-100">

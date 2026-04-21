@@ -104,8 +104,8 @@ export async function GET() {
           subcomponent: first.subcomponent ?? '',
           day: first.day ?? '',
           time,
-          location: first.location ?? '',
-          lecturer: '',
+          location: first.location ?? '',               // not stored
+          lecturerName: first.lecturerName ?? '',
           students,
           sessions,
         });

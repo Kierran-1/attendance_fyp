@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole, UserStatus, SessionName } from '@prisma/client';
+import { SessionName, UserRole, UserStatus } from '@prisma/client';
 
 type StudentInput = {
   studentId: string;
@@ -23,7 +23,7 @@ type UnitInput = {
   day?: string;
   time?: string;
   location?: string;
-  lecturer?: string;
+  lecturerName?: string;
   sessionDates?: string[];
 };
 
@@ -39,27 +39,50 @@ function toSessionName(sessionType: string): SessionName {
   return SessionName.LECTURE;
 }
 
-function parseTime(timeStr: string): { startHour: number; startMin: number; durationMinutes: number } {
-  const parts = timeStr.split('-').map(s => s.trim());
+function parseTime(timeStr: string): {
+  startHour: number;
+  startMin: number;
+  durationMinutes: number;
+} {
+  const parts = timeStr.split('-').map((s) => s.trim());
   const [sh, sm] = (parts[0] || '00:00').split(':').map(Number);
   const [eh, em] = (parts[1] || parts[0] || '00:00').split(':').map(Number);
   const startHour = isNaN(sh) ? 0 : sh;
   const startMin = isNaN(sm) ? 0 : sm;
   const endHour = isNaN(eh) ? startHour + 2 : eh;
   const endMin = isNaN(em) ? 0 : em;
-  const durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
-  return { startHour, startMin, durationMinutes: durationMinutes > 0 ? durationMinutes : 120 };
+  const durationMinutes = endHour * 60 + endMin - (startHour * 60 + startMin);
+
+  return {
+    startHour,
+    startMin,
+    durationMinutes: durationMinutes > 0 ? durationMinutes : 120,
+  };
 }
 
-function buildSessionDates(day: string, startHour: number, startMin: number, year: number, count = 12): Date[] {
+function buildSessionDates(
+  day: string,
+  startHour: number,
+  startMin: number,
+  year: number,
+  count = 12
+): Date[] {
   const dayMap: Record<string, number> = {
-    sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+    sun: 0,
+    mon: 1,
+    tue: 2,
+    wed: 3,
+    thu: 4,
+    fri: 5,
+    sat: 6,
   };
   const targetDay = dayMap[day.trim().toLowerCase().slice(0, 3)] ?? 1;
   const first = new Date(year, 0, 1, startHour, startMin, 0, 0);
+
   while (first.getDay() !== targetDay) {
     first.setDate(first.getDate() + 1);
   }
+
   return Array.from({ length: count }, (_, i) => {
     const d = new Date(first);
     d.setDate(d.getDate() + i * 7);
@@ -79,6 +102,8 @@ async function importSheet(
   const sessionType = unitInput.sessionType?.trim() || 'LE';
   const sessionNameEnum = toSessionName(sessionType);
   const scopeKey = `${sessionType}-${groupNo}`;
+  const { startHour, startMin, durationMinutes } = parseTime(unitInput.time || '08:00 - 10:00');
+  const hasExplicitDates = Boolean(unitInput.sessionDates?.length);
 
   const unit = await prisma.unit.upsert({
     where: { code: unitInput.code },
@@ -103,10 +128,7 @@ async function importSheet(
     });
   }
 
-  const { startHour, startMin } = parseTime(unitInput.time || '08:00 - 10:00');
-  const hasExplicitDates = unitInput.sessionDates && unitInput.sessionDates.length > 0;
-
-  const existingSession = await prisma.classSession.findFirst({
+  let existingSession = await prisma.classSession.findFirst({
     where: {
       unitRegistrationId: lecturerReg.id,
       sessionName: sessionNameEnum,
@@ -124,11 +146,12 @@ async function importSheet(
         subcomponent: scopeKey,
       },
     });
+    existingSession = null;
   }
 
-  if (!existingSession || hasExplicitDates) {
-    const scheduledDates: Date[] = hasExplicitDates
-      ? unitInput.sessionDates!.map((iso) => {
+  if (!existingSession) {
+    const sessionTimes = hasExplicitDates
+      ? (unitInput.sessionDates ?? []).map((iso) => {
           const d = new Date(iso);
           d.setHours(startHour, startMin, 0, 0);
           return d;
@@ -136,22 +159,34 @@ async function importSheet(
       : buildSessionDates(unitInput.day || 'Mon', startHour, startMin, year);
 
     await prisma.classSession.createMany({
-      data: scheduledDates.map((scheduledDate) => ({
+      data: sessionTimes.map((sessionTime) => ({
         unitRegistrationId: lecturerReg.id,
-        unitId: unit.id,
         lecturerId: userId,
         sessionName: sessionNameEnum,
-        scheduledDate,
+        sessionTime,
+        sessionDuration: durationMinutes,
         groupNo,
         subcomponent: scopeKey,
         location: unitInput.location ?? null,
         day: unitInput.day ?? null,
+        lecturerName: unitInput.lecturerName ?? null,
       })),
+    });
+  } else if (unitInput.lecturerName && !existingSession.lecturerName) {
+    await prisma.classSession.updateMany({
+      where: {
+        unitRegistrationId: lecturerReg.id,
+        sessionName: sessionNameEnum,
+        groupNo,
+        subcomponent: scopeKey,
+        lecturerName: null,
+      },
+      data: { lecturerName: unitInput.lecturerName },
     });
   }
 
-  const validStudents = students.filter(s => s.studentId && s.name);
-  const userData = validStudents.map(s => ({
+  const validStudents = students.filter((s) => s.studentId && s.name);
+  const userData = validStudents.map((s) => ({
     email: `${s.studentId}@students.swinburne.edu.my`,
     name: s.name,
     role: UserRole.STUDENT,
@@ -166,12 +201,12 @@ async function importSheet(
     console.error('User bulk create failed:', err);
   }
 
-  const emails = userData.map(u => u.email);
+  const emails = userData.map((u) => u.email);
   const users = await prisma.user.findMany({
     where: { email: { in: emails } },
     select: { id: true, email: true },
   });
-  const userMap = new Map(users.map(u => [u.email, u.id]));
+  const userMap = new Map(users.map((u) => [u.email, u.id]));
 
   let enrolled = 0;
   const errors: string[] = [];
@@ -179,6 +214,7 @@ async function importSheet(
   for (const s of validStudents) {
     const studentUserId = userMap.get(`${s.studentId}@students.swinburne.edu.my`);
     if (!studentUserId) continue;
+
     try {
       await prisma.unitRegistration.upsert({
         where: {
@@ -233,10 +269,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (!Array.isArray(sheets) || sheets.length === 0) {
-    return NextResponse.json({ error: 'Expected a non-empty array of sheet payloads' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Expected a non-empty array of sheet payloads' },
+      { status: 400 }
+    );
   }
 
-  // Validate each sheet has the minimum required fields
   for (let i = 0; i < sheets.length; i++) {
     const { unit, students } = sheets[i];
     if (!unit?.code || !unit?.name || !Array.isArray(students)) {
@@ -260,6 +298,7 @@ export async function POST(request: NextRequest) {
         unitCode: payload.unit.code,
         sessionType: payload.unit.sessionType,
         groupNo: payload.unit.groupNo,
+        lecturerName: payload.unit.lecturerName ?? null,
         ...result,
       });
       totalCreated += result.created;
@@ -273,6 +312,7 @@ export async function POST(request: NextRequest) {
         unitCode: payload.unit.code,
         sessionType: payload.unit.sessionType,
         groupNo: payload.unit.groupNo,
+        lecturerName: payload.unit.lecturerName ?? null,
         created: 0,
         enrolled: 0,
         skipped: 0,
