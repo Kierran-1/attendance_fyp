@@ -61,10 +61,11 @@ export async function POST(request: NextRequest) {
     where: {
       unitRegistrationId: unitRegistration.id,
       sessionName: sessionName as SessionName,
+      sessionTime: null,
       ...(groupNo ? { groupNo } : {}),
       ...(subcomponent ? { subcomponent } : {}),
     },
-    orderBy: { sessionTime: 'asc' },
+    orderBy: { scheduledDate: 'asc' },
   });
 
   if (candidates.length === 0) {
@@ -74,11 +75,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Pick the session whose scheduled date is closest to today
+  // Pick the unactivated session whose scheduled date is closest to today
   const now = new Date();
   const closest = candidates.reduce((best, s) =>
-    Math.abs((s.sessionTime?.getTime() ?? 0) - now.getTime()) <
-    Math.abs((best.sessionTime?.getTime() ?? 0) - now.getTime())
+    Math.abs((s.scheduledDate?.getTime() ?? 0) - now.getTime()) <
+    Math.abs((best.scheduledDate?.getTime() ?? 0) - now.getTime())
       ? s
       : best
   );

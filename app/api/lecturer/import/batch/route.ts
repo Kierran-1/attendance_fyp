@@ -150,7 +150,7 @@ async function importSheet(
   }
 
   if (!existingSession) {
-    const sessionTimes = hasExplicitDates
+    const scheduledDates = hasExplicitDates
       ? (unitInput.sessionDates ?? []).map((iso) => {
           const d = new Date(iso);
           d.setHours(startHour, startMin, 0, 0);
@@ -159,11 +159,11 @@ async function importSheet(
       : buildSessionDates(unitInput.day || 'Mon', startHour, startMin, year);
 
     await prisma.classSession.createMany({
-      data: sessionTimes.map((sessionTime) => ({
+      data: scheduledDates.map((scheduledDate) => ({
         unitRegistrationId: lecturerReg.id,
         lecturerId: userId,
         sessionName: sessionNameEnum,
-        sessionTime,
+        scheduledDate,
         sessionDuration: durationMinutes,
         groupNo,
         subcomponent: scopeKey,

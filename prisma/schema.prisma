@@ -96,8 +96,9 @@ model ClassSession {
   unitRegistrationId String
   lecturerId         String
   sessionName        SessionName
-  sessionTime        DateTime
-  sessionDuration    Int
+  scheduledDate      DateTime?
+  sessionTime        DateTime?
+  sessionDuration    Int?
   weekNumber         Int?
   subcomponent       String?
   groupNo            String?
