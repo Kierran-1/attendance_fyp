@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
+import { createPortal } from "react-dom";
 import {
   Plus,
   Upload,
@@ -144,28 +145,43 @@ function lecturerMatchesUser(sheetLecturer: string, sessionName: string): boolea
 }
 
 // ─── Helper Components ────────────────────────────────────────────────────────
-
 const Modal = ({ title, onClose, children, footer }: { 
   title: string; 
   onClose: () => void; 
   children: React.ReactNode; 
   footer: React.ReactNode 
-}) => (
-  <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
-        <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-          <X className="w-4 h-4" />
-        </button>
+}) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div 
+      className="fixed inset-0 flex items-center justify-center z-[9999] p-4"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">{title}</h3>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-5 py-5 space-y-4">{children}</div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4 bg-gray-50 border-t border-gray-100">
+          {footer}
+        </div>
       </div>
-      <div className="px-5 py-5 space-y-4">{children}</div>
-      <div className="flex items-center justify-end gap-2 px-5 py-4 bg-gray-50 border-t border-gray-100">
-        {footer}
-      </div>
-    </div>
-  </div>
-);
+    </div>,
+    document.body
+  );
+};
 
 const FormField = ({ label, required, children }: { 
   label: string; 
