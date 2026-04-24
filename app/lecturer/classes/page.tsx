@@ -99,23 +99,19 @@ const RED_HOVER = "#c90025";
 
 // ─── Fuzzy lecturer matching ──────────────────────────────────────────────────
 
-/** Normalize a name: lowercase, strip punctuation, collapse spaces */
 function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-/** Token-set similarity: what fraction of tokens in `a` appear in `b` */
 function tokenOverlap(a: string, b: string): number {
   const ta = new Set(normalizeName(a).split(' ').filter(Boolean));
   const tb = new Set(normalizeName(b).split(' ').filter(Boolean));
   if (ta.size === 0 || tb.size === 0) return 0;
   let hits = 0;
   ta.forEach(t => { if (tb.has(t)) hits++; });
-  // Use the smaller set as denominator so partial names still match
   return hits / Math.min(ta.size, tb.size);
 }
 
-/** Bigram similarity between two strings (Sørensen–Dice on char bigrams) */
 function bigramSimilarity(a: string, b: string): number {
   const bigrams = (s: string) => {
     const n = normalizeName(s);
@@ -130,12 +126,6 @@ function bigramSimilarity(a: string, b: string): number {
   return (2 * inter) / (ba.size + bb.size);
 }
 
-/**
- * Returns true if `sheetLecturer` is likely the same person as `sessionName`.
- * Uses combined token-overlap + bigram score with a 0.45 threshold.
- * Handles Swinburne's SURNAME-in-ALL-CAPS convention, East/West name order
- * differences, and middle names absent from the session profile.
- */
 function lecturerMatchesUser(sheetLecturer: string, sessionName: string): boolean {
   if (!sheetLecturer || !sessionName) return false;
   const overlap = tokenOverlap(sheetLecturer, sessionName);
@@ -145,6 +135,7 @@ function lecturerMatchesUser(sheetLecturer: string, sessionName: string): boolea
 }
 
 // ─── Helper Components ────────────────────────────────────────────────────────
+
 const Modal = ({ title, onClose, children, footer }: { 
   title: string; 
   onClose: () => void; 
@@ -162,19 +153,20 @@ const Modal = ({ title, onClose, children, footer }: {
 
   return createPortal(
     <div 
-      className="fixed inset-0 flex items-center justify-center z-[9999] p-4"
+      className="fixed inset-0 flex items-end sm:items-center justify-center z-[9999] p-0 sm:p-4"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-900">{title}</h3>
+      {/* Bottom-sheet on mobile, centered modal on sm+ */}
+      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full sm:max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{title}</h3>
           <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="px-5 py-5 space-y-4">{children}</div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4 bg-gray-50 border-t border-gray-100">
+        <div className="px-4 sm:px-5 py-4 sm:py-5 space-y-3 sm:space-y-4 max-h-[70vh] overflow-y-auto">{children}</div>
+        <div className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 sm:py-4 bg-gray-50 border-t border-gray-100">
           {footer}
         </div>
       </div>
@@ -212,7 +204,7 @@ const Button = ({
   disabled?: boolean;
   className?: string;
 }) => {
-  const base = "inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed";
+  const base = "inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed";
   const variants = {
     primary: "bg-[#e4002b] text-white hover:bg-[#c90025] shadow-sm",
     secondary: "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50",
@@ -239,9 +231,9 @@ const IconButton = ({
 }) => (
   <button 
     onClick={onClick} 
-    className={`p-2 rounded-lg transition-colors ${variant === "danger" ? "text-gray-400 hover:text-red-500 hover:bg-red-50" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"} ${className}`}
+    className={`p-1.5 sm:p-2 rounded-lg transition-colors ${variant === "danger" ? "text-gray-400 hover:text-red-500 hover:bg-red-50" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"} ${className}`}
   >
-    <Icon className="w-4 h-4" />
+    <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
   </button>
 );
 
@@ -261,7 +253,7 @@ const Badge = ({
     gray: "bg-gray-50 text-gray-600"
   };
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium ${variants[variant]}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-medium ${variants[variant]}`}>
       {children}
     </span>
   );
@@ -284,15 +276,32 @@ const EmptyState = ({
   description: string; 
   action?: React.ReactNode;
 }) => (
-  <div className="text-center py-12">
-    <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mx-auto mb-3">
-      <Icon className="w-6 h-6 text-gray-300" />
+  <div className="text-center py-10 sm:py-12 px-4">
+    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-50 rounded-xl flex items-center justify-center mx-auto mb-3">
+      <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-gray-300" />
     </div>
-    <p className="font-medium text-gray-900 mb-1">{title}</p>
-    <p className="text-sm text-gray-400 mb-4">{description}</p>
+    <p className="font-medium text-gray-900 mb-1 text-sm">{title}</p>
+    <p className="text-xs sm:text-sm text-gray-400 mb-4">{description}</p>
     {action}
   </div>
 );
+
+// ─── Status badge helper ──────────────────────────────────────────────────────
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const cfg = {
+    Completed: { cls: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
+    Ongoing:   { cls: "bg-amber-50 text-amber-700",   dot: "bg-amber-500" },
+    Scheduled: { cls: "bg-gray-100 text-gray-500",    dot: "bg-gray-400" },
+  }[status] ?? { cls: "bg-gray-100 text-gray-500", dot: "bg-gray-400" };
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold ${cfg.cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {status}
+    </span>
+  );
+};
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -529,7 +538,6 @@ export default function ClassesPage() {
         }
       }
     }
-    console.log(`[parseSheet] ${sheetName}: extracted ${sessionDates.length} dates`, sessionDates.slice(0, 5));
     const coreHeaders = ["Sl.No", "Student Number", "Empty", "Student Name", "Program", "Registered Course", "Nationality", "School Status"];
     const studentData = allData.slice(7)
       .map((row: any[]) => { const p = [...row]; while (p.length < 8) p.push(''); return p.slice(0, 8); })
@@ -550,7 +558,6 @@ export default function ClassesPage() {
         });
         if (allSheets.length === 0) { alert('No valid sheets found in the file.'); return; }
 
-        // ── Fuzzy lecturer filtering ───────────────────────────────────────
         const userName = session?.user?.name ?? '';
         const matchedSheets: ParsedSheet[] = [];
         const skippedSheets: { sheetName: string; lecturer: string }[] = [];
@@ -565,7 +572,6 @@ export default function ClassesPage() {
         }
 
         if (matchedSheets.length === 0) {
-          // No matches — fall back to showing all sheets so the user isn't stranded
           alert(
             `No sheets matched your name (${userName || 'unknown'}).\n\n` +
             `Lecturers found in this file:\n` +
@@ -578,7 +584,6 @@ export default function ClassesPage() {
           setParsedSheets(matchedSheets);
           setExcludedSheets(skippedSheets);
         }
-        // ─────────────────────────────────────────────────────────────────
 
         setUploadColumns(allSheets[0].columns);
         setUploadPreview((matchedSheets.length > 0 ? matchedSheets : allSheets)[0].students);
@@ -617,8 +622,7 @@ export default function ClassesPage() {
             const name = row[nameCol]?.toString().trim() || '';
             if (!studentId || !name) return null;
             return {
-              studentId,
-              name,
+              studentId, name,
               programName: programCol >= 0 ? row[programCol]?.toString().trim() || null : null,
               nationality: nationalityCol >= 0 ? row[nationalityCol]?.toString().trim() || null : null,
               schoolStatus: statusCol >= 0 ? row[statusCol]?.toString().trim() || null : null,
@@ -661,13 +665,9 @@ export default function ClassesPage() {
       setClasses(data);
       setExpandedUnits(new Set<string>(data.map((c: ClassData) => c.unitCode)));
 
-      setUploadFile(null);
-      setUploadPreview([]);
-      setUploadColumns([]);
+      setUploadFile(null); setUploadPreview([]); setUploadColumns([]);
       setColumnMapping({ studentId: '', name: '', program: '' });
-      setParsedSheets([]);
-      setExcludedSheets([]);
-      setUploadStep(1);
+      setParsedSheets([]); setExcludedSheets([]); setUploadStep(1);
       setViewMode('list');
 
       alert(`Import complete!\n${result.totalCreated} new students created\n${result.totalEnrolled} enrollments added across ${result.sheets.length} class${result.sheets.length !== 1 ? 'es' : ''}`);
@@ -691,8 +691,8 @@ export default function ClassesPage() {
   );
 
   if (error) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <Card className="p-8 text-center max-w-md">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <Card className="p-6 sm:p-8 text-center max-w-md w-full">
         <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
           <AlertCircle className="w-6 h-6 text-red-500" />
         </div>
@@ -706,37 +706,39 @@ export default function ClassesPage() {
   // ── Views ──────────────────────────────────────────────────────────────────
 
   const renderListView = () => (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Classes</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage units, groups, and enrollments</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Classes</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Manage units, groups, and enrollments</p>
         </div>
-        <Button onClick={() => setViewMode("upload")} className="self-start sm:self-auto">
-          <Upload className="w-4 h-4" /> Upload Master List
+        <Button onClick={() => setViewMode("upload")} className="shrink-0">
+          <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <span className="hidden sm:inline">Upload Master List</span>
+          <span className="sm:hidden">Upload</span>
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats — 2×2 on mobile */}
+      <div className="grid grid-cols-2 gap-3">
         {[
           { label: "Units", value: units.length, icon: BookOpen, color: "blue" },
           { label: "Classes", value: stats.classCount, icon: BarChart3, color: "blue" },
           { label: "Students", value: stats.totalStudents, icon: Users, color: "green", sub: "unique" },
           { label: "At Risk", value: stats.atRiskStudents, icon: ShieldAlert, color: "red" },
         ].map((stat, i) => (
-          <Card key={i} className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{stat.label}</p>
-                <p className={`text-2xl font-bold ${stat.color === 'red' ? 'text-[#e4002b]' : stat.color === 'green' ? 'text-emerald-600' : 'text-gray-900'}`}>
+          <Card key={i} className="p-3 sm:p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 truncate">{stat.label}</p>
+                <p className={`text-xl sm:text-2xl font-bold ${stat.color === 'red' ? 'text-[#e4002b]' : stat.color === 'green' ? 'text-emerald-600' : 'text-gray-900'}`}>
                   {stat.value}
                 </p>
-                {stat.sub && <p className="text-xs text-gray-400 mt-0.5">{stat.sub}</p>}
+                {stat.sub && <p className="text-[10px] sm:text-xs text-gray-400 mt-0.5">{stat.sub}</p>}
               </div>
-              <div className={`p-2 rounded-lg ${stat.color === 'red' ? 'bg-red-50' : stat.color === 'green' ? 'bg-emerald-50' : 'bg-gray-50'}`}>
-                <stat.icon className={`w-5 h-5 ${stat.color === 'red' ? 'text-[#e4002b]' : stat.color === 'green' ? 'text-emerald-600' : 'text-gray-600'}`} />
+              <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${stat.color === 'red' ? 'bg-red-50' : stat.color === 'green' ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+                <stat.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${stat.color === 'red' ? 'text-[#e4002b]' : stat.color === 'green' ? 'text-emerald-600' : 'text-gray-600'}`} />
               </div>
             </div>
           </Card>
@@ -745,30 +747,30 @@ export default function ClassesPage() {
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
         <input
           type="text"
-          placeholder="Search units, codes, or class types..."
+          placeholder="Search units or class types..."
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
+          className="w-full pl-9 sm:pl-10 pr-9 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
         />
         {searchQuery && (
           <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         )}
       </div>
 
       {/* Units */}
-      <div className="space-y-3">
+      <div className="space-y-2 sm:space-y-3">
         {units.length === 0 ? (
-          <Card className="py-16">
+          <Card className="py-12 sm:py-16">
             <EmptyState 
               icon={FolderOpen} 
               title="No classes yet" 
               description="Upload a Swinburne master attendance form to get started."
-              action={<Button onClick={() => setViewMode("upload")}><Upload className="w-4 h-4" /> Upload List</Button>}
+              action={<Button onClick={() => setViewMode("upload")}><Upload className="w-3.5 h-3.5" /> Upload List</Button>}
             />
           </Card>
         ) : (
@@ -784,23 +786,22 @@ export default function ClassesPage() {
             return (
               <Card key={unit.unitCode} className="overflow-hidden">
                 {/* Unit Header */}
-                <div className="flex items-center justify-between px-5 py-4 hover:bg-gray-50/60 transition-colors">
-                  <button className="flex items-center gap-4 flex-1 text-left" onClick={() => toggleUnit(unit.unitCode)}>
-                    <div className="w-10 h-10 rounded-lg bg-[#e4002b] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                <div className="flex items-center gap-2 px-3 sm:px-5 py-3 sm:py-4 hover:bg-gray-50/60 transition-colors">
+                  <button className="flex items-center gap-3 flex-1 text-left min-w-0" onClick={() => toggleUnit(unit.unitCode)}>
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-[#e4002b] flex items-center justify-center text-white font-bold text-xs sm:text-sm flex-shrink-0">
                       {unit.unitCode.slice(0, 2)}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900">{unit.unitCode}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-gray-900 text-sm">{unit.unitCode}</span>
                         <Badge variant="gray">{filtered.length} class{filtered.length !== 1 ? 'es' : ''}</Badge>
                       </div>
-                      <p className="text-sm text-gray-500 mt-0.5">{unit.unitName}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{unit.unitName}</p>
                     </div>
                   </button>
-                  <div className="flex items-center gap-2">
-                    <span className="hidden sm:flex items-center gap-1.5 text-sm text-gray-400 mr-2">
-                      <Users className="w-3.5 h-3.5" />
-                      {unit.totalStudents}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="hidden sm:flex items-center gap-1 text-xs text-gray-400 mr-1">
+                      <Users className="w-3 h-3" />{unit.totalStudents}
                     </span>
                     <IconButton icon={Trash2} onClick={(e) => { e?.stopPropagation(); deleteAllClassesForUnit(unit.unitCode, unit.classes); }} variant="danger" />
                     <IconButton icon={isExpanded ? ChevronUp : ChevronDown} onClick={() => toggleUnit(unit.unitCode)} />
@@ -809,8 +810,8 @@ export default function ClassesPage() {
 
                 {/* Classes Grid */}
                 {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  <div className="border-t border-gray-100 bg-gray-50/50 p-3 sm:p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
                       {filtered.map(cls => {
                         const avg = cls.sessions.length > 0
                           ? Math.round(cls.sessions.reduce((a, s) => a + s.attendancePercentage, 0) / cls.sessions.length)
@@ -820,40 +821,40 @@ export default function ClassesPage() {
                         return (
                           <Card key={cls.id} className="hover:shadow-md transition-shadow cursor-pointer group" onClick={() => { setSelectedClass(cls); setViewMode("detail"); }}>
                             <div className="h-1 bg-[#e4002b]" />
-                            <div className="p-4">
-                              <div className="flex items-start justify-between mb-3">
-                                <div>
+                            <div className="p-3 sm:p-4">
+                              <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2">
+                                <div className="min-w-0">
                                   <Badge variant="red">{sessionLabel}{cls.group ? ` · ${cls.group}` : ''}</Badge>
-                                  <h3 className="font-semibold text-gray-900 text-sm mt-1.5 line-clamp-1">{cls.unitName}</h3>
+                                  <h3 className="font-semibold text-gray-900 text-xs sm:text-sm mt-1.5 line-clamp-1">{cls.unitName}</h3>
                                 </div>
                               </div>
 
-                              <div className="space-y-1.5 mb-4 text-xs text-gray-500">
+                              <div className="space-y-1 mb-3 sm:mb-4">
                                 {(cls.day || cls.time) && (
-                                  <div className="flex items-center gap-2">
-                                    <Clock className="w-3.5 h-3.5 text-gray-400" />
-                                    <span>{[cls.day, cls.time].filter(Boolean).join(', ')}</span>
+                                  <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-gray-500">
+                                    <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+                                    <span className="truncate">{[cls.day, cls.time].filter(Boolean).join(', ')}</span>
                                   </div>
                                 )}
                                 {cls.location && (
-                                  <div className="flex items-center gap-2">
-                                    <MapPin className="w-3.5 h-3.5 text-gray-400" />
-                                    <span>{cls.location}</span>
+                                  <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-gray-500">
+                                    <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
+                                    <span className="truncate">{cls.location}</span>
                                   </div>
                                 )}
-                                <div className="flex items-center gap-2">
-                                  <Users className="w-3.5 h-3.5 text-gray-400" />
+                                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-gray-500">
+                                  <Users className="w-3 h-3 text-gray-400 shrink-0" />
                                   <span>{cls.students.length} students</span>
                                 </div>
                               </div>
 
                               {avg !== null && (
-                                <div className="pt-3 border-t border-gray-100">
-                                  <div className="flex items-center justify-between text-xs mb-1">
+                                <div className="pt-2.5 sm:pt-3 border-t border-gray-100">
+                                  <div className="flex items-center justify-between text-[10px] sm:text-xs mb-1">
                                     <span className="text-gray-400">Attendance</span>
                                     <span className={`font-semibold ${avg >= 80 ? 'text-emerald-600' : avg >= 60 ? 'text-amber-500' : 'text-[#e4002b]'}`}>{avg}%</span>
                                   </div>
-                                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="h-1 sm:h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                     <div className={`h-full rounded-full ${avg >= 80 ? 'bg-emerald-500' : avg >= 60 ? 'bg-amber-400' : 'bg-[#e4002b]'}`} style={{ width: `${avg}%` }} />
                                   </div>
                                 </div>
@@ -874,27 +875,27 @@ export default function ClassesPage() {
   );
 
   const renderUploadView = () => (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
       <div>
         <button
           onClick={() => { setViewMode("list"); setUploadStep(1); setUploadFile(null); setUploadPreview([]); setParsedSheets([]); setExcludedSheets([]); }}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-4 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-3 sm:mb-4 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" /> Back to Classes
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Upload Master List</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Import from Swinburne attendance form</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Upload Master List</h1>
+        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Import from Swinburne attendance form</p>
       </div>
 
       {/* Stepper */}
-      <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl shadow-sm px-6 py-4">
+      <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl shadow-sm px-4 sm:px-6 py-3 sm:py-4">
         {[{ n: 1, label: 'Upload' }, { n: 2, label: 'Map columns' }].map(({ n, label }, i) => (
           <React.Fragment key={n}>
             <div className="flex items-center gap-2">
-              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${uploadStep >= n ? 'bg-[#e4002b] text-white' : 'bg-gray-100 text-gray-400'}`}>
-                {uploadStep > n ? <Check className="w-3.5 h-3.5" /> : n}
+              <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold ${uploadStep >= n ? 'bg-[#e4002b] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                {uploadStep > n ? <Check className="w-3 h-3" /> : n}
               </span>
-              <span className={`text-sm font-medium ${uploadStep >= n ? 'text-gray-900' : 'text-gray-400'}`}>{label}</span>
+              <span className={`text-xs sm:text-sm font-medium ${uploadStep >= n ? 'text-gray-900' : 'text-gray-400'}`}>{label}</span>
             </div>
             {i === 0 && <div className="flex-1 h-px bg-gray-100"><div className={`h-full bg-[#e4002b] transition-all duration-500 ${uploadStep >= 2 ? 'w-full' : 'w-0'}`} /></div>}
           </React.Fragment>
@@ -903,45 +904,43 @@ export default function ClassesPage() {
 
       <Card className="overflow-hidden">
         {uploadStep === 1 ? (
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
             <div
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all ${isDragging ? 'border-[#e4002b] bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
+              className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center transition-all ${isDragging ? 'border-[#e4002b] bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
               onDragEnter={e => handleDrag(e, true)} onDragLeave={e => handleDrag(e, false)}
               onDragOver={e => e.preventDefault()} onDrop={handleDrop}
             >
-              <div className="w-14 h-14 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <FileSpreadsheet className="w-7 h-7 text-[#e4002b]" />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-red-50 rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                <FileSpreadsheet className="w-6 h-6 sm:w-7 sm:h-7 text-[#e4002b]" />
               </div>
-              <p className="font-semibold text-gray-900 mb-1">Drop Excel file here</p>
-              <p className="text-sm text-gray-400 mb-6">Each sheet = one class group</p>
+              <p className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">Drop Excel file here</p>
+              <p className="text-xs sm:text-sm text-gray-400 mb-5 sm:mb-6">Each sheet = one class group</p>
               <input type="file" accept=".xlsx,.xls" id="file-upload" className="hidden" onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
-              <label htmlFor="file-upload" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#e4002b] text-white text-sm font-medium rounded-lg hover:bg-[#c90025] cursor-pointer transition-colors">
-                <Upload className="w-4 h-4" /> Choose File
+              <label htmlFor="file-upload" className="inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-[#e4002b] text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-[#c90025] cursor-pointer transition-colors">
+                <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Choose File
               </label>
-              <p className="text-xs text-gray-300 mt-4">.xlsx, .xls · up to 10 MB</p>
+              <p className="text-xs text-gray-300 mt-3 sm:mt-4">.xlsx, .xls · up to 10 MB</p>
             </div>
           </div>
         ) : (
-          <div className="p-6 space-y-6">
-            {/* Matched sheets summary */}
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+            {/* Matched sheets */}
             {parsedSheets.length > 0 && (
-              <div className="rounded-xl border border-red-100 bg-red-50/50 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 className="w-4 h-4 text-[#e4002b]" />
-                  <p className="text-sm font-semibold text-gray-900">
+              <div className="rounded-xl border border-red-100 bg-red-50/50 p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#e4002b]" />
+                  <p className="text-xs sm:text-sm font-semibold text-gray-900">
                     {parsedSheets.length} sheet{parsedSheets.length !== 1 ? 's' : ''} matched — <span className="text-[#e4002b]">{parsedSheets[0].metadata.unitCode}</span>
                   </p>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {parsedSheets.map((sheet, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-2.5 border border-gray-100">
+                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 text-[10px] sm:text-xs bg-white rounded-lg px-3 py-2 border border-gray-100">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-700">{sheet.sheetName}</span>
-                        <span className="text-gray-300">·</span>
                         <Badge variant="red">{sheet.metadata.classType}{sheet.metadata.group ? ` ${sheet.metadata.group}` : ''}</Badge>
                       </div>
-                      <div className="flex items-center gap-3 text-gray-400">
-                        {sheet.metadata.lecturer && <span className="truncate max-w-[160px]">{sheet.metadata.lecturer}</span>}
+                      <div className="flex items-center gap-2 text-gray-400 flex-wrap">
                         {sheet.metadata.day && <span>{sheet.metadata.day}</span>}
                         {sheet.metadata.location && <span>{sheet.metadata.location}</span>}
                         <span className="font-medium text-gray-600">{sheet.students.length} students</span>
@@ -952,41 +951,39 @@ export default function ClassesPage() {
               </div>
             )}
 
-            {/* Excluded sheets warning */}
+            {/* Excluded sheets */}
             {excludedSheets.length > 0 && (
-              <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+              <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-3 sm:p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  <p className="text-sm font-semibold text-gray-900">
-                    {excludedSheets.length} sheet{excludedSheets.length !== 1 ? 's' : ''} excluded — lecturer name didn't match yours
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                  <p className="text-xs sm:text-sm font-semibold text-gray-900">
+                    {excludedSheets.length} sheet{excludedSheets.length !== 1 ? 's' : ''} excluded
                   </p>
                 </div>
                 <div className="space-y-1.5">
                   {excludedSheets.map((s, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-2 border border-amber-100">
-                      <span className="font-medium text-gray-600">{s.sheetName}</span>
-                      <span className="text-gray-400 truncate max-w-[200px]">{s.lecturer || 'No lecturer listed'}</span>
+                    <div key={i} className="flex items-center justify-between text-[10px] sm:text-xs bg-white rounded-lg px-3 py-2 border border-amber-100 gap-2">
+                      <span className="font-medium text-gray-600 shrink-0">{s.sheetName}</span>
+                      <span className="text-gray-400 truncate">{s.lecturer || 'No lecturer listed'}</span>
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-amber-600 mt-2.5">
-                  These classes are taught by a different lecturer and will not be imported.
-                </p>
+                <p className="text-[10px] sm:text-xs text-amber-600 mt-2">These classes are taught by a different lecturer and will not be imported.</p>
               </div>
             )}
 
             {/* Column mapping */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-1">Map Columns</h3>
-              <p className="text-xs text-gray-400 mb-4">Applies to all matched sheets</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-1">Map Columns</h3>
+              <p className="text-[10px] sm:text-xs text-gray-400 mb-3 sm:mb-4">Applies to all matched sheets</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 {[
                   { label: "Student ID", key: "studentId", required: true },
                   { label: "Name", key: "name", required: true },
                   { label: "Program", key: "program", required: false }
                 ].map(({ label, key, required }) => (
                   <div key={key}>
-                    <label className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1">
+                    <label className="text-[10px] sm:text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1">
                       {label} {required && <span className="text-[#e4002b]">*</span>}
                     </label>
                     <select
@@ -998,7 +995,7 @@ export default function ClassesPage() {
                       {uploadColumns.map((col, i) => <option key={i} value={col}>{col}</option>)}
                     </select>
                     {(columnMapping as any)[key] && (
-                      <p className="flex items-center gap-1 text-xs text-emerald-600 mt-1">
+                      <p className="flex items-center gap-1 text-[10px] sm:text-xs text-emerald-600 mt-1">
                         <Check className="w-3 h-3" /> Mapped
                       </p>
                     )}
@@ -1007,8 +1004,8 @@ export default function ClassesPage() {
               </div>
             </div>
 
-            {/* Preview */}
-            <div>
+            {/* Preview — hidden on very small, shown on sm+ */}
+            <div className="hidden sm:block">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Preview (First Matched Sheet)</h3>
               <div className="border border-gray-100 rounded-xl overflow-x-auto">
                 <table className="w-full text-xs">
@@ -1026,13 +1023,10 @@ export default function ClassesPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-2 sm:gap-3 pt-2 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setUploadStep(1)}>Back</Button>
-              <Button 
-                onClick={confirmImport}
-                disabled={!columnMapping.studentId || !columnMapping.name || loading}
-              >
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing...</> : <><CheckCircle2 className="w-4 h-4" /> Import {parsedSheets.length} Class{parsedSheets.length !== 1 ? 'es' : ''}</>}
+              <Button onClick={confirmImport} disabled={!columnMapping.studentId || !columnMapping.name || loading}>
+                {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Importing...</> : <><CheckCircle2 className="w-3.5 h-3.5" /> Import {parsedSheets.length} Class{parsedSheets.length !== 1 ? 'es' : ''}</>}
               </Button>
             </div>
           </div>
@@ -1049,7 +1043,7 @@ export default function ClassesPage() {
     const sessionLabel = selectedClass.classType === 'LECTURE' ? 'Lecture' : selectedClass.classType === 'LAB' ? 'Lab' : selectedClass.classType === 'TUTORIAL' ? 'Tutorial' : selectedClass.classType || 'Class';
 
     return (
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="max-w-5xl mx-auto space-y-3 sm:space-y-4">
         <button onClick={() => setViewMode("list")} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors">
           <ChevronLeft className="w-4 h-4" /> Back to Classes
         </button>
@@ -1057,29 +1051,39 @@ export default function ClassesPage() {
         {/* Header Card */}
         <Card className="overflow-hidden">
           <div className="h-1 bg-[#e4002b]" />
-          <div className="p-6">
-            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <Badge variant="red">{selectedClass.unitCode}</Badge>
-                  <Badge variant="gray">{sessionLabel}{selectedClass.group ? ` · ${selectedClass.group}` : ''}</Badge>
-                </div>
-                <h1 className="text-xl font-bold text-gray-900 mb-3">{selectedClass.unitName}</h1>
-                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                  {(selectedClass.day || selectedClass.time) && (
-                    <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-gray-400" />{[selectedClass.day, selectedClass.time].filter(Boolean).join(', ')}</span>
-                  )}
-                  {selectedClass.location && (
-                    <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-gray-400" />{selectedClass.location}</span>
-                  )}
-                  <span className="flex items-center gap-1.5"><Users className="w-4 h-4 text-gray-400" />{selectedClass.students.length} students</span>
-                  {avg !== null && (
-                    <span className={`flex items-center gap-1.5 font-medium ${avg >= 80 ? 'text-emerald-600' : avg >= 60 ? 'text-amber-500' : 'text-[#e4002b]'}`}>
-                      <TrendingUp className="w-4 h-4" />{avg}% avg
-                    </span>
-                  )}
-                </div>
-              </div>
+          <div className="p-4 sm:p-6">
+            {/* Badges */}
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <Badge variant="red">{selectedClass.unitCode}</Badge>
+              <Badge variant="gray">{sessionLabel}{selectedClass.group ? ` · ${selectedClass.group}` : ''}</Badge>
+            </div>
+
+            {/* Unit name */}
+            <h1 className="text-base sm:text-xl font-bold text-gray-900 mb-3 leading-snug">{selectedClass.unitName}</h1>
+
+            {/* Meta info — wraps to 2 cols on mobile */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm text-gray-500">
+              {(selectedClass.day || selectedClass.time) && (
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="truncate">{[selectedClass.day, selectedClass.time].filter(Boolean).join(', ')}</span>
+                </span>
+              )}
+              {selectedClass.location && (
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="truncate">{selectedClass.location}</span>
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                {selectedClass.students.length} students
+              </span>
+              {avg !== null && (
+                <span className={`flex items-center gap-1.5 font-medium ${avg >= 80 ? 'text-emerald-600' : avg >= 60 ? 'text-amber-500' : 'text-[#e4002b]'}`}>
+                  <TrendingUp className="w-3.5 h-3.5 shrink-0" />{avg}% avg
+                </span>
+              )}
             </div>
           </div>
 
@@ -1092,11 +1096,11 @@ export default function ClassesPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-medium transition-colors relative ${activeTab === tab.id ? 'text-[#e4002b]' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-3 sm:py-3.5 text-xs sm:text-sm font-medium transition-colors relative ${activeTab === tab.id ? 'text-[#e4002b]' : 'text-gray-500 hover:text-gray-700'}`}
               >
-                <tab.icon className="w-4 h-4" />
+                <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {tab.label}
-                <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab.id ? 'bg-red-50 text-[#e4002b]' : 'bg-gray-100 text-gray-500'}`}>{tab.count}</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs ${activeTab === tab.id ? 'bg-red-50 text-[#e4002b]' : 'bg-gray-100 text-gray-500'}`}>{tab.count}</span>
                 {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e4002b]" />}
               </button>
             ))}
@@ -1106,91 +1110,133 @@ export default function ClassesPage() {
         {/* Content */}
         <Card>
           {activeTab === "students" && (
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="font-semibold text-gray-900">Students</h3>
-                <Button onClick={() => setShowAddStudentModal(true)} className="text-sm">
-                  <Plus className="w-4 h-4" /> Add Student
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-5">
+                <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Students</h3>
+                <Button onClick={() => setShowAddStudentModal(true)}>
+                  <Plus className="w-3.5 h-3.5" /> Add Student
                 </Button>
               </div>
               
               {selectedClass.students.length > 0 ? (
-                <div className="overflow-x-auto -mx-6">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-gray-100">
-                      <tr className="text-left">
-                        {["ID", "Name", "Program", "Nationality", "Status", ""].map((h, i) => (
-                          <th key={i} className={`px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider ${i === 5 ? 'text-right' : ''}`}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {selectedClass.students.map(student => {
-                        const status = student.schoolStatus || "Active";
-                        const statusConfig = {
-                          Active: { variant: 'green', icon: CheckCircle2 },
-                          Inactive: { variant: 'gray', icon: X },
-                          Suspended: { variant: 'amber', icon: AlertCircle }
-                        } as const;
-                        const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.Active;
-                        
-                        return (
-                          <tr key={student.id} className="hover:bg-gray-50/60 group">
-                            <td className="px-6 py-3.5 font-mono text-xs text-gray-500">{student.studentNumber}</td>
-                            <td className="px-6 py-3.5 font-medium text-gray-900">{student.name}</td>
-                            <td className="px-6 py-3.5 text-gray-500 text-xs max-w-[180px] truncate">{student.program || '—'}</td>
-                            <td className="px-6 py-3.5 text-gray-500 text-xs">{student.nationality || '—'}</td>
-                            <td className="px-6 py-3.5">
-                              <Badge variant={config.variant as any}>
-                                <config.icon className="w-3 h-3 mr-1" />
+                <>
+                  {/* Mobile: card list */}
+                  <div className="sm:hidden space-y-2">
+                    {selectedClass.students.map(student => {
+                      const status = student.schoolStatus || "Active";
+                      const statusConfig = {
+                        Active: { variant: 'green' as const, icon: CheckCircle2 },
+                        Inactive: { variant: 'gray' as const, icon: X },
+                        Suspended: { variant: 'amber' as const, icon: AlertCircle }
+                      };
+                      const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.Active;
+
+                      return (
+                        <div key={student.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 hover:border-red-100 hover:bg-red-50/10 transition-colors group">
+                          <div className="min-w-0 flex-1 pr-2">
+                            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                              <span className="font-medium text-gray-900 text-xs truncate">{student.name}</span>
+                              <Badge variant={config.variant}>
+                                <config.icon className="w-2.5 h-2.5 mr-0.5" />
                                 {status}
                               </Badge>
-                            </td>
-                            <td className="px-6 py-3.5 text-right">
-                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <IconButton icon={Edit2} onClick={() => { setEditingStudent(student); setShowEditStudentModal(true); }} />
-                                <IconButton icon={Trash2} onClick={() => deleteStudent(student.id)} variant="danger" />
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-400 flex-wrap">
+                              <span className="font-mono">{student.studentNumber}</span>
+                              {student.program && <span className="truncate max-w-[120px]">{student.program}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <IconButton icon={Edit2} onClick={() => { setEditingStudent(student); setShowEditStudentModal(true); }} />
+                            <IconButton icon={Trash2} onClick={() => deleteStudent(student.id)} variant="danger" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop: table */}
+                  <div className="hidden sm:block overflow-x-auto -mx-6">
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-gray-100">
+                        <tr className="text-left">
+                          {["ID", "Name", "Program", "Nationality", "Status", ""].map((h, i) => (
+                            <th key={i} className={`px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider ${i === 5 ? 'text-right' : ''}`}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {selectedClass.students.map(student => {
+                          const status = student.schoolStatus || "Active";
+                          const statusConfig = {
+                            Active: { variant: 'green' as const, icon: CheckCircle2 },
+                            Inactive: { variant: 'gray' as const, icon: X },
+                            Suspended: { variant: 'amber' as const, icon: AlertCircle }
+                          };
+                          const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.Active;
+                          
+                          return (
+                            <tr key={student.id} className="hover:bg-gray-50/60 group">
+                              <td className="px-6 py-3.5 font-mono text-xs text-gray-500">{student.studentNumber}</td>
+                              <td className="px-6 py-3.5 font-medium text-gray-900">{student.name}</td>
+                              <td className="px-6 py-3.5 text-gray-500 text-xs max-w-[180px] truncate">{student.program || '—'}</td>
+                              <td className="px-6 py-3.5 text-gray-500 text-xs">{student.nationality || '—'}</td>
+                              <td className="px-6 py-3.5">
+                                <Badge variant={config.variant}>
+                                  <config.icon className="w-3 h-3 mr-1" />{status}
+                                </Badge>
+                              </td>
+                              <td className="px-6 py-3.5 text-right">
+                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <IconButton icon={Edit2} onClick={() => { setEditingStudent(student); setShowEditStudentModal(true); }} />
+                                  <IconButton icon={Trash2} onClick={() => deleteStudent(student.id)} variant="danger" />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : (
                 <EmptyState 
                   icon={Users} 
                   title="No students" 
                   description="Add students manually or upload an Excel file"
-                  action={<Button onClick={() => setShowAddStudentModal(true)}><Plus className="w-4 h-4" /> Add Student</Button>}
+                  action={<Button onClick={() => setShowAddStudentModal(true)}><Plus className="w-3.5 h-3.5" /> Add Student</Button>}
                 />
               )}
             </div>
           )}
 
           {activeTab === "sessions" && (
-            <div className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-5">Attendance Sessions</h3>
+            <div className="p-4 sm:p-6">
+              <h3 className="font-semibold text-gray-900 mb-4 sm:mb-5 text-sm sm:text-base">Attendance Sessions</h3>
               {selectedClass.sessions.length > 0 ? (
                 <div className="space-y-2">
-                  {selectedClass.sessions.map(session => (
-                    <div key={session.id} className="flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:border-red-100 hover:bg-red-50/10 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${session.status === 'Completed' ? 'bg-emerald-50' : session.status === 'Ongoing' ? 'bg-amber-50' : 'bg-gray-50'}`}>
-                          <Calendar className={`w-5 h-5 ${session.status === 'Completed' ? 'text-emerald-500' : session.status === 'Ongoing' ? 'text-amber-500' : 'text-gray-400'}`} />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{session.date}</p>
-                          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
-                            <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-400" />{session.presentCount}</span>
-                            <span className="flex items-center gap-1"><X className="w-3 h-3 text-red-400" />{session.absentCount}</span>
-                          </div>
+                  {selectedClass.sessions.map(sess => (
+                    <div key={sess.id} className="flex items-center gap-3 p-3 sm:p-4 border border-gray-100 rounded-xl hover:border-red-100 hover:bg-red-50/10 transition-colors">
+                      {/* Icon */}
+                      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 ${sess.status === 'Completed' ? 'bg-emerald-50' : sess.status === 'Ongoing' ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                        <Calendar className={`w-3.5 h-3.5 sm:w-5 sm:h-5 ${sess.status === 'Completed' ? 'text-emerald-500' : sess.status === 'Ongoing' ? 'text-amber-500' : 'text-gray-400'}`} />
+                      </div>
+
+                      {/* Date + counts */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-xs sm:text-sm">{sess.date}</p>
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] sm:text-xs text-gray-400">
+                          <span className="flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3 text-emerald-400" />{sess.presentCount}</span>
+                          <span className="flex items-center gap-0.5"><X className="w-3 h-3 text-red-400" />{sess.absentCount}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className={`text-sm font-bold ${session.attendancePercentage >= 80 ? 'text-emerald-600' : 'text-amber-500'}`}>{session.attendancePercentage}%</span>
-                        <Badge variant={session.status === 'Completed' ? 'green' : session.status === 'Ongoing' ? 'amber' : 'gray'}>{session.status}</Badge>
+
+                      {/* Percentage + status — stacked on mobile */}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`text-xs sm:text-sm font-bold ${sess.attendancePercentage >= 80 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                          {sess.attendancePercentage}%
+                        </span>
+                        <StatusBadge status={sess.status} />
                       </div>
                     </div>
                   ))}
@@ -1212,7 +1258,7 @@ export default function ClassesPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         {viewMode === "list" && renderListView()}
         {viewMode === "upload" && renderUploadView()}
@@ -1225,7 +1271,7 @@ export default function ClassesPage() {
           <>
             <Button variant="ghost" onClick={() => setShowAddStudentModal(false)} disabled={modalLoading}>Cancel</Button>
             <Button onClick={addStudent} disabled={!newStudent.studentNumber || !newStudent.name || modalLoading}>
-              {modalLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding...</> : "Add Student"}
+              {modalLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Adding...</> : "Add Student"}
             </Button>
           </>
         }>
@@ -1257,7 +1303,7 @@ export default function ClassesPage() {
           <>
             <Button variant="ghost" onClick={() => { setShowEditStudentModal(false); setEditingStudent(null); }} disabled={modalLoading}>Cancel</Button>
             <Button onClick={editStudent} disabled={!editingStudent.name || modalLoading}>
-              {modalLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : "Save Changes"}
+              {modalLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...</> : "Save Changes"}
             </Button>
           </>
         }>
