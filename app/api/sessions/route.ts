@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
     where: {
       unitRegistrationId: unitRegistration.id,
       sessionName: sessionName as SessionName,
+      sessionTime: null,
       ...(groupNo ? { groupNo } : {}),
       ...(subcomponent ? { subcomponent } : {}),
     },
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Pick the session whose scheduled date is closest to today
+  // Pick the unactivated session whose scheduled date is closest to today
   const now = new Date();
   const closest = candidates.reduce((best, s) =>
     Math.abs((s.scheduledDate?.getTime() ?? 0) - now.getTime()) <

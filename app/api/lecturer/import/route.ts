@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!existingSession) {
-    const sessionTimes = hasExplicitDates
+    const scheduledDates = hasExplicitDates
       ? (unitInput.sessionDates ?? []).map((iso) => {
           const d = new Date(iso);
           d.setHours(startHour, startMin, 0, 0);
@@ -176,11 +176,11 @@ export async function POST(request: NextRequest) {
       : buildSessionDates(unitInput.day || 'Mon', startHour, startMin, year);
 
     await prisma.classSession.createMany({
-      data: sessionTimes.map((sessionTime) => ({
+      data: scheduledDates.map((scheduledDate) => ({
         unitRegistrationId: lecturerReg.id,
         lecturerId: userId,
         sessionName: sessionNameEnum,
-        sessionTime,
+        scheduledDate,
         sessionDuration: durationMinutes,
         groupNo,
         subcomponent: scopeKey,

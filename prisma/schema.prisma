@@ -96,14 +96,15 @@ model ClassSession {
   unitRegistrationId String
   lecturerId         String
   sessionName        SessionName
-  sessionTime        DateTime
-  sessionDuration    Int
+  sessionTime        DateTime?
+  sessionDuration    Int?
   weekNumber         Int?
   subcomponent       String?
   groupNo            String?
   location           String?
   day                String?
   lecturerName       String?
+  scheduledDate      DateTime?
   attendanceData     ClassAttendanceData[]
   attendanceRecords  ClassAttendanceRecord[]
   lecturer           User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
