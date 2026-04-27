@@ -12,6 +12,7 @@ import {
   Edit2,
   X,
   ChevronLeft,
+  ChevronRight,
   Users,
   Calendar,
   MapPin,
@@ -260,7 +261,7 @@ const Badge = ({
 };
 
 const Card = ({ children, className = "", onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) => (
-  <div onClick={onClick} className={`bg-white rounded-xl border border-gray-100 shadow-sm ${className}`}>
+  <div onClick={onClick} className={`bg-white rounded-2xl border border-gray-100 shadow-sm ${className}`}>
     {children}
   </div>
 );
@@ -682,7 +683,7 @@ export default function ClassesPage() {
   // ── Loading / error ────────────────────────────────────────────────────────
 
   if (loading && viewMode === 'list') return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="flex min-h-[60vh] items-center justify-center">
       <div className="flex items-center gap-3 text-gray-500">
         <Loader2 className="w-5 h-5 animate-spin text-[#e4002b]" />
         <span className="text-sm font-medium">Loading classes...</span>
@@ -691,7 +692,7 @@ export default function ClassesPage() {
   );
 
   if (error) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="flex min-h-[60vh] items-center justify-center p-4">
       <Card className="p-6 sm:p-8 text-center max-w-md w-full">
         <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
           <AlertCircle className="w-6 h-6 text-red-500" />
@@ -710,8 +711,8 @@ export default function ClassesPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Classes</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Manage units, groups, and enrollments</p>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">Classes</h1>
+          <p className="text-sm text-gray-500 mt-1.5">Manage units, groups, and enrollments</p>
         </div>
         <Button onClick={() => setViewMode("upload")} className="shrink-0">
           <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -883,8 +884,8 @@ export default function ClassesPage() {
         >
           <ChevronLeft className="w-4 h-4" /> Back to Classes
         </button>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Upload Master List</h1>
-        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Import from Swinburne attendance form</p>
+        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">Upload Master List</h1>
+        <p className="text-sm text-gray-500 mt-1.5">Import from Swinburne attendance form</p>
       </div>
 
       {/* Stepper */}
@@ -1059,7 +1060,7 @@ export default function ClassesPage() {
             </div>
 
             {/* Unit name */}
-            <h1 className="text-base sm:text-xl font-bold text-gray-900 mb-3 leading-snug">{selectedClass.unitName}</h1>
+            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-gray-900 mb-3 leading-snug">{selectedClass.unitName}</h1>
 
             {/* Meta info — wraps to 2 cols on mobile */}
             <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm text-gray-500">
@@ -1258,12 +1259,17 @@ export default function ClassesPage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        {viewMode === "list" && renderListView()}
-        {viewMode === "upload" && renderUploadView()}
-        {viewMode === "detail" && renderDetailView()}
-      </div>
+    <div className="space-y-6 sm:space-y-8">
+
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="hover:text-gray-600 cursor-default">Lecturer</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Classes</span>
+      </nav>
+
+      {viewMode === "list" && renderListView()}
+      {viewMode === "upload" && renderUploadView()}
+      {viewMode === "detail" && renderDetailView()}
 
       {/* Add Student Modal */}
       {showAddStudentModal && (

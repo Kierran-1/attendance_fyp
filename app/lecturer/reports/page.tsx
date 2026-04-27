@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import {
   AlertTriangle, ArrowLeft, BarChart3, BookOpen,
-  Download, Loader2, Search, ShieldAlert, Users,
+  ChevronRight, Download, Loader2, Search, ShieldAlert, Users,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -325,18 +325,21 @@ export default function ReportsPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 sm:space-y-8">
+
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="hover:text-gray-600 cursor-default">Lecturer</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Reports</span>
+      </nav>
 
       {/* Header */}
       <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Lecturer Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
             Analytics & Reports
           </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             Real-time attendance insights, trends, and at-risk student tracking across your units.
           </p>
         </div>
@@ -360,7 +363,7 @@ export default function ReportsPage() {
       </section>
 
       {/* Filters */}
-      <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-700">Unit Filter</label>
@@ -406,7 +409,7 @@ export default function ReportsPage() {
           { label: 'At-Risk Students', value: buildAtRiskRows(selectedCode === 'all' ? rawUnits : rawUnits.filter(u => u.unitCode === selectedCode)).length, note: 'Below 75% threshold', icon: <ShieldAlert size={18} className="text-red-400" />, cls: 'text-red-600' },
           { label: 'Total Students', value: totalStudents, note: `Across ${totalSessions} sessions`, icon: <Users size={18} className="text-gray-300" />, cls: 'text-gray-900' },
         ].map(({ label, value, note, icon, cls }) => (
-          <div key={label} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div key={label} className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">{label}</p>
               {icon}
@@ -422,7 +425,7 @@ export default function ReportsPage() {
         <section className="grid gap-6 xl:grid-cols-2">
 
           {/* Bar chart — attendance per unit */}
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-gray-900">Attendance by Unit</h2>
@@ -477,7 +480,7 @@ export default function ReportsPage() {
           </div>
 
           {/* Line chart — trend */}
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-gray-900">Attendance Trend</h2>
@@ -562,7 +565,7 @@ export default function ReportsPage() {
 
       {/* Unit breakdown table */}
       {filteredSummaries.length > 0 && (
-        <section className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-6 py-4">
             <h2 className="text-base font-bold text-gray-900">Unit Breakdown</h2>
             <p className="mt-1 text-xs text-gray-400">Summary across all class groups</p>
@@ -609,7 +612,7 @@ export default function ReportsPage() {
       )}
 
       {/* At-risk table */}
-      <section className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm overflow-hidden">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
@@ -712,7 +715,7 @@ export default function ReportsPage() {
 
         return (
           <section className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-3xl bg-gradient-to-br from-red-600 to-red-700 p-5 text-white shadow-md shadow-red-100">
+            <div className="rounded-2xl sm:rounded-[2rem] bg-gradient-to-br from-red-600 to-red-700 p-5 text-white shadow-md shadow-red-100">
               <p className="mb-2 text-xs font-bold uppercase tracking-widest text-white/70">Needs Attention</p>
               <p className="text-lg font-bold leading-snug">
                 {lowest
@@ -720,7 +723,7 @@ export default function ReportsPage() {
                   : 'No data yet.'}
               </p>
             </div>
-            <div className="rounded-3xl bg-gradient-to-br from-amber-500 to-orange-500 p-5 text-white shadow-md shadow-orange-100">
+            <div className="rounded-2xl sm:rounded-[2rem] bg-gradient-to-br from-amber-500 to-orange-500 p-5 text-white shadow-md shadow-orange-100">
               <p className="mb-2 text-xs font-bold uppercase tracking-widest text-white/70">At-Risk Count</p>
               <p className="text-lg font-bold leading-snug">
                 {highRisk > 0
@@ -728,7 +731,7 @@ export default function ReportsPage() {
                   : 'No high-risk students detected right now.'}
               </p>
             </div>
-            <div className="rounded-3xl bg-gradient-to-br from-green-600 to-emerald-600 p-5 text-white shadow-md shadow-green-100">
+            <div className="rounded-2xl sm:rounded-[2rem] bg-gradient-to-br from-green-600 to-emerald-600 p-5 text-white shadow-md shadow-green-100">
               <p className="mb-2 text-xs font-bold uppercase tracking-widest text-white/70">Best Performing</p>
               <p className="text-lg font-bold leading-snug">
                 {highest
