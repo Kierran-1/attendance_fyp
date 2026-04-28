@@ -9,9 +9,11 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  Info,
   Loader2,
   Search,
-  Send,
+  ShieldAlert,
+  TriangleAlert,
 } from 'lucide-react';
 
 type AlertLevel = 'Critical' | 'Warning' | 'Info';
@@ -45,8 +47,8 @@ type StudentPageAlert = {
   id: string;
   title: string;
   message: string;
-  type: 'Lecturer Message';
   level: AlertLevel;
+  targetGroup: AlertTargetGroup;
   unitCode: string;
   unitName: string | null;
   actionHref: string | null;
@@ -79,6 +81,17 @@ function getLevelClasses(level: AlertLevel) {
       return 'border-amber-100 bg-amber-50 text-amber-700';
     default:
       return 'border-blue-100 bg-blue-50 text-blue-700';
+  }
+}
+
+function getLevelIcon(level: AlertLevel) {
+  switch (level) {
+    case 'Critical':
+      return <ShieldAlert size={18} className="text-red-600" />;
+    case 'Warning':
+      return <TriangleAlert size={18} className="text-amber-600" />;
+    default:
+      return <Info size={18} className="text-blue-600" />;
   }
 }
 
@@ -119,8 +132,8 @@ export default function StudentAlertsPage() {
               id: item.id,
               title: item.title,
               message: item.message,
-              type: 'Lecturer Message',
               level: item.level,
+              targetGroup: item.targetGroup,
               unitCode: item.unitCode,
               unitName: item.unitName,
               actionHref: item.actionHref,
@@ -294,49 +307,55 @@ export default function StudentAlertsPage() {
                 key={item.id}
                 className="rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-gray-200"
               >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${getLevelClasses(
-                          item.level
-                        )}`}
-                      >
-                        {item.level}
-                      </span>
-
-                      <span className="rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-purple-700">
-                        Lecturer Message
-                      </span>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm">
+                      {getLevelIcon(item.level)}
                     </div>
 
-                    <div>
-                      <h2 className="text-xl font-black tracking-tight text-gray-900">
-                        {item.title}
-                      </h2>
-                      <p className="mt-2 max-w-3xl text-sm leading-7 text-gray-500">
-                        {item.message}
-                      </p>
-                    </div>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${getLevelClasses(
+                            item.level
+                          )}`}
+                        >
+                          {item.level}
+                        </span>
 
-                    <div className="space-y-1 text-sm text-gray-600">
-                      <p className="font-semibold">
-                        {item.unitCode}
-                        {item.unitName ? ` — ${item.unitName}` : ''}
-                      </p>
-                      {item.createdByName ? (
-                        <p>From: {item.createdByName}</p>
-                      ) : null}
+                        <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-600">
+                          {getTargetGroupLabel(item.targetGroup)}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h2 className="text-xl font-black tracking-tight text-gray-900">
+                          {item.title}
+                        </h2>
+                        <p className="mt-1 max-w-3xl text-sm leading-7 text-gray-500">
+                          {item.message}
+                        </p>
+                      </div>
+
+                      <div className="space-y-1 text-sm text-gray-600">
+                        <p className="font-semibold">
+                          {item.unitCode}
+                          {item.unitName ? ` — ${item.unitName}` : ''}
+                        </p>
+                        {item.createdByName ? (
+                          <p>From: {item.createdByName}</p>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-start gap-3 lg:items-end">
+                  <div className="flex flex-col items-start gap-3 sm:items-end">
                     <div className="text-sm text-gray-500">
                       <p className="font-semibold text-gray-700">{stamp.date}</p>
                       <p>{stamp.time}</p>
                     </div>
 
-                    {item.actionHref ? (
+                    {item.actionHref && item.actionHref !== '/student/alerts' ? (
                       <Link
                         href={item.actionHref}
                         className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"

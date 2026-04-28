@@ -293,13 +293,10 @@ export default function LecturerAlertsPage() {
 
       <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Lecturer Panel
-          </p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
             Alerts
           </h1>
-          <p className="mt-2 max-w-3xl text-base text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             Send class-based alerts using only the real units linked to this
             lecturer account.
           </p>
@@ -327,7 +324,7 @@ export default function LecturerAlertsPage() {
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Total Alerts
@@ -339,7 +336,7 @@ export default function LecturerAlertsPage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Critical
@@ -351,7 +348,7 @@ export default function LecturerAlertsPage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Warning
@@ -363,7 +360,7 @@ export default function LecturerAlertsPage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Info
@@ -377,7 +374,7 @@ export default function LecturerAlertsPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-start gap-3">
             <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-50 text-[#E4002B]">
               <Send size={18} />
@@ -547,7 +544,7 @@ export default function LecturerAlertsPage() {
           )}
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-start gap-3">
             <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
               <Users size={18} />
@@ -627,7 +624,7 @@ export default function LecturerAlertsPage() {
                 return (
                   <article
                     key={item.id}
-                    className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5 transition hover:border-gray-200 hover:bg-white"
+                    className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm transition hover:border-gray-200"
                   >
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex items-start gap-3">
