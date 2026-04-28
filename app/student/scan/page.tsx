@@ -145,6 +145,16 @@ export default function StudentScanPage() {
     };
   }, []);
 
+  // Auto-submit when arriving via QR link (e.g. scanned from lecturer's screen)
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token && !submittingRef.current) {
+      submittingRef.current = true;
+      submitToken(token);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function startScanner() {
     setScanState('scanning');
     setMessage('');

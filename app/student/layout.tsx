@@ -25,9 +25,11 @@ export default function StudentLayout({
   useEffect(() => {
     if (status === 'loading') return;
 
-    // Redirect unauthenticated users back to login.
+    // Redirect unauthenticated users back to login, preserving the current URL so
+    // QR-link arrivals (e.g. /student/scan?token=X) are sent back after sign-in.
     if (!session) {
-      router.replace('/auth/login');
+      const callbackUrl = encodeURIComponent(pathname + window.location.search);
+      router.replace(`/auth/login?callbackUrl=${callbackUrl}`);
       return;
     }
 

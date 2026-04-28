@@ -275,7 +275,7 @@ export default function LiveAttendancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           unitId: selectedCard?.unitId,
-          sessionName: selectedCard?.classType ?? sessionType,
+          sessionName: selectedCard?.classType ?? SESSION_TYPES[0].value,
           durationMinutes: duration,
           groupNo: selectedCard?.group,
           subcomponent: selectedCard?.subcomponent,
@@ -619,7 +619,7 @@ export default function LiveAttendancePage() {
                 >
                   {sessionQRToken ? (
                     <QRCodeSVG
-                      value={sessionQRToken}
+                      value={`${window.location.origin}/student/scan?token=${sessionQRToken}`}
                       size={200}
                       bgColor="#f9fafb"
                       fgColor="#111111"
@@ -868,7 +868,7 @@ export default function LiveAttendancePage() {
             </div>
 
             <QRCodeSVG
-              value={sessionQRToken}
+              value={`${window.location.origin}/student/scan?token=${sessionQRToken}`}
               size={380}
               bgColor="#ffffff"
               fgColor="#111111"
