@@ -284,14 +284,14 @@ export default function LecturerAlertsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 sm:space-y-8">
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-        <span>Lecturer</span>
+        <span className="hover:text-gray-600 cursor-default">Lecturer</span>
         <ChevronRight size={12} />
         <span className="text-red-600">Alerts</span>
       </nav>
 
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
             Alerts
@@ -516,7 +516,7 @@ export default function LecturerAlertsPage() {
                   type="button"
                   onClick={handleSendAlert}
                   disabled={submitting}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#c2183a] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submitting ? (
                     <Loader2 size={16} className="animate-spin" />
@@ -530,7 +530,7 @@ export default function LecturerAlertsPage() {
                   type="button"
                   onClick={handleClearAlerts}
                   disabled={clearing}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-red-200 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {clearing ? (
                     <Loader2 size={16} className="animate-spin" />
@@ -672,7 +672,7 @@ export default function LecturerAlertsPage() {
                         {item.actionHref ? (
                           <Link
                             href={item.actionHref}
-                            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                           >
                             {item.actionLabel ?? 'Open'}
                           </Link>

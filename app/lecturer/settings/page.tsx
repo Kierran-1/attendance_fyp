@@ -36,7 +36,7 @@ export default function LecturerSettingsPage() {
       </header>
 
       {/* Profile Section */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <User size={18} />
           <h2 className="font-semibold">Profile</h2>
@@ -62,7 +62,7 @@ export default function LecturerSettingsPage() {
       </div>
 
       {/* Notifications */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Bell size={18} />
           <h2 className="font-semibold">Notifications</h2>
@@ -81,7 +81,7 @@ export default function LecturerSettingsPage() {
       </div>
 
       {/* Attendance Settings */}
-      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Shield size={18} />
           <h2 className="font-semibold">Attendance Settings</h2>
@@ -102,7 +102,7 @@ export default function LecturerSettingsPage() {
       {/* Save Button */}
       <button
         onClick={handleSave}
-        className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-700"
+        className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
       >
         <Save size={16} />
         Save Changes

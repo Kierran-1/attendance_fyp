@@ -307,7 +307,7 @@ export default function UploadRosterPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 sm:space-y-8">
       <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
@@ -330,7 +330,7 @@ export default function UploadRosterPage() {
         </Link>
       </section>
 
-      <section className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+      <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
         {/* Step 1: File upload */}
         {uploadStep === 1 && (
           <div className="space-y-6">
@@ -340,7 +340,7 @@ export default function UploadRosterPage() {
               onDragOver={(e) => handleDragState(e, true)}
               onDragLeave={(e) => handleDragState(e, false)}
               onDrop={handleDrop}
-              className={`block cursor-pointer rounded-[28px] border-2 border-dashed p-10 text-center transition ${
+              className={`block cursor-pointer rounded-2xl sm:rounded-[2rem] border-2 border-dashed p-10 text-center transition ${
                 isDragging
                   ? 'border-[#E4002B] bg-rose-50'
                   : 'border-gray-200 bg-gray-50 hover:border-[#E4002B]/40 hover:bg-rose-50/40'
@@ -372,7 +372,7 @@ export default function UploadRosterPage() {
         {/* Step 2: Preview & confirm */}
         {uploadStep === 2 && (
           <div className="space-y-6">
-            <div className="flex flex-col gap-3 rounded-3xl border border-gray-100 bg-gray-50/60 p-5">
+            <div className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-gray-50/60 p-5">
               <p className="text-sm font-bold text-gray-900">Selected file</p>
               <p className="text-sm text-gray-600">{uploadFile?.name || 'No file selected'}</p>
               <p className={`text-sm font-semibold ${sessionDates.length > 0 ? 'text-green-600' : 'text-red-500'}`}>
@@ -385,7 +385,7 @@ export default function UploadRosterPage() {
 
             <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
               <div className="space-y-6">
-                <div className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5">
+                <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5">
                   <h3 className="text-base font-bold text-gray-900">Parsed Metadata</h3>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -413,7 +413,7 @@ export default function UploadRosterPage() {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-gray-100 bg-gray-50/70 p-5">
+                <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-5">
                   <h3 className="text-base font-bold text-gray-900">Column Mapping</h3>
 
                   <div className="mt-4 space-y-4">
@@ -446,7 +446,7 @@ export default function UploadRosterPage() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
+              <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm">
                 <div className="border-b border-gray-100 px-6 py-4">
                   <h3 className="text-base font-bold text-gray-900">Student Preview</h3>
                   <p className="mt-1 text-sm text-gray-500">
@@ -494,13 +494,13 @@ export default function UploadRosterPage() {
                 type="button"
                 onClick={confirmImport}
                 disabled={importing}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <CheckCircle2 size={16} />
                 {importing ? 'Importing…' : 'Confirm Import'}
               </button>
 
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]">
                 <Upload size={16} />
                 Choose Another File
                 <input
@@ -514,7 +514,7 @@ export default function UploadRosterPage() {
               <button
                 type="button"
                 onClick={resetUploadState}
-                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-red-100 hover:text-red-600"
+                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
               >
                 <X size={16} />
                 Reset
@@ -526,7 +526,7 @@ export default function UploadRosterPage() {
         {/* Step 3: Success */}
         {uploadStep === 3 && importResult && (
           <div className="space-y-6">
-            <div className="flex flex-col items-center rounded-[28px] bg-green-50 px-6 py-12 text-center">
+            <div className="flex flex-col items-center rounded-2xl sm:rounded-[2rem] bg-green-50 px-6 py-12 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
                 <CheckCircle2 size={32} className="text-green-600" />
               </div>
@@ -544,7 +544,7 @@ export default function UploadRosterPage() {
                 { label: 'Enrolled in Course', value: importResult.enrolled },
                 { label: 'Already Enrolled (Skipped)', value: importResult.skipped },
               ].map(({ label, value }) => (
-                <div key={label} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+                <div key={label} className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
                     {label}
                   </p>
@@ -570,7 +570,7 @@ export default function UploadRosterPage() {
               <button
                 type="button"
                 onClick={resetUploadState}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
+                className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
               >
                 <Upload size={16} />
                 Import Another File
@@ -578,7 +578,7 @@ export default function UploadRosterPage() {
 
               <Link
                 href="/lecturer/classes"
-                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
               >
                 <ArrowLeft size={16} />
                 View Classes

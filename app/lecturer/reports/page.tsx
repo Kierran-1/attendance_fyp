@@ -266,9 +266,6 @@ export default function ReportsPage() {
       r.unit.toLowerCase().includes(q)
     );
   }, [rawUnits, selectedCode, studentSearch]);
-  console.log('rawUnits', rawUnits);
-  console.log('atRiskRows', atRiskRows);
-
   // Summary stats
   const totalStudents = useMemo(() => {
     const all = new Set<string>();
@@ -315,7 +312,7 @@ export default function ReportsPage() {
       <div className="rounded-2xl border border-red-100 bg-red-50 px-6 py-8 text-center max-w-sm">
         <AlertTriangle size={28} className="mx-auto mb-3 text-red-500" />
         <p className="font-semibold text-red-700">{error}</p>
-        <button onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-[#E4002B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#C70026]">
+        <button onClick={() => window.location.reload()} className="mt-4 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]">
           Retry
         </button>
       </div>

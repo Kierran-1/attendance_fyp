@@ -536,7 +536,7 @@ export default function LiveAttendancePage() {
                     type="button"
                     onClick={handleStartSession}
                     disabled={starting || !selectedUnitId}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3.5 text-sm font-bold text-white transition hover:bg-[#C70026] disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {starting
                       ? <><Loader2 size={16} className="animate-spin" /> Starting…</>
@@ -595,7 +595,7 @@ export default function LiveAttendancePage() {
                 type="button"
                 onClick={handleEndSession}
                 disabled={stopping}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 text-sm font-bold text-white transition hover:bg-white/25 disabled:opacity-60"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 text-sm font-semibold text-white transition hover:bg-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {stopping
                   ? <><Loader2 size={16} className="animate-spin" /> Ending…</>
@@ -656,7 +656,7 @@ export default function LiveAttendancePage() {
                 <button
                   type="button"
                   onClick={() => sessionIdRef.current && fetchSessionQR(sessionIdRef.current)}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                 >
                   <RefreshCw size={12} /> Refresh now
                 </button>
@@ -666,15 +666,15 @@ export default function LiveAttendancePage() {
 
           {/* Stats cards */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm text-center">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Present</p>
               <p className="mt-2 text-3xl font-black text-green-600">{presentCount}</p>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm text-center">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Absent</p>
               <p className="mt-2 text-3xl font-black text-gray-700">{absentCount}</p>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm text-center">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Rate</p>
               <p className="mt-2 text-3xl font-black text-[#E4002B]">{attendanceRate}%</p>
             </div>
@@ -702,7 +702,7 @@ export default function LiveAttendancePage() {
                   <button
                     type="button"
                     onClick={startScanner}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:bg-rose-50 hover:text-[#E4002B]"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                   >
                     <Camera size={16} /> Open Camera Scanner
                   </button>
@@ -710,7 +710,7 @@ export default function LiveAttendancePage() {
                   <button
                     type="button"
                     onClick={stopScanner}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-800 py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                   >
                     <StopCircle size={16} /> Stop Camera
                   </button>
@@ -751,7 +751,7 @@ export default function LiveAttendancePage() {
                       type="button"
                       onClick={handleManualSubmit}
                       disabled={!manualToken.trim() || submittingManual}
-                      className="rounded-xl bg-[#E4002B] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#C70026] disabled:opacity-50"
+                      className="rounded-2xl bg-[#E4002B] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {submittingManual ? <Loader2 size={14} className="animate-spin" /> : 'Submit'}
                     </button>
@@ -777,7 +777,7 @@ export default function LiveAttendancePage() {
               <button
                 type="button"
                 onClick={() => sessionIdRef.current && fetchCheckIns(sessionIdRef.current)}
-                className="rounded-xl border border-gray-200 p-2 text-gray-400 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="rounded-2xl border border-gray-200 p-2 text-gray-400 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                 title="Refresh"
               >
                 <RefreshCw size={14} className={checkInsLoading ? 'animate-spin' : ''} />

@@ -205,10 +205,10 @@ const Button = ({
   disabled?: boolean;
   className?: string;
 }) => {
-  const base = "inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed";
+  const base = "inline-flex items-center justify-center gap-1.5 px-4 py-3 text-sm font-semibold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed";
   const variants = {
-    primary: "bg-[#e4002b] text-white hover:bg-[#c90025] shadow-sm",
-    secondary: "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50",
+    primary: "bg-[#E4002B] text-white hover:bg-[#C70026]",
+    secondary: "bg-white border border-gray-200 text-gray-700 shadow-sm hover:border-[#E4002B]/20 hover:text-[#E4002B]",
     ghost: "text-gray-600 hover:bg-gray-100",
     danger: "text-red-600 hover:bg-red-50"
   };
@@ -230,9 +230,9 @@ const IconButton = ({
   variant?: "default" | "danger";
   className?: string;
 }) => (
-  <button 
-    onClick={onClick} 
-    className={`p-1.5 sm:p-2 rounded-lg transition-colors ${variant === "danger" ? "text-gray-400 hover:text-red-500 hover:bg-red-50" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"} ${className}`}
+  <button
+    onClick={onClick}
+    className={`p-1.5 sm:p-2 rounded-xl transition-colors ${variant === "danger" ? "text-gray-400 hover:text-red-500 hover:bg-red-50" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"} ${className}`}
   >
     <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
   </button>
@@ -261,7 +261,7 @@ const Badge = ({
 };
 
 const Card = ({ children, className = "", onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) => (
-  <div onClick={onClick} className={`bg-white rounded-2xl border border-gray-100 shadow-sm ${className}`}>
+  <div onClick={onClick} className={`bg-white rounded-2xl sm:rounded-[2rem] border border-gray-100 shadow-sm ${className}`}>
     {children}
   </div>
 );
@@ -712,7 +712,7 @@ export default function ClassesPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">Classes</h1>
-          <p className="text-sm text-gray-500 mt-1.5">Manage units, groups, and enrollments</p>
+          <p className="mt-2 text-sm text-gray-500">Manage units, groups, and enrollments</p>
         </div>
         <Button onClick={() => setViewMode("upload")} className="shrink-0">
           <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -729,7 +729,7 @@ export default function ClassesPage() {
           { label: "Students", value: stats.totalStudents, icon: Users, color: "green", sub: "unique" },
           { label: "At Risk", value: stats.atRiskStudents, icon: ShieldAlert, color: "red" },
         ].map((stat, i) => (
-          <Card key={i} className="p-3 sm:p-5">
+          <Card key={i} className="p-5">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[10px] sm:text-xs font-medium text-gray-400 uppercase tracking-wider mb-1 truncate">{stat.label}</p>
@@ -885,11 +885,11 @@ export default function ClassesPage() {
           <ChevronLeft className="w-4 h-4" /> Back to Classes
         </button>
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">Upload Master List</h1>
-        <p className="text-sm text-gray-500 mt-1.5">Import from Swinburne attendance form</p>
+        <p className="mt-2 text-sm text-gray-500">Import from Swinburne attendance form</p>
       </div>
 
       {/* Stepper */}
-      <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl shadow-sm px-4 sm:px-6 py-3 sm:py-4">
+      <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-2xl sm:rounded-[2rem] shadow-sm px-6 py-4">
         {[{ n: 1, label: 'Upload' }, { n: 2, label: 'Map columns' }].map(({ n, label }, i) => (
           <React.Fragment key={n}>
             <div className="flex items-center gap-2">
@@ -905,7 +905,7 @@ export default function ClassesPage() {
 
       <Card className="overflow-hidden">
         {uploadStep === 1 ? (
-          <div className="p-4 sm:p-8">
+          <div className="p-6">
             <div
               className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center transition-all ${isDragging ? 'border-[#e4002b] bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
               onDragEnter={e => handleDrag(e, true)} onDragLeave={e => handleDrag(e, false)}
@@ -917,14 +917,14 @@ export default function ClassesPage() {
               <p className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">Drop Excel file here</p>
               <p className="text-xs sm:text-sm text-gray-400 mb-5 sm:mb-6">Each sheet = one class group</p>
               <input type="file" accept=".xlsx,.xls" id="file-upload" className="hidden" onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
-              <label htmlFor="file-upload" className="inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-[#e4002b] text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-[#c90025] cursor-pointer transition-colors">
+              <label htmlFor="file-upload" className="inline-flex items-center gap-2 px-4 py-3 bg-[#E4002B] text-sm font-semibold rounded-2xl text-white hover:bg-[#C70026] cursor-pointer transition">
                 <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Choose File
               </label>
               <p className="text-xs text-gray-300 mt-3 sm:mt-4">.xlsx, .xls · up to 10 MB</p>
             </div>
           </div>
         ) : (
-          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+          <div className="p-6 space-y-4 sm:space-y-6">
             {/* Matched sheets */}
             {parsedSheets.length > 0 && (
               <div className="rounded-xl border border-red-100 bg-red-50/50 p-3 sm:p-4">
@@ -1052,7 +1052,7 @@ export default function ClassesPage() {
         {/* Header Card */}
         <Card className="overflow-hidden">
           <div className="h-1 bg-[#e4002b]" />
-          <div className="p-4 sm:p-6">
+          <div className="p-6">
             {/* Badges */}
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <Badge variant="red">{selectedClass.unitCode}</Badge>
@@ -1111,7 +1111,7 @@ export default function ClassesPage() {
         {/* Content */}
         <Card>
           {activeTab === "students" && (
-            <div className="p-4 sm:p-6">
+            <div className="p-6">
               <div className="flex items-center justify-between mb-4 sm:mb-5">
                 <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Students</h3>
                 <Button onClick={() => setShowAddStudentModal(true)}>
@@ -1212,7 +1212,7 @@ export default function ClassesPage() {
           )}
 
           {activeTab === "sessions" && (
-            <div className="p-4 sm:p-6">
+            <div className="p-6">
               <h3 className="font-semibold text-gray-900 mb-4 sm:mb-5 text-sm sm:text-base">Attendance Sessions</h3>
               {selectedClass.sessions.length > 0 ? (
                 <div className="space-y-2">

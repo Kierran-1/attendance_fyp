@@ -141,24 +141,24 @@ export default function LecturerProfilePage() {
         <span className="text-red-600">Profile</span>
       </nav>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
-            My <span className="text-[#E4002B]">Profile</span>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
+            My Profile
           </h1>
-          <p className="mt-2 text-sm text-gray-500 sm:text-base">
+          <p className="mt-2 text-sm text-gray-500">
             View your lecturer account details and synced Microsoft sign-in information.
           </p>
         </div>
 
         <Link
           href="/lecturer/dashboard"
-          className="inline-flex items-center gap-2 self-start rounded-2xl border border-gray-100 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-rose-200 hover:bg-rose-50 hover:text-[#E4002B]"
+          className="inline-flex items-center gap-2 self-start rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
         >
           <ArrowLeft size={16} />
           Back to Dashboard
         </Link>
-      </div>
+      </section>
 
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -167,7 +167,7 @@ export default function LecturerProfilePage() {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_1.35fr]">
-        <section className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm">
           <div className="bg-gradient-to-r from-[#E4002B] via-rose-500 to-rose-400 px-6 py-6 text-white">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">
               Account Overview
@@ -221,7 +221,7 @@ export default function LecturerProfilePage() {
           </div>
         </section>
 
-        <section className="rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm sm:p-7">
+        <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-400">
               Academic Information
