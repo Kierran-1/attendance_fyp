@@ -212,10 +212,12 @@ export async function POST(request: NextRequest) {
     schoolStatus: 'Active',
   }));
 
+  let userCreateError: string | null = null;
   try {
     await prisma.user.createMany({ data: userData, skipDuplicates: true });
   } catch (err) {
     console.error('User bulk create failed:', err);
+    userCreateError = err instanceof Error ? err.message : String(err);
   }
 
   const emails = userData.map((u) => u.email);
@@ -264,6 +266,7 @@ export async function POST(request: NextRequest) {
     enrolled,
     skipped: validStudents.length - enrolled,
     errors,
+    userCreateError,
     duration: `${Date.now() - startTime}ms`,
   });
 }

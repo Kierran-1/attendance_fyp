@@ -30,7 +30,9 @@ export async function PATCH(
   }
 
   const now = Date.now();
-  const elapsed = Math.floor((now - classSession.sessionTime.getTime()) / 60_000);
+  const elapsed = classSession.sessionTime
+    ? Math.floor((now - classSession.sessionTime.getTime()) / 60_000)
+    : classSession.sessionDuration ?? 0;
   const newDuration = Math.max(0, elapsed);
 
   await prisma.classSession.update({
