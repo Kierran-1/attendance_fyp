@@ -150,12 +150,17 @@ model AttendanceEvidence {
   attendanceRecordId String
   uploadedBy         String
   fileUrl            String
+  fileName           String                @default("")
   reason             String?
   uploadedAt         DateTime              @default(now())
   status             String                @default("PENDING")
+  lecturerComment    String?
+  reviewedBy         String?
+  reviewedAt         DateTime?
   attendanceRecord   ClassAttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
 
   @@index([attendanceRecordId])
+  @@index([uploadedBy])
 }
 
 model AppAlert {

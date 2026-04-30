@@ -5,6 +5,7 @@ import {
   RadioTower,
   BarChart3,
   Bell,
+  FileText,
 } from 'lucide-react';
 
 type MenuItem = {
@@ -74,6 +75,11 @@ export const lecturerMenu: {
           name: 'Alerts',
           href: '/lecturer/alerts',
           icon: <Bell size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
+        },
+        {
+          name: 'Absence Requests',
+          href: '/lecturer/absence',
+          icon: <FileText size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
         },
         // {
         //   name: 'Profile',
