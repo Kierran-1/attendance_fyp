@@ -185,26 +185,26 @@ export default function StudentAlertsPage() {
   }, [alerts]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 pb-12">
+    <div className="space-y-6 sm:space-y-8">
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-        <span>Student</span>
+        <span className="cursor-default hover:text-gray-600">Student</span>
         <ChevronRight size={12} />
         <span className="text-red-600">Alerts</span>
       </nav>
 
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
-            Student <span className="text-red-600">Alerts</span>
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
+            Alerts
           </h1>
-          <p className="max-w-2xl text-base text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             View lecturer messages that are matched to your real registered units.
           </p>
         </div>
 
         <Link
           href="/student/dashboard"
-          className="inline-flex items-center gap-2 self-start rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+          className="inline-flex items-center gap-2 self-start rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
         >
           <ArrowLeft size={16} />
           Back to Dashboard
@@ -218,7 +218,7 @@ export default function StudentAlertsPage() {
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Total Alerts
@@ -231,7 +231,7 @@ export default function StudentAlertsPage() {
           <p className="mt-2 text-xs text-gray-500">Lecturer alerts for your units</p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Critical
@@ -243,7 +243,7 @@ export default function StudentAlertsPage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Warning
@@ -255,7 +255,7 @@ export default function StudentAlertsPage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
               Info
@@ -268,7 +268,7 @@ export default function StudentAlertsPage() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
         <label
           htmlFor="alert-search"
           className="mb-2 block text-sm font-semibold text-gray-700"
@@ -294,7 +294,7 @@ export default function StudentAlertsPage() {
 
       <section className="space-y-4">
         {loading ? (
-          <div className="flex items-center justify-center gap-3 rounded-[2rem] border border-gray-100 bg-white px-6 py-16 text-sm text-gray-500 shadow-sm">
+          <div className="flex items-center justify-center gap-3 rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white px-6 py-16 text-sm text-gray-500 shadow-sm">
             <Loader2 size={18} className="animate-spin text-red-600" />
             Loading alerts...
           </div>
@@ -305,7 +305,7 @@ export default function StudentAlertsPage() {
             return (
               <article
                 key={item.id}
-                className="rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-gray-200"
+                className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-gray-200"
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex items-start gap-3">
@@ -358,7 +358,7 @@ export default function StudentAlertsPage() {
                     {item.actionHref && item.actionHref !== '/student/alerts' ? (
                       <Link
                         href={item.actionHref}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                        className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                       >
                         {item.actionLabel ?? 'Open'}
                       </Link>
@@ -369,7 +369,7 @@ export default function StudentAlertsPage() {
             );
           })
         ) : (
-          <div className="rounded-[2rem] border border-dashed border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-dashed border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
             <h2 className="text-xl font-bold text-gray-900">No alerts found</h2>
             <p className="mt-2 text-sm text-gray-500">
               You do not have any lecturer alerts for your registered units yet.

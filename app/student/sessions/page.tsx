@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowLeft,
   CalendarDays,
   ChevronRight,
   Clock3,
@@ -171,16 +172,19 @@ export default function StudentSessionsPage() {
   const upcomingCount = sessions.filter((item) => item.status === 'Upcoming').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 sm:space-y-8">
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="cursor-default hover:text-gray-600">Student</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Sessions</span>
+      </nav>
+
       <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Student Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
             My Sessions
           </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             View actual class-session rows from the backend instead of inferred session types.
           </p>
         </div>
@@ -190,7 +194,7 @@ export default function StudentSessionsPage() {
             href="/student/dashboard"
             className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
-            <ChevronRight size={16} className="rotate-180" />
+            <ArrowLeft size={16} />
             Back to Dashboard
           </Link>
 
@@ -211,23 +215,23 @@ export default function StudentSessionsPage() {
       )}
 
       <section className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Total Sessions</p>
           <p className="mt-3 text-3xl font-black text-gray-900">{loading ? '—' : totalSessions}</p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Active</p>
           <p className="mt-3 text-3xl font-black text-green-600">{loading ? '—' : activeCount}</p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Upcoming</p>
           <p className="mt-3 text-3xl font-black text-blue-600">{loading ? '—' : upcomingCount}</p>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto]">
           <div className="relative">
             <Search
@@ -291,7 +295,7 @@ export default function StudentSessionsPage() {
           filteredSessions.map((item) => (
             <article
               key={item.id}
-              className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
+              className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>

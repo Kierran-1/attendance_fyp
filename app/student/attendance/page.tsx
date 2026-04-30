@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
   Clock3,
   Loader2,
+  QrCode,
   Search,
   XCircle,
 } from 'lucide-react';
@@ -148,21 +150,19 @@ export default function StudentAttendancePage() {
   }, [records, presentCount]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 pb-12">
-      {/* Breadcrumb */}
+    <div className="space-y-6 sm:space-y-8">
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-        <span>Student</span>
+        <span className="cursor-default hover:text-gray-600">Student</span>
         <ChevronRight size={12} />
         <span className="text-red-600">Attendance</span>
       </nav>
 
-      {/* Header */}
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
-            Attendance <span className="text-red-600">History</span>
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
+            Attendance History
           </h1>
-          <p className="max-w-2xl text-base text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             Review your attendance records across all past sessions and track your current
             progress by unit and session.
           </p>
@@ -171,17 +171,17 @@ export default function StudentAttendancePage() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/student/dashboard"
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-700 shadow-sm transition hover:border-red-100 hover:text-red-600"
+            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
-            <ChevronRight size={16} className="rotate-180" />
+            <ArrowLeft size={16} />
             Back to Dashboard
           </Link>
 
           <Link
             href="/student/qrcode"
-            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026]"
           >
-            <CalendarDays size={16} />
+            <QrCode size={16} />
             Open QR
           </Link>
         </div>
@@ -199,7 +199,7 @@ export default function StudentAttendancePage() {
 
       {/* Summary Cards */}
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Total Records
@@ -212,7 +212,7 @@ export default function StudentAttendancePage() {
           <p className="mt-2 text-xs text-gray-500">All recorded past sessions</p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Present
@@ -225,7 +225,7 @@ export default function StudentAttendancePage() {
           <p className="mt-2 text-xs text-gray-500">Successful attendance records</p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Absent
@@ -238,7 +238,7 @@ export default function StudentAttendancePage() {
           <p className="mt-2 text-xs text-gray-500">Sessions without a valid check-in</p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Attendance Rate
@@ -253,7 +253,7 @@ export default function StudentAttendancePage() {
       </section>
 
       {/* Search and Filter */}
-      <section className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
           <div className="relative">
             <Search
@@ -277,8 +277,8 @@ export default function StudentAttendancePage() {
                 onClick={() => setStatusFilter(status)}
                 className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                   statusFilter === status
-                    ? 'bg-red-600 text-white'
-                    : 'border border-gray-200 bg-white text-gray-700 hover:border-red-100 hover:text-red-600'
+                    ? 'bg-[#E4002B] text-white'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:border-[#E4002B]/20 hover:text-[#E4002B]'
                 }`}
               >
                 {status}
@@ -289,7 +289,7 @@ export default function StudentAttendancePage() {
       </section>
 
       {/* Attendance Table / Cards */}
-      <section className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-50 px-6 py-5">
           <div>
             <h2 className="text-lg font-black text-gray-900">Attendance Records</h2>
@@ -367,17 +367,17 @@ export default function StudentAttendancePage() {
                   <div className="flex flex-wrap gap-3 lg:justify-end">
                     <Link
                       href="/student/classes"
-                      className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700 transition hover:border-red-100 hover:text-red-600"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                     >
                       View Classes
                     </Link>
 
                     <Link
                       href="/student/qrcode"
-                      className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700 active:scale-95"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
                     >
+                      <QrCode size={16} />
                       Open QR
-                      <ChevronRight size={16} />
                     </Link>
                   </div>
                 </div>

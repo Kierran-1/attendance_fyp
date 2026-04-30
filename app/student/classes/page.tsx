@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowLeft,
   BookOpen,
   CalendarDays,
   ChevronRight,
@@ -10,7 +11,6 @@ import {
   GraduationCap,
   LayoutGrid,
   Loader2,
-  MapPin,
   Search,
   UserCircle2,
 } from 'lucide-react';
@@ -178,19 +178,19 @@ export default function StudentClassesPage() {
   ).length;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 pb-12">
+    <div className="space-y-6 sm:space-y-8">
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-        <span>Student</span>
+        <span className="cursor-default hover:text-gray-600">Student</span>
         <ChevronRight size={12} />
         <span className="text-red-600">Classes</span>
       </nav>
 
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
-            My <span className="text-red-600">Classes</span>
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
+            My Classes
           </h1>
-          <p className="max-w-2xl text-base text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             Review your enrolled units together with the real session rows created on the lecturer side.
           </p>
         </div>
@@ -198,15 +198,15 @@ export default function StudentClassesPage() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/student/dashboard"
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-700 shadow-sm transition hover:border-red-100 hover:text-red-600"
+            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
-            <ChevronRight size={16} className="rotate-180" />
+            <ArrowLeft size={16} />
             Back to Dashboard
           </Link>
 
           <Link
             href="/student/attendance"
-            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026]"
           >
             <CalendarDays size={16} />
             View Attendance
@@ -222,7 +222,7 @@ export default function StudentClassesPage() {
       ) : null}
 
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Total Units
@@ -235,7 +235,7 @@ export default function StudentClassesPage() {
           <p className="mt-2 text-xs text-gray-500">Units linked to your student account</p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Avg Attendance
@@ -248,7 +248,7 @@ export default function StudentClassesPage() {
           <p className="mt-2 text-xs text-gray-500">Based on completed session rows only</p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Strong Progress
@@ -261,7 +261,7 @@ export default function StudentClassesPage() {
           <p className="mt-2 text-xs text-gray-500">Units with 80% attendance or above</p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Need Attention
@@ -275,7 +275,7 @@ export default function StudentClassesPage() {
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-lg font-black text-gray-900">Search Classes</p>
@@ -302,14 +302,14 @@ export default function StudentClassesPage() {
 
       <section className="space-y-5">
         {loading ? (
-          <div className="flex items-center justify-center rounded-[28px] border border-gray-100 bg-white px-6 py-16 shadow-sm">
+          <div className="flex items-center justify-center rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white px-6 py-16 shadow-sm">
             <div className="flex items-center gap-3 text-gray-500">
               <Loader2 size={18} className="animate-spin text-red-600" />
               <span className="text-sm font-semibold">Loading classes...</span>
             </div>
           </div>
         ) : filteredClasses.length === 0 ? (
-          <div className="rounded-[28px] border border-dashed border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-dashed border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
             <p className="text-lg font-black text-gray-900">No classes found</p>
             <p className="mt-2 text-sm text-gray-500">
               Try another search or wait until your lecturer-uploaded units appear.
@@ -329,7 +329,7 @@ export default function StudentClassesPage() {
             return (
               <article
                 key={item.id}
-                className="overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm transition hover:shadow-md"
+                className="overflow-hidden rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm transition hover:shadow-md"
               >
                 <div className="border-b border-gray-100 px-6 py-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -412,7 +412,7 @@ export default function StudentClassesPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-gray-100 bg-gray-50/60 p-5">
+                  <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-gray-50/60 p-5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-bold uppercase tracking-widest text-gray-400">
                         Session Rows

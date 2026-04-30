@@ -94,7 +94,7 @@ const StatCard = ({
   color: string;
   trend?: string;
 }) => (
-  <div className="group relative overflow-hidden rounded-3xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:border-red-100 hover:shadow-md">
+  <div className="group relative overflow-hidden rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm transition-all hover:border-red-100 hover:shadow-md">
     <div className="flex items-start justify-between">
       <div>
         <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
@@ -279,21 +279,19 @@ export default function StudentDashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 pb-12">
-      {/* Top Navigation / Breadcrumb */}
+    <div className="space-y-6 sm:space-y-8">
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
         <span className="cursor-default hover:text-gray-600">Student</span>
         <ChevronRight size={12} />
         <span className="text-red-600">Dashboard</span>
       </nav>
 
-      {/* Welcome Header */}
-      <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
-            {greeting}, <span className="text-red-600">{firstName}</span>
+      <header className="flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1.5 sm:space-y-2">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-gray-900 leading-tight">
+            {greeting}, <span className="text-[#E4002B]">{firstName}</span>
           </h1>
-          <p className="max-w-2xl text-base text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             You are enrolled in{' '}
             <span className="font-bold text-gray-900">
               {dashboard?.stats.enrolledCourses ?? 0} unit
@@ -304,7 +302,7 @@ export default function StudentDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-5 py-3.5 shadow-sm">
+          <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E4002B] text-white">
               <UserCircle2 size={22} />
             </div>
@@ -324,12 +322,9 @@ export default function StudentDashboardPage() {
 
           <Link
             href="/student/attendance"
-            className="group flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-700 shadow-sm transition-all hover:border-red-100 hover:text-red-600"
+            className="group flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
-            <ScanLine
-              size={18}
-              className="transition-transform group-hover:-translate-y-0.5"
-            />
+            <CalendarDays size={16} />
             View Attendance
           </Link>
         </div>
@@ -381,12 +376,10 @@ export default function StudentDashboardPage() {
         />
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Main Content Area */}
-        <div className="space-y-8 lg:col-span-2">
-          {/* My Units */}
-          <div className="overflow-hidden rounded-[2rem] border border-gray-100 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-50 px-8 py-6">
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <div className="overflow-hidden rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-50 px-6 py-5">
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-red-50 p-2 text-red-600">
                   <BookOpen size={20} />
@@ -423,7 +416,7 @@ export default function StudentDashboardPage() {
                   return (
                     <div
                       key={course.id}
-                      className="group flex flex-col gap-6 p-8 transition-colors hover:bg-gray-50/50 sm:flex-row sm:items-center"
+                      className="group flex flex-col gap-6 p-6 transition-colors hover:bg-gray-50/50 sm:flex-row sm:items-center"
                     >
                       <div className="flex-1 space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -472,7 +465,7 @@ export default function StudentDashboardPage() {
 
                         <Link
                           href="/student/attendance"
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-5 py-3 text-xs font-bold text-gray-700 transition-all hover:bg-red-600 hover:text-white group-hover:shadow-md"
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-xs font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                         >
                           Details <ArrowUpRight size={14} />
                         </Link>
@@ -484,9 +477,8 @@ export default function StudentDashboardPage() {
             </div>
           </div>
 
-          {/* Recent Attendance */}
-          <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
-            <div className="mb-8 flex items-center justify-between">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600">
                   <Calendar size={20} />
@@ -558,11 +550,10 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
-        {/* Right Sidebar */}
-        <div className="space-y-8">
+        <div className="space-y-6">
           {/* Live Session */}
           <div
-            className={`relative overflow-hidden rounded-[2rem] p-8 text-white shadow-xl transition-all ${
+            className={`relative overflow-hidden rounded-2xl sm:rounded-[2rem] p-6 text-white shadow-xl transition-all ${
               activeSession
                 ? 'bg-red-600 shadow-red-100'
                 : 'bg-gray-900 shadow-gray-100'
@@ -623,7 +614,7 @@ export default function StudentDashboardPage() {
 
                   <Link
                     href="/student/qrcode"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3.5 text-sm font-bold text-red-600 transition-transform hover:scale-[1.02] active:scale-95"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3 text-sm font-semibold text-red-600 transition hover:bg-white/90"
                   >
                     <QrCode size={18} /> Show My QR
                   </Link>
@@ -637,7 +628,7 @@ export default function StudentDashboardPage() {
 
                   <Link
                     href="/student/qrcode"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-3.5 text-sm font-bold text-white transition-all hover:bg-white/20 active:scale-95"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
                   >
                     <QrCode size={18} /> Open QR Page
                   </Link>
@@ -650,7 +641,7 @@ export default function StudentDashboardPage() {
           </div>
 
           {/* Today Snapshot */}
-          <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
             <div className="mb-6 flex items-center gap-3">
               <div className="rounded-xl bg-red-50 p-2 text-red-600">
                 <Clock3 size={20} />
@@ -701,7 +692,7 @@ export default function StudentDashboardPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="rounded-[2rem] border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
             <div className="mb-6 flex items-center gap-3">
               <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600">
                 <ScanLine size={20} />
