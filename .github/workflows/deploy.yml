@@ -17,6 +17,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /root/attendance_fyp
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             docker compose up -d --build --remove-orphans
             docker image prune -f
