@@ -1,19 +1,5 @@
 import { prisma } from '@/lib/prisma';
 
-type SafeStudentProfile = {
-  id: string;
-  studentId: string;
-  major: string | null;
-  enrollmentYear: number | null;
-  program: string | null;
-  faculty: string | null;
-  intake: string | null;
-  user: {
-    name: string | null;
-    email: string | null;
-  };
-};
-
 type EnrollmentTableConfig = {
   tableName: string;
   studentColumn: string;
@@ -22,36 +8,6 @@ type EnrollmentTableConfig = {
 
 // Cached after first discovery so later API calls are much faster.
 let cachedEnrollmentConfig: EnrollmentTableConfig | undefined;
-
-/**
- * Read only columns that are confirmed by your current DB error shape.
- * We intentionally do NOT read phone / nationality / schoolStatus here
- * because those columns are not guaranteed to exist yet.
- */
-export async function getSafeStudentProfileByUserId(
-  userId: string
-): Promise<SafeStudentProfile | null> {
-  const studentProfile = await prisma.studentProfile.findUnique({
-    where: { userId },
-    select: {
-      id: true,
-      studentId: true,
-      major: true,
-      enrollmentYear: true,
-      program: true,
-      faculty: true,
-      intake: true,
-      user: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-    },
-  });
-
-  return studentProfile;
-}
 
 /**
  * Discover the actual enrollment table in the current database.
