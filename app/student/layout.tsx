@@ -25,9 +25,11 @@ export default function StudentLayout({
   useEffect(() => {
     if (status === 'loading') return;
 
-    // Redirect unauthenticated users back to login.
+    // Redirect unauthenticated users back to login, preserving the current URL so
+    // QR-link arrivals (e.g. /student/scan?token=X) are sent back after sign-in.
     if (!session) {
-      router.replace('/auth/login');
+      const callbackUrl = encodeURIComponent(pathname + window.location.search);
+      router.replace(`/auth/login?callbackUrl=${callbackUrl}`);
       return;
     }
 
@@ -76,22 +78,7 @@ export default function StudentLayout({
         <TopNavbar onMenuClick={toggleSidebar} />
 
         <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-          <div className="mx-auto w-full max-w-7xl space-y-4">
-            {/* Small route status strip to make the shell feel more polished */}
-            <div className="rounded-[1.65rem] border border-white/80 bg-white/85 px-4 py-3 text-sm text-slate-500 shadow-sm backdrop-blur-xl">
-              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <span className="font-semibold text-slate-900">
-                    {session.user.name ?? 'Student'}
-                  </span>
-                  {session.user.email ? (
-                    <span className="truncate"> · {session.user.email}</span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            {/* Main white surface shared by all student pages */}
+          <div className="mx-auto w-full max-w-7xl">
             <div className="rounded-[2rem] border border-white/80 bg-white/78 p-4 shadow-[0_20px_70px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:p-5 lg:p-6">
               {children}
             </div>

@@ -80,15 +80,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Session is no longer active' }, { status: 400 });
     }
 
-    // Check if challenge token was already used (prevent reuse)
-    if (stage1Data.usedAt) {
+    // Check if Stage 2 already done (prevents replay)
+    const existingStage2 = await prisma.classAttendanceData.findFirst({
+      where: {
+        classSessionId: stage1Data.classSessionId,
+        studentId: payload.studentId,
+        verificationStage: 'STAGE_2',
+      },
+    });
+    if (existingStage2) {
       return NextResponse.json({ error: 'Challenge token already used' }, { status: 409 });
     }
 
     const now = new Date();
 
     // Record Stage 2 raw scan
-    const stage2Record = await prisma.classAttendanceData.create({
+    await prisma.classAttendanceData.create({
       data: {
         classSessionId: stage1Data.classSessionId,
         studentId: payload.studentId,
@@ -96,12 +103,6 @@ export async function POST(request: NextRequest) {
         scanMethod: 'QR',
         verificationStage: 'STAGE_2',
       },
-    });
-
-    // Mark Stage 1 challenge token as used to prevent replay attacks
-    await prisma.classAttendanceData.update({
-      where: { id: stage1Data.id },
-      data: { usedAt: now },
     });
 
     // Confirm attendance

@@ -427,19 +427,19 @@ export default function StudentQRCodePage() {
       : 'bg-rose-50 text-[#E4002B] border-rose-200';
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 pb-12">
+    <div className="space-y-6 sm:space-y-8">
       <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-        <span>Student</span>
+        <span className="cursor-default hover:text-gray-600">Student</span>
         <ChevronRight size={12} />
         <span className="text-red-600">QR Code</span>
       </nav>
 
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-black tracking-tight text-gray-900 sm:text-5xl">
-            My <span className="text-red-600">QR Code</span>
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
+            My QR Code
           </h1>
-          <p className="max-w-2xl text-base text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             Use this page during a live attendance session. Your QR updates in real time
             to support the lecturer verification flow.
           </p>
@@ -448,7 +448,7 @@ export default function StudentQRCodePage() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/student/dashboard"
-            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-sm font-bold text-gray-700 shadow-sm transition hover:border-red-100 hover:text-red-600"
+            className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
             <ArrowLeft size={16} />
             Back to Dashboard
@@ -458,7 +458,7 @@ export default function StudentQRCodePage() {
             type="button"
             onClick={handleRefresh}
             disabled={qrLoading}
-            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C70026] disabled:opacity-60"
           >
             <RefreshCw size={16} className={qrLoading ? 'animate-spin' : ''} />
             Refresh QR
@@ -474,7 +474,7 @@ export default function StudentQRCodePage() {
       ) : null}
 
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               QR Status
@@ -503,7 +503,7 @@ export default function StudentQRCodePage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Verification
@@ -528,7 +528,7 @@ export default function StudentQRCodePage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Active Unit
@@ -543,7 +543,7 @@ export default function StudentQRCodePage() {
           </p>
         </div>
 
-        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
               Token Expires
@@ -566,7 +566,7 @@ export default function StudentQRCodePage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p
@@ -602,12 +602,12 @@ export default function StudentQRCodePage() {
           </div>
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center rounded-[28px] bg-gray-50 py-24">
+            <div className="flex flex-col items-center justify-center rounded-2xl bg-gray-50 py-24">
               <Loader2 size={32} className="animate-spin text-gray-300" />
               <p className="mt-4 text-sm text-gray-400">Loading session...</p>
             </div>
           ) : verificationStage === 'VERIFIED' ? (
-            <div className="flex flex-col items-center justify-center rounded-[28px] bg-green-50 py-20 text-center">
+            <div className="flex flex-col items-center justify-center rounded-2xl bg-green-50 py-20 text-center">
               <CheckCircle2 size={56} className="text-green-500" />
               <h3 className="mt-4 text-xl font-black text-green-700">
                 Attendance Confirmed
@@ -618,7 +618,7 @@ export default function StudentQRCodePage() {
             </div>
           ) : sessionAvailable && displayToken ? (
             <div
-              className="flex flex-col items-center rounded-[28px] px-4 py-8"
+              className="flex flex-col items-center rounded-2xl px-4 py-8"
               style={{
                 background:
                   verificationStage === 'STAGE_2'
@@ -626,7 +626,7 @@ export default function StudentQRCodePage() {
                     : 'linear-gradient(180deg, #fff1f2 0%, #ffffff 100%)',
               }}
             >
-              <div className="mb-6 rounded-[2rem] bg-white p-4 shadow-sm sm:p-6">
+              <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
                 <QRCodeSVG
                   value={displayToken}
                   size={260}
@@ -659,7 +659,7 @@ export default function StudentQRCodePage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-[28px] bg-gray-50 py-20 text-center">
+            <div className="flex flex-col items-center justify-center rounded-2xl bg-gray-50 py-20 text-center">
               <QrCode size={52} className="text-gray-300" />
               <h3 className="mt-4 text-xl font-black text-gray-700">
                 No active session right now
@@ -673,7 +673,7 @@ export default function StudentQRCodePage() {
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-black text-gray-900">Session Details</h2>
               <Clock3 size={18} className="text-gray-300" />
@@ -737,7 +737,7 @@ export default function StudentQRCodePage() {
             )}
           </div>
 
-          <div className="rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-black text-gray-900">Student Details</h2>
               <ShieldCheck size={18} className="text-gray-300" />
@@ -757,7 +757,7 @@ export default function StudentQRCodePage() {
                     type="button"
                     onClick={handleCopyStudentId}
                     disabled={!profile?.studentId}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 transition hover:border-red-100 hover:text-red-600 disabled:opacity-50"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-2xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:text-[#E4002B] disabled:opacity-50"
                   >
                     <Copy size={14} />
                     {copied ? 'Copied' : 'Copy'}

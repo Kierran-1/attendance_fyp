@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Save, User, Bell, Shield } from 'lucide-react';
+import { ChevronRight, Save, User, Bell, Shield } from 'lucide-react';
 
 export default function LecturerSettingsPage() {
   const [form, setForm] = useState({
@@ -20,18 +20,23 @@ export default function LecturerSettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="space-y-6 sm:space-y-8">
+
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="hover:text-gray-600 cursor-default">Lecturer</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Settings</span>
+      </nav>
+
+      <header className="space-y-1.5">
+        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">Settings</h1>
         <p className="text-sm text-gray-500">
           Manage your lecturer preferences and system settings.
         </p>
-      </div>
+      </header>
 
       {/* Profile Section */}
-      <div className="bg-white p-6 rounded-xl border shadow-sm">
+      <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <User size={18} />
           <h2 className="font-semibold">Profile</h2>
@@ -57,7 +62,7 @@ export default function LecturerSettingsPage() {
       </div>
 
       {/* Notifications */}
-      <div className="bg-white p-6 rounded-xl border shadow-sm">
+      <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Bell size={18} />
           <h2 className="font-semibold">Notifications</h2>
@@ -76,7 +81,7 @@ export default function LecturerSettingsPage() {
       </div>
 
       {/* Attendance Settings */}
-      <div className="bg-white p-6 rounded-xl border shadow-sm">
+      <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Shield size={18} />
           <h2 className="font-semibold">Attendance Settings</h2>
@@ -97,7 +102,7 @@ export default function LecturerSettingsPage() {
       {/* Save Button */}
       <button
         onClick={handleSave}
-        className="bg-red-600 text-white px-6 py-3 rounded-lg flex items-center gap-2"
+        className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
       >
         <Save size={16} />
         Save Changes

@@ -20,6 +20,14 @@ export async function GET(
 
   const { id } = await params;
 
+  const classSession = await prisma.classSession.findFirst({
+    where: { id, lecturerId: session.user.id },
+  });
+
+  if (!classSession) {
+    return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+  }
+
   const records = await prisma.classAttendanceRecord.findMany({
     where: { classSessionId: id },
     orderBy: { verifiedAt: 'asc' },

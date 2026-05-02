@@ -42,17 +42,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ challengeToken: null }, { status: 200 });
   }
 
-  // Check if challenge token was already used (prevent reuse)
-  if (stage1.usedAt) {
-    return NextResponse.json({ challengeToken: null }, { status: 200 });
-  }
-
   // Check if session is still active (challenge should be invalidated if session ended)
   const classSession = await prisma.classSession.findUnique({
     where: { id: sessionId },
   });
 
-  if (!classSession) {
+  if (!classSession || !classSession.sessionTime || classSession.sessionDuration === null) {
     return NextResponse.json({ challengeToken: null }, { status: 200 });
   }
 

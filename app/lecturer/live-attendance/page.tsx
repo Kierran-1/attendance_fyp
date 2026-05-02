@@ -7,6 +7,7 @@ import {
   Camera,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Clock3,
   Loader2,
   MapPin,
@@ -275,7 +276,7 @@ export default function LiveAttendancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           unitId: selectedCard?.unitId,
-          sessionName: selectedCard?.classType ?? sessionType,
+          sessionName: selectedCard?.classType ?? SESSION_TYPES[0].value,
           durationMinutes: duration,
           groupNo: selectedCard?.group,
           subcomponent: selectedCard?.subcomponent,
@@ -427,18 +428,21 @@ export default function LiveAttendancePage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 sm:space-y-8">
+
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="hover:text-gray-600 cursor-default">Lecturer</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Live Attendance</span>
+      </nav>
 
       {/* Header */}
       <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Lecturer Panel
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
             Live Attendance
           </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             Start a session, scan student QR codes, and monitor check-ins in real time.
           </p>
         </div>
@@ -466,7 +470,7 @@ export default function LiveAttendancePage() {
 
           {!activeSession ? (
             /* Setup panel */
-            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
               <h2 className="mb-5 text-base font-bold text-gray-900">Start a Session</h2>
 
               {unitsLoading ? (
@@ -532,7 +536,7 @@ export default function LiveAttendancePage() {
                     type="button"
                     onClick={handleStartSession}
                     disabled={starting || !selectedUnitId}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3.5 text-sm font-bold text-white transition hover:bg-[#C70026] disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {starting
                       ? <><Loader2 size={16} className="animate-spin" /> Starting…</>
@@ -544,7 +548,7 @@ export default function LiveAttendancePage() {
             </div>
           ) : (
             /* Active session info */
-            <div className="rounded-3xl bg-[#E4002B] p-6 text-white shadow-lg shadow-rose-100">
+            <div className="rounded-2xl sm:rounded-[2rem] bg-[#E4002B] p-6 text-white shadow-lg shadow-rose-100">
               <div className="mb-1 flex items-center gap-2">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-white/70" />
                 <p className="text-xs font-bold uppercase tracking-widest text-white/70">Live Session</p>
@@ -591,7 +595,7 @@ export default function LiveAttendancePage() {
                 type="button"
                 onClick={handleEndSession}
                 disabled={stopping}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 text-sm font-bold text-white transition hover:bg-white/25 disabled:opacity-60"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 text-sm font-semibold text-white transition hover:bg-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {stopping
                   ? <><Loader2 size={16} className="animate-spin" /> Ending…</>
@@ -603,7 +607,7 @@ export default function LiveAttendancePage() {
 
           {/* Session QR — shown to students to scan */}
           {activeSession && (
-            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
               <h2 className="mb-1 text-base font-bold text-gray-900 flex items-center gap-2">
                 <QrCode size={18} className="text-[#E4002B]" />
                 Session QR Code
@@ -619,7 +623,7 @@ export default function LiveAttendancePage() {
                 >
                   {sessionQRToken ? (
                     <QRCodeSVG
-                      value={sessionQRToken}
+                      value={`${window.location.origin}/student/scan?token=${sessionQRToken}`}
                       size={200}
                       bgColor="#f9fafb"
                       fgColor="#111111"
@@ -652,7 +656,7 @@ export default function LiveAttendancePage() {
                 <button
                   type="button"
                   onClick={() => sessionIdRef.current && fetchSessionQR(sessionIdRef.current)}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                 >
                   <RefreshCw size={12} /> Refresh now
                 </button>
@@ -662,15 +666,15 @@ export default function LiveAttendancePage() {
 
           {/* Stats cards */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm text-center">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Present</p>
               <p className="mt-2 text-3xl font-black text-green-600">{presentCount}</p>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm text-center">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Absent</p>
               <p className="mt-2 text-3xl font-black text-gray-700">{absentCount}</p>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm text-center">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-5 shadow-sm text-center">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Rate</p>
               <p className="mt-2 text-3xl font-black text-[#E4002B]">{attendanceRate}%</p>
             </div>
@@ -678,7 +682,7 @@ export default function LiveAttendancePage() {
 
           {/* QR scanner panel — only when session is active */}
           {activeSession && (
-            <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-base font-bold text-gray-900 flex items-center gap-2">
                 <ScanLine size={18} className="text-[#E4002B]" />
                 Scan Student QR
@@ -698,7 +702,7 @@ export default function LiveAttendancePage() {
                   <button
                     type="button"
                     onClick={startScanner}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#E4002B]/20 hover:bg-rose-50 hover:text-[#E4002B]"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                   >
                     <Camera size={16} /> Open Camera Scanner
                   </button>
@@ -706,7 +710,7 @@ export default function LiveAttendancePage() {
                   <button
                     type="button"
                     onClick={stopScanner}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-800 py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                   >
                     <StopCircle size={16} /> Stop Camera
                   </button>
@@ -747,7 +751,7 @@ export default function LiveAttendancePage() {
                       type="button"
                       onClick={handleManualSubmit}
                       disabled={!manualToken.trim() || submittingManual}
-                      className="rounded-xl bg-[#E4002B] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#C70026] disabled:opacity-50"
+                      className="rounded-2xl bg-[#E4002B] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {submittingManual ? <Loader2 size={14} className="animate-spin" /> : 'Submit'}
                     </button>
@@ -759,7 +763,7 @@ export default function LiveAttendancePage() {
         </div>
 
         {/* ── RIGHT: Live check-in log ── */}
-        <div className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
             <div>
               <h2 className="text-base font-bold text-gray-900">Check-in Log</h2>
@@ -773,7 +777,7 @@ export default function LiveAttendancePage() {
               <button
                 type="button"
                 onClick={() => sessionIdRef.current && fetchCheckIns(sessionIdRef.current)}
-                className="rounded-xl border border-gray-200 p-2 text-gray-400 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="rounded-2xl border border-gray-200 p-2 text-gray-400 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                 title="Refresh"
               >
                 <RefreshCw size={14} className={checkInsLoading ? 'animate-spin' : ''} />
@@ -868,7 +872,7 @@ export default function LiveAttendancePage() {
             </div>
 
             <QRCodeSVG
-              value={sessionQRToken}
+              value={`${window.location.origin}/student/scan?token=${sessionQRToken}`}
               size={380}
               bgColor="#ffffff"
               fgColor="#111111"

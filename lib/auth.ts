@@ -26,7 +26,7 @@ function getRoleFromEmail(email: string): UserRole {
   if (STUDENT_EMAIL_OVERRIDES.has(email)) return UserRole.STUDENT;
 
   if (email.endsWith('@students.swinburne.edu.my')) return UserRole.STUDENT;
-  if (email.endsWith('@swinburne@outlook.com')) return UserRole.STUDENT;
+  if (email.endsWith('@outlook.com')) return UserRole.STUDENT;
   if (email.endsWith('@swinburne.edu.my')) return UserRole.LECTURER;
 
   return UserRole.STUDENT;

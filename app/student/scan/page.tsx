@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import {
+  ArrowLeft,
   Camera,
   CheckCircle2,
   ChevronRight,
@@ -145,6 +146,16 @@ export default function StudentScanPage() {
     };
   }, []);
 
+  // Auto-submit when arriving via QR link (e.g. scanned from lecturer's screen)
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token && !submittingRef.current) {
+      submittingRef.current = true;
+      submitToken(token);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function startScanner() {
     setScanState('scanning');
     setMessage('');
@@ -221,16 +232,19 @@ export default function StudentScanPage() {
   }, [activeSession]);
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-6 sm:space-y-8">
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="cursor-default hover:text-gray-600">Student</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Scan Attendance</span>
+      </nav>
+
+      <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#E4002B]">
-            Student
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-gray-900">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-900">
             Scan Attendance QR
           </h1>
-          <p className="mt-2 text-sm leading-7 text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             Use this page when your lecturer displays the session QR for students to scan.
           </p>
         </div>
@@ -240,7 +254,7 @@ export default function StudentScanPage() {
             href="/student/dashboard"
             className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
           >
-            <ChevronRight size={16} className="rotate-180" />
+            <ArrowLeft size={16} />
             Back to Dashboard
           </Link>
 
@@ -256,7 +270,7 @@ export default function StudentScanPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-black text-gray-900">Scanner</h2>
             <ScanLine size={18} className="text-gray-300" />
@@ -303,7 +317,7 @@ export default function StudentScanPage() {
               <button
                 type="button"
                 onClick={handleReset}
-                className="mt-5 rounded-2xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
+                className="mt-5 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
               >
                 Scan Another QR
               </button>
@@ -320,7 +334,7 @@ export default function StudentScanPage() {
               <button
                 type="button"
                 onClick={handleReset}
-                className="mt-5 rounded-2xl bg-[#E4002B] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#C70026]"
+                className="mt-5 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
               >
                 Try Again
               </button>
@@ -340,7 +354,7 @@ export default function StudentScanPage() {
                 <button
                   type="button"
                   onClick={startScanner}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3.5 text-sm font-bold text-white transition hover:bg-[#C70026]"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
                 >
                   <Camera size={16} />
                   Open Camera
@@ -349,7 +363,7 @@ export default function StudentScanPage() {
                 <button
                   type="button"
                   onClick={handleStop}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-800 py-3.5 text-sm font-bold text-white transition hover:bg-gray-900"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-[#E4002B]/20 hover:text-[#E4002B]"
                 >
                   <StopCircle size={16} />
                   Stop Camera
@@ -366,7 +380,7 @@ export default function StudentScanPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl sm:rounded-[2rem] border border-gray-100 bg-white p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-black text-gray-900">Current Active Session</h2>
               <Clock3 size={18} className="text-gray-300" />

@@ -304,10 +304,15 @@ export default function AttendancePage() {
   });
 
   return (
-    <div className="min-h-screen">
+    <div className="space-y-6 sm:space-y-8">
 
-      <div className=" mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="hover:text-gray-600 cursor-default">Lecturer</span>
+        <ChevronRight size={12} />
+        <span className="text-red-600">Attendance</span>
+      </nav>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Left Sidebar - Units & Classes */}
           <div className="lg:col-span-3 space-y-6">
@@ -936,7 +941,6 @@ export default function AttendancePage() {
 
           </div>
         </div>
-      </div>
     </div>
   );
 }
