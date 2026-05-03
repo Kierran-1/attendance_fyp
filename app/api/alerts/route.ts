@@ -295,6 +295,8 @@ export async function GET() {
         alerts: rawAlerts,
       });
 
+      console.log('[ALERTS_GET] Student alerts:', { unitCodes, rawAlerts: rawAlerts.length, filteredAlerts: filteredAlerts.length });
+
       return NextResponse.json({
         alerts: filteredAlerts,
       });

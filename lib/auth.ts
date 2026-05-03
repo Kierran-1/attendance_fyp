@@ -9,12 +9,12 @@ import { UserRole } from '@prisma/client';
 const LECTURER_EMAIL_OVERRIDES = new Set([
   '102789110@students.swinburne.edu.my',
   '102785480@students.swinburne.edu.my',
-  'dev-lecturer.swinburne@outlook.com',
   '102789880@students.swinburne.edu.my',
+  'dev-lecturer.swinburne@outlook.com'
 
   // add more here as needed
 ]);
-
+ 
 const STUDENT_EMAIL_OVERRIDES = new Set([
   'dev-student.swinburne@outlook.com'
 ]);

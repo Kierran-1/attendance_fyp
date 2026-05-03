@@ -120,8 +120,12 @@ export default function StudentAlertsPage() {
         setLoading(true);
         setError('');
 
+        console.log('Loading alerts...');
         const response = await fetch('/api/alerts', { cache: 'no-store' });
+        console.log('Response status:', response.status, 'ok:', response.ok);
+
         const json: StudentAlertsResponse = await response.json();
+        console.log('Response json:', json);
 
         if (!response.ok) {
           throw new Error(json.error || 'Failed to load alerts');
