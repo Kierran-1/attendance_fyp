@@ -32,6 +32,7 @@ import {
   BookOpen,
   TrendingUp,
   ShieldAlert,
+  ClipboardEdit,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -314,7 +315,18 @@ export default function ClassesPage() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
-  const [activeTab, setActiveTab] = useState<"students" | "sessions">("students");
+  const [activeTab, setActiveTab] = useState<"students" | "sessions" | "attendance">("students");
+
+  // Attendance matrix state
+  type AttendanceRecord = { id: string; sessionId: string; userId: string; status: string };
+  type AttendanceSession = { id: string; weekNumber: number; day: string | null; scheduledDate: string | null; status: string };
+  type AttendanceStudent = { userId: string; studentNumber: string; name: string };
+  const [attendanceSessions, setAttendanceSessions] = useState<AttendanceSession[]>([]);
+  const [attendanceStudents, setAttendanceStudents] = useState<AttendanceStudent[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [openCell, setOpenCell] = useState<{ sessionId: string; userId: string } | null>(null);
+  const [savingCell, setSavingCell] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
 
@@ -506,6 +518,65 @@ export default function ClassesPage() {
       setSelectedClass(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== studentId) } : null);
     } catch (err) { alert('Failed to remove: ' + (err instanceof Error ? err.message : 'Unknown error')); }
   };
+
+  // ── Attendance matrix ──────────────────────────────────────────────────────
+
+  const loadAttendance = useCallback(async (classId: string) => {
+    setAttendanceLoading(true);
+    try {
+      const res = await fetch(`/api/lecturer/unit/${classId}/attendance`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setAttendanceSessions(data.sessions ?? []);
+      setAttendanceStudents(data.students ?? []);
+      setAttendanceRecords(data.records ?? []);
+    } catch { /* silent */ } finally {
+      setAttendanceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'attendance' && selectedClass) {
+      loadAttendance(selectedClass.id);
+    }
+  }, [activeTab, selectedClass, loadAttendance]);
+
+  async function handleSetStatus(sessionId: string, userId: string, status: string) {
+    if (!selectedClass) return;
+    const cellKey = `${sessionId}:${userId}`;
+    setSavingCell(cellKey);
+    setOpenCell(null);
+    try {
+      if (status === 'CLEAR') {
+        await fetch(`/api/lecturer/unit/${selectedClass.id}/attendance`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, userId }),
+        });
+        setAttendanceRecords(prev => prev.filter(r => !(r.sessionId === sessionId && r.userId === userId)));
+      } else {
+        const res = await fetch(`/api/lecturer/unit/${selectedClass.id}/attendance`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, userId, status }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setAttendanceRecords(prev => {
+            const existing = prev.findIndex(r => r.sessionId === sessionId && r.userId === userId);
+            if (existing >= 0) {
+              const updated = [...prev];
+              updated[existing] = data.record;
+              return updated;
+            }
+            return [...prev, data.record];
+          });
+        }
+      }
+    } catch { /* silent */ } finally {
+      setSavingCell(null);
+    }
+  }
 
   // ── Excel parsing ──────────────────────────────────────────────────────────
 
@@ -1090,9 +1161,10 @@ export default function ClassesPage() {
 
           {/* Tabs */}
           <div className="flex border-t border-gray-100">
-            {[ 
-              { id: "students", label: "Students", icon: Users, count: selectedClass.students.length },
-              { id: "sessions", label: "Sessions", icon: Calendar, count: selectedClass.sessions.length },
+            {[
+              { id: "students",   label: "Students",   icon: Users,          count: selectedClass.students.length },
+              { id: "sessions",   label: "Sessions",   icon: Calendar,       count: selectedClass.sessions.length },
+              { id: "attendance", label: "Attendance", icon: ClipboardEdit,  count: null },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1101,7 +1173,9 @@ export default function ClassesPage() {
               >
                 <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {tab.label}
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs ${activeTab === tab.id ? 'bg-red-50 text-[#e4002b]' : 'bg-gray-100 text-gray-500'}`}>{tab.count}</span>
+                {tab.count !== null && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] sm:text-xs ${activeTab === tab.id ? 'bg-red-50 text-[#e4002b]' : 'bg-gray-100 text-gray-500'}`}>{tab.count}</span>
+                )}
                 {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#e4002b]" />}
               </button>
             ))}
@@ -1218,12 +1292,9 @@ export default function ClassesPage() {
                 <div className="space-y-2">
                   {selectedClass.sessions.map(sess => (
                     <div key={sess.id} className="flex items-center gap-3 p-3 sm:p-4 border border-gray-100 rounded-xl hover:border-red-100 hover:bg-red-50/10 transition-colors">
-                      {/* Icon */}
                       <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 ${sess.status === 'Completed' ? 'bg-emerald-50' : sess.status === 'Ongoing' ? 'bg-amber-50' : 'bg-gray-50'}`}>
                         <Calendar className={`w-3.5 h-3.5 sm:w-5 sm:h-5 ${sess.status === 'Completed' ? 'text-emerald-500' : sess.status === 'Ongoing' ? 'text-amber-500' : 'text-gray-400'}`} />
                       </div>
-
-                      {/* Date + counts */}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 text-xs sm:text-sm">{sess.date}</p>
                         <div className="flex items-center gap-2 mt-0.5 text-[10px] sm:text-xs text-gray-400">
@@ -1231,8 +1302,6 @@ export default function ClassesPage() {
                           <span className="flex items-center gap-0.5"><X className="w-3 h-3 text-red-400" />{sess.absentCount}</span>
                         </div>
                       </div>
-
-                      {/* Percentage + status — stacked on mobile */}
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={`text-xs sm:text-sm font-bold ${sess.attendancePercentage >= 80 ? 'text-emerald-600' : 'text-amber-500'}`}>
                           {sess.attendancePercentage}%
@@ -1243,14 +1312,153 @@ export default function ClassesPage() {
                   ))}
                 </div>
               ) : (
-                <EmptyState 
-                  icon={Calendar} 
-                  title="No sessions" 
-                  description="Attendance sessions appear here once recorded"
-                />
+                <EmptyState icon={Calendar} title="No sessions" description="Attendance sessions appear here once recorded" />
               )}
             </div>
           )}
+
+          {activeTab === "attendance" && (() => {
+            // Only the statuses a lecturer can manually set
+            const EDITABLE_STATUSES: Record<string, { label: string; short: string; cell: string; dot: string }> = {
+              PRESENT: { label: 'Present', short: 'P', cell: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+              LATE:    { label: 'Late',    short: 'L', cell: 'bg-amber-50 text-amber-700 border-amber-200',       dot: 'bg-amber-400'  },
+              ABSENT:  { label: 'Absent',  short: 'A', cell: 'bg-red-50 text-[#e4002b] border-red-200',           dot: 'bg-[#e4002b]'  },
+            };
+            // Display config for all statuses (including read-only QR-flow PENDING)
+            const DISPLAY_CFG: Record<string, { short: string; cell: string }> = {
+              ...EDITABLE_STATUSES,
+              PENDING: { short: '?', cell: 'bg-violet-50 text-violet-700 border-violet-200' },
+            };
+            const recordMap = new Map(attendanceRecords.map(r => [`${r.sessionId}:${r.userId}`, r]));
+
+            return (
+              <div className="p-4 sm:p-6" onClick={() => setOpenCell(null)}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Edit Attendance</h3>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); if (selectedClass) loadAttendance(selectedClass.id); }}
+                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <Loader2 className={`w-3 h-3 ${attendanceLoading ? 'animate-spin' : 'hidden'}`} />
+                    Refresh
+                  </button>
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap gap-3 mb-4 text-[10px] sm:text-xs">
+                  {Object.entries(EDITABLE_STATUSES).map(([k, v]) => (
+                    <span key={k} className="flex items-center gap-1 text-gray-500">
+                      <span className={`w-2 h-2 rounded-full ${v.dot}`} />
+                      {v.label}
+                    </span>
+                  ))}
+                  <span className="flex items-center gap-1 text-gray-400">
+                    <span className="w-2 h-2 rounded-full bg-gray-200" />
+                    Not recorded
+                  </span>
+                </div>
+
+                {attendanceLoading ? (
+                  <div className="flex items-center justify-center py-12 text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading attendance data…
+                  </div>
+                ) : attendanceStudents.length === 0 ? (
+                  <EmptyState icon={ClipboardEdit} title="No students enrolled" description="Enrol students first via the Students tab" />
+                ) : attendanceSessions.length === 0 ? (
+                  <EmptyState icon={Calendar} title="No sessions found" description="Upload a timetable first to create sessions" />
+                ) : (
+                  /* Clip wrapper prevents the horizontal scrollbar from creating a right-side gap */
+                  <div className="rounded-xl border border-gray-100 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border-separate border-spacing-0">
+                        <thead>
+                          <tr>
+                            <th className="sticky left-0 z-10 bg-gray-50 px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-400 border-b border-r border-gray-100 min-w-[160px]">
+                              Student
+                            </th>
+                            {attendanceSessions.map(sess => {
+                              const dateStr = sess.scheduledDate
+                                ? new Date(sess.scheduledDate).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })
+                                : '—';
+                              const dayStr = sess.scheduledDate
+                                ? new Date(sess.scheduledDate).toLocaleDateString('en-US', { weekday: 'short' })
+                                : (sess.day ?? '');
+                              return (
+                                <th key={sess.id} className="bg-gray-50 px-1 py-2.5 text-center border-b border-gray-100 min-w-[62px]">
+                                  <div className="text-[10px] font-bold text-gray-700">Wk {sess.weekNumber}</div>
+                                  <div className="text-[9px] text-gray-400 whitespace-nowrap">{dayStr} {dateStr}</div>
+                                  <div className={`mt-1 h-0.5 w-5 rounded-full mx-auto ${sess.status === 'Completed' ? 'bg-emerald-400' : sess.status === 'Ongoing' ? 'bg-amber-400' : 'bg-gray-200'}`} />
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attendanceStudents.map((student, rowIdx) => (
+                            <tr key={student.userId} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                              <td className="sticky left-0 z-10 bg-inherit px-4 py-2 border-r border-gray-100">
+                                <p className="font-medium text-gray-900 truncate max-w-[140px]">{student.name}</p>
+                                <p className="text-[10px] text-gray-400 font-mono">{student.studentNumber}</p>
+                              </td>
+
+                              {attendanceSessions.map(sess => {
+                                const cellKey = `${sess.id}:${student.userId}`;
+                                const record = recordMap.get(cellKey);
+                                const displayCfg = record ? DISPLAY_CFG[record.status] : null;
+                                const isOpen = openCell?.sessionId === sess.id && openCell?.userId === student.userId;
+                                const isSaving = savingCell === cellKey;
+
+                                return (
+                                  <td key={sess.id} className="px-1 py-1.5 text-center relative">
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setOpenCell(isOpen ? null : { sessionId: sess.id, userId: student.userId }); }}
+                                      disabled={isSaving}
+                                      className={`inline-flex items-center justify-center w-9 h-7 rounded-lg border text-[10px] font-bold transition-all
+                                        ${isSaving ? 'opacity-40 cursor-wait' : 'hover:scale-110 hover:shadow-sm cursor-pointer'}
+                                        ${displayCfg ? displayCfg.cell : 'border-gray-200 bg-white text-gray-300 hover:border-gray-300'}`}
+                                    >
+                                      {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : displayCfg ? displayCfg.short : '—'}
+                                    </button>
+
+                                    {isOpen && (
+                                      <div
+                                        className="absolute z-30 top-full mt-1 left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[110px]"
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        {Object.entries(EDITABLE_STATUSES).map(([status, scfg]) => (
+                                          <button
+                                            key={status}
+                                            onClick={() => handleSetStatus(sess.id, student.userId, status)}
+                                            className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-left transition-colors hover:bg-gray-50
+                                              ${record?.status === status ? 'text-[#e4002b]' : 'text-gray-700'}`}
+                                          >
+                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${scfg.dot}`} />
+                                            {scfg.label}
+                                          </button>
+                                        ))}
+                                        {record && (
+                                          <button
+                                            onClick={() => handleSetStatus(sess.id, student.userId, 'CLEAR')}
+                                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-left text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors border-t border-gray-100 mt-1"
+                                          >
+                                            <X className="w-3 h-3" /> Clear
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </Card>
       </div>
     );

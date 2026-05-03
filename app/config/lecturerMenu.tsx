@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bell,
   FileText,
+  CalendarDays,
 } from 'lucide-react';
 
 type MenuItem = {
@@ -47,6 +48,11 @@ export const lecturerMenu: {
         //     </svg>
         //   ),
         // },
+        {
+          name: 'Sessions',
+          href: '/lecturer/sessions',
+          icon: <CalendarDays size={20} strokeWidth={2.2} className="text-[#E4002B]" />,
+        },
         {
           name: 'Live Attendance',
           href: '/lecturer/live-attendance',

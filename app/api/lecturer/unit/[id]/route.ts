@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { UserRole, UserStatus } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 
 // [id] = ClassSession.id
 
@@ -27,24 +27,16 @@ export async function DELETE(
     if (!cs) return NextResponse.json({ error: 'Class session not found' }, { status: 404 });
     if (cs.unitRegistration.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const unitId = cs.unitRegistration.unitId;
-    const scopeKey = cs.subcomponent ?? cs.groupNo ?? null;
-
-    // Delete the class session (cascades to attendance records/data)
-    await prisma.classSession.delete({ where: { id: classSessionId } });
-
-    // Also remove student enrollments scoped to this session type+group
-    await prisma.unitRegistration.deleteMany({
-      where: { unitId, userStatus: UserStatus.STUDENT, name: scopeKey },
+    // Delete all sessions in this group (same registration + subcomponent scope)
+    await prisma.classSession.deleteMany({
+      where: {
+        unitRegistrationId: cs.unitRegistrationId,
+        subcomponent: cs.subcomponent,
+      },
     });
 
-    // If no more class sessions exist for this unit registration, delete it too
-    const remainingSessions = await prisma.classSession.count({
-      where: { unitRegistrationId: cs.unitRegistrationId },
-    });
-    if (remainingSessions === 0) {
-      await prisma.unitRegistration.delete({ where: { id: cs.unitRegistrationId } });
-    }
+    // Remove the lecturer's unit registration (and cascade student registrations via the unit)
+    await prisma.unitRegistration.delete({ where: { id: cs.unitRegistrationId } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

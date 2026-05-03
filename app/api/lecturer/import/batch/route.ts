@@ -159,7 +159,7 @@ async function importSheet(
       : buildSessionDates(unitInput.day || 'Mon', startHour, startMin, year);
 
     await prisma.classSession.createMany({
-      data: scheduledDates.map((scheduledDate) => ({
+      data: scheduledDates.map((scheduledDate, i) => ({
         unitRegistrationId: lecturerReg.id,
         lecturerId: userId,
         sessionName: sessionNameEnum,
@@ -170,6 +170,7 @@ async function importSheet(
         location: unitInput.location ?? null,
         day: unitInput.day ?? null,
         lecturerName: unitInput.lecturerName ?? null,
+        weekNumber: i + 1,
       })),
     });
   } else if (unitInput.lecturerName && !existingSession.lecturerName) {

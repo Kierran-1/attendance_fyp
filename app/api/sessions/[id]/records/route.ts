@@ -55,3 +55,27 @@ export async function GET(
     }),
   });
 }
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (session.user.role !== UserRole.LECTURER) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const { id } = await params;
+
+  const classSession = await prisma.classSession.findFirst({
+    where: { id, lecturerId: session.user.id },
+  });
+
+  if (!classSession) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+
+  const [deletedRecords, deletedData] = await prisma.$transaction([
+    prisma.classAttendanceRecord.deleteMany({ where: { classSessionId: id } }),
+    prisma.classAttendanceData.deleteMany({ where: { classSessionId: id } }),
+  ]);
+
+  return NextResponse.json({ deletedRecords: deletedRecords.count, deletedData: deletedData.count });
+}

@@ -56,13 +56,22 @@ type ActiveSession = {
   sessionDuration: number;
 };
 
+type CandidateSession = {
+  id: string;
+  weekNumber: number | null;
+  day: string | null;
+  scheduledDate: string | null;
+  sessionName: string;
+  groupNo: string | null;
+  location: string | null;
+};
+
 const SESSION_TYPES: { value: SessionName; label: string; colour: string }[] = [
   { value: 'LECTURE',  label: 'Lecture',  colour: 'bg-blue-100 text-blue-700 border-blue-200' },
   { value: 'TUTORIAL', label: 'Tutorial', colour: 'bg-purple-100 text-purple-700 border-purple-200' },
   { value: 'LAB',      label: 'Lab',      colour: 'bg-green-100 text-green-700 border-green-200' },
 ];
 
-const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120];
 
 function formatTime(iso: string | null) {
   if (!iso) return '—';
@@ -88,10 +97,15 @@ export default function LiveAttendancePage() {
   const [isQrModalOpen, setIsQrModalOpen]   = useState(false);
 
   // Units & selection
-  const [units, setUnits]                   = useState<LecturerUnit[]>([]);
-  const [unitsLoading, setUnitsLoading]     = useState(true);
-  const [selectedUnitId, setSelectedUnitId] = useState('');
-  const [duration, setDuration]             = useState(60);
+  const [units, setUnits]                       = useState<LecturerUnit[]>([]);
+  const [unitsLoading, setUnitsLoading]         = useState(true);
+  const [selectedUnitId, setSelectedUnitId]     = useState('');
+  const [duration, setDuration]                 = useState(60);
+
+  // Candidate sessions (for week picker)
+  const [candidates, setCandidates]             = useState<CandidateSession[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
 
   // Active session
   const [activeSession, setActiveSession]   = useState<ActiveSession | null>(null);
@@ -143,6 +157,52 @@ export default function LiveAttendancePage() {
     }
     loadUnits();
   }, []);
+
+  // Load candidate sessions when selected unit changes
+  useEffect(() => {
+    if (!selectedUnitId || activeSession) return;
+    const selectedCard = units.find(u => u.id === selectedUnitId);
+    if (!selectedCard) return;
+
+    async function loadCandidates() {
+      setCandidatesLoading(true);
+      try {
+        const params = new URLSearchParams({ unitId: selectedCard!.unitId, status: 'unscheduled' });
+        const res = await fetch(`/api/sessions?${params}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const all: CandidateSession[] = data.sessions ?? [];
+        // Filter to matching classType and group for this unit registration
+        const filtered = all.filter(s =>
+          s.sessionName === selectedCard!.classType &&
+          (selectedCard!.group ? s.groupNo === selectedCard!.group : true)
+        );
+        // Sort by scheduledDate
+        filtered.sort((a, b) => {
+          const ta = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+          const tb = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+          return ta - tb;
+        });
+        setCandidates(filtered);
+
+        // Default to closest to today
+        if (filtered.length > 0) {
+          const now = Date.now();
+          const closest = filtered.reduce((best, s) =>
+            Math.abs((s.scheduledDate ? new Date(s.scheduledDate).getTime() : 0) - now) <
+            Math.abs((best.scheduledDate ? new Date(best.scheduledDate).getTime() : 0) - now)
+              ? s : best
+          );
+          setSelectedSessionId(closest.id);
+        } else {
+          setSelectedSessionId('');
+        }
+      } catch { /* silent */ } finally {
+        setCandidatesLoading(false);
+      }
+    }
+    loadCandidates();
+  }, [selectedUnitId, units, activeSession]);
 
   // Check if there's already an active session on mount
   useEffect(() => {
@@ -262,25 +322,41 @@ export default function LiveAttendancePage() {
     setSessionQRCountdown(30);
   }
 
+  // Schedule-for-later state
+  const [scheduleForLater, setScheduleForLater] = useState(false);
+  const [scheduledStartTime, setScheduledStartTime] = useState('');
+  const [scheduleSuccess, setScheduleSuccess] = useState('');
+
   // ── Start session ──────────────────────────────────────────────────────────
 
   async function handleStartSession() {
     if (!selectedUnitId) { setError('Please select a unit first.'); return; }
+    if (scheduleForLater && !scheduledStartTime) { setError('Please select a start date and time.'); return; }
     setError('');
+    setScheduleSuccess('');
     setStarting(true);
 
     try {
       const selectedCard = units.find(u => u.id === selectedUnitId);
+      const body: Record<string, unknown> = {
+        durationMinutes: duration,
+      };
+      // Prefer direct sessionId; fall back to unit+type search for auto-pick
+      if (selectedSessionId) {
+        body.sessionId = selectedSessionId;
+      } else {
+        body.unitId       = selectedCard?.unitId;
+        body.sessionName  = selectedCard?.classType ?? SESSION_TYPES[0].value;
+        body.groupNo      = selectedCard?.group;
+        body.subcomponent = selectedCard?.subcomponent;
+      }
+      if (scheduleForLater && scheduledStartTime) {
+        body.scheduledStartTime = new Date(scheduledStartTime).toISOString();
+      }
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          unitId: selectedCard?.unitId,
-          sessionName: selectedCard?.classType ?? SESSION_TYPES[0].value,
-          durationMinutes: duration,
-          groupNo: selectedCard?.group,
-          subcomponent: selectedCard?.subcomponent,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -291,6 +367,18 @@ export default function LiveAttendancePage() {
       const data = await res.json();
       const s = data.session;
       const unit = selectedCard;
+
+      // If scheduled for a future time, just show confirmation — don't go live
+      const startTime = new Date(s.sessionTime);
+      if (scheduleForLater && startTime > new Date()) {
+        const fmt = startTime.toLocaleString('en-MY', {
+          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+        });
+        setScheduleSuccess(`Session scheduled for ${fmt}. It will go live automatically at that time.`);
+        setScheduleForLater(false);
+        setScheduledStartTime('');
+        return;
+      }
 
       const newSession: ActiveSession = {
         id: s.id,
@@ -462,6 +550,14 @@ export default function LiveAttendancePage() {
         </section>
       )}
 
+      {/* Schedule success banner */}
+      {scheduleSuccess && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 flex items-center justify-between gap-3">
+          <span>{scheduleSuccess}</span>
+          <button onClick={() => setScheduleSuccess('')} className="text-amber-600 hover:text-amber-800 flex-shrink-0">✕</button>
+        </section>
+      )}
+
       {/* Main grid */}
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
 
@@ -508,39 +604,95 @@ export default function LiveAttendancePage() {
                     )}
                   </div>
 
+                  {/* Week / session picker */}
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">
+                      Select Week
+                    </label>
+                    {candidatesLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <Loader2 size={13} className="animate-spin" /> Loading sessions…
+                      </div>
+                    ) : candidates.length === 0 ? (
+                      <p className="text-xs text-gray-400">No unactivated sessions found for this unit. Upload the timetable first.</p>
+                    ) : (
+                      <div className="relative">
+                        <select
+                          value={selectedSessionId}
+                          onChange={e => setSelectedSessionId(e.target.value)}
+                          className="w-full appearance-none rounded-2xl border border-gray-200 bg-white py-3 pl-4 pr-10 text-sm font-semibold text-gray-900 outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                        >
+                          {candidates.map((c, i) => {
+                            const weekLabel = c.weekNumber != null ? `Week ${c.weekNumber}` : 'Week ?';
+                            const dayLabel  = c.day ?? (c.scheduledDate ? new Date(c.scheduledDate).toLocaleDateString('en-US', { weekday: 'short' }) : '');
+                            const dateLabel = c.scheduledDate ? new Date(c.scheduledDate).toLocaleDateString('en-MY', { day: 'numeric', month: 'short' }) : 'No date';
+                            return (
+                              <option key={c.id} value={c.id}>
+                                {weekLabel} · {dayLabel} {dateLabel}{c.location ? ` · ${c.location}` : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <ChevronDown size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
 
                   {/* Duration */}
                   <div>
                     <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">
                       Duration (minutes)
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {DURATION_OPTIONS.map(d => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setDuration(d)}
-                          className={`rounded-xl border px-4 py-2 text-xs font-bold transition ${
-                            duration === d
-                              ? 'border-[#E4002B] bg-[#E4002B] text-white'
-                              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-                          }`}
-                        >
-                          {d} min
-                        </button>
-                      ))}
-                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="e.g. 60"
+                      value={duration || ''}
+                      onChange={e => setDuration(Number(e.target.value))}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:border-[#E4002B] focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Schedule for later */}
+                  <div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={scheduleForLater}
+                        onChange={e => { setScheduleForLater(e.target.checked); setScheduledStartTime(''); }}
+                        className="h-4 w-4 rounded border-gray-300 accent-[#E4002B]"
+                      />
+                      <span className="text-sm font-semibold text-gray-700">Schedule for later</span>
+                    </label>
+                    {scheduleForLater && (
+                      <div className="mt-2">
+                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-gray-500">
+                          Attendance Window Start
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={scheduledStartTime}
+                          onChange={e => setScheduledStartTime(e.target.value)}
+                          className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-[#E4002B] focus:bg-white"
+                        />
+                        <p className="mt-1 text-xs text-gray-400">
+                          Students can check in from this time. The session goes live automatically.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <button
                     type="button"
                     onClick={handleStartSession}
-                    disabled={starting || !selectedUnitId}
+                    disabled={starting || !selectedUnitId || candidates.length === 0}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {starting
-                      ? <><Loader2 size={16} className="animate-spin" /> Starting…</>
-                      : <><RadioTower size={16} /> Start Session</>
+                      ? <><Loader2 size={16} className="animate-spin" /> {scheduleForLater ? 'Scheduling…' : 'Starting…'}</>
+                      : scheduleForLater
+                        ? <><Clock3 size={16} /> Schedule Session</>
+                        : <><RadioTower size={16} /> Start Session</>
                     }
                   </button>
                 </div>
