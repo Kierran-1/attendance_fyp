@@ -5,93 +5,142 @@ import { prisma } from '@/lib/prisma';
 import { UserRole, SessionName } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  if (session.user.role !== UserRole.LECTURER) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const userId = session.user.id;
-
-  let body: {
-    unitId?: string;
-    courseId?: string;
-    sessionName?: string;
-    durationMinutes?: number;
-    groupNo?: string;
-    subcomponent?: string;
-  };
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
-  }
+    const session = await getServerSession(authOptions);
 
-  const unitId = body.unitId ?? body.courseId;
-  const { sessionName, durationMinutes, groupNo, subcomponent } = body;
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
-  if (!unitId || !sessionName || !durationMinutes) {
-    return NextResponse.json(
-      { error: 'unitId (or courseId), sessionName, and durationMinutes are required' },
-      { status: 400 }
-    );
-  }
+    if (session.user.role !== UserRole.LECTURER) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
 
-  if (!Object.values(SessionName).includes(sessionName as SessionName)) {
-    return NextResponse.json({ error: 'Invalid sessionName' }, { status: 400 });
-  }
+    const userId = session.user.id;
 
-  const unitRegistration = await prisma.unitRegistration.findFirst({
-    where: { unitId, userId, userStatus: 'LECTURER' },
-  });
+    let body: {
+      unitId?: string;
+      courseId?: string;
+      sessionName?: string;
+      durationMinutes?: number;
+      groupNo?: string;
+      subcomponent?: string;
+    };
 
-  if (!unitRegistration) {
-    return NextResponse.json(
-      { error: 'You are not registered as a lecturer for this unit' },
-      { status: 404 }
-    );
-  }
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
 
-  // Find all pre-created sessions for this slot from the Excel upload
+    const unitId = body.unitId ?? body.courseId;
+    const { sessionName, durationMinutes, groupNo, subcomponent } = body;
+
+    if (!unitId || !sessionName || !durationMinutes) {
+      return NextResponse.json(
+        {
+          error: 'unitId, sessionName, and durationMinutes are required',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!Object.values(SessionName).includes(sessionName as SessionName)) {
+      return NextResponse.json(
+        { error: 'Invalid sessionName' },
+        { status: 400 }
+      );
+    }
+
+    const unitRegistration = await prisma.unitRegistration.findFirst({
+      where: {
+        unitId,
+        userId,
+        userStatus: UserRole.LECTURER,
+      },
+    });
+
+    if (!unitRegistration) {
+      return NextResponse.json(
+        {
+          error: 'You are not registered as a lecturer for this unit',
+        },
+        { status: 404 }
+      );
+    }
+
   const candidates = await prisma.classSession.findMany({
     where: {
       unitRegistrationId: unitRegistration.id,
       sessionName: sessionName as SessionName,
-      sessionTime: null,
       ...(groupNo ? { groupNo } : {}),
       ...(subcomponent ? { subcomponent } : {}),
     },
-    orderBy: { scheduledDate: 'asc' },
-  });
-
-  if (candidates.length === 0) {
-    return NextResponse.json(
-      { error: 'No pre-created sessions found for this slot. Please upload the class timetable first.' },
-      { status: 404 }
-    );
-  }
-
-  // Pick the unactivated session whose scheduled date is closest to today
-  const now = new Date();
-  const closest = candidates.reduce((best, s) =>
-    Math.abs((s.scheduledDate?.getTime() ?? 0) - now.getTime()) <
-    Math.abs((best.scheduledDate?.getTime() ?? 0) - now.getTime())
-      ? s
-      : best
-  );
-
-  // Activate the session: set sessionTime to now and record the chosen duration
-  const classSession = await prisma.classSession.update({
-    where: { id: closest.id },
-    data: {
-      sessionTime: now,
-      sessionDuration: durationMinutes,
+    orderBy: {
+      sessionTime: 'asc',
     },
   });
 
-  return NextResponse.json({ session: classSession }, { status: 200 });
+    if (candidates.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            'No pre-created sessions found for this slot. Please upload the class timetable first.',
+        },
+        { status: 404 }
+      );
+    }
+
+    const now = new Date();
+
+    const closest = candidates.reduce((best, current) => {
+      const bestTime = best.sessionTime.getTime();
+      const currentTime = current.sessionTime.getTime();
+
+      return Math.abs(currentTime - now.getTime()) <
+        Math.abs(bestTime - now.getTime())
+        ? current
+        : best;
+    });
+
+    const classSession = await prisma.classSession.update({
+      where: {
+        id: closest.id,
+      },
+      data: {
+        sessionTime: now,
+        sessionDuration: durationMinutes,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Session started successfully',
+        session: classSession,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Start session API error:', error);
+
+    const message =
+      error instanceof Error ? error.message : 'Unknown server error';
+
+    return NextResponse.json(
+      {
+        error: message,
+      },
+      { status: 500 }
+    );
+  }
 }

@@ -105,6 +105,13 @@ model ClassSession {
   day                String?
   lecturerName       String?
   scheduledDate      DateTime?
+
+  status             SessionStatus           @default(SCHEDULED)
+  liveStartedAt      DateTime?
+  liveEndedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+
   attendanceData     ClassAttendanceData[]
   attendanceRecords  ClassAttendanceRecord[]
   lecturer           User                    @relation("LecturerSessions", fields: [lecturerId], references: [id])
@@ -208,4 +215,12 @@ enum AttendanceStatus {
   ABSENT
   LATE
   PENDING
+  CANCELLED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  ACTIVE
+  CLOSED
+  CANCELLED
 }

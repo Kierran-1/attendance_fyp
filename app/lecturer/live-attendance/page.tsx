@@ -97,6 +97,7 @@ export default function LiveAttendancePage() {
   const [activeSession, setActiveSession]   = useState<ActiveSession | null>(null);
   const [starting, setStarting]             = useState(false);
   const [stopping, setStopping]             = useState(false);
+  const [cancelling, setCancelling]         = useState(false);
   const [elapsed, setElapsed]               = useState(0);
 
   // Check-ins
@@ -265,38 +266,58 @@ export default function LiveAttendancePage() {
   // ── Start session ──────────────────────────────────────────────────────────
 
   async function handleStartSession() {
-    if (!selectedUnitId) { setError('Please select a unit first.'); return; }
+    if (!selectedUnitId) {
+      setError('Please select a unit first.');
+      return;
+    }
+
     setError('');
     setStarting(true);
 
     try {
       const selectedCard = units.find(u => u.id === selectedUnitId);
+
+      if (!selectedCard) {
+        throw new Error('Selected unit not found.');
+      }
+
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          unitId: selectedCard?.unitId,
-          sessionName: selectedCard?.classType ?? SESSION_TYPES[0].value,
+          unitId: selectedCard.unitId,
+          sessionName: selectedCard.classType ?? SESSION_TYPES[0].value,
           durationMinutes: duration,
-          groupNo: selectedCard?.group,
-          subcomponent: selectedCard?.subcomponent,
+          groupNo: selectedCard.group,
+          subcomponent: selectedCard.subcomponent,
         }),
       });
 
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error ?? 'Failed to start session');
+      const text = await res.text();
+
+      let data: any = {};
+
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(text || 'Invalid server response');
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to start session');
+      }
+
+      if (!data.session) {
+        throw new Error('Session was created but API did not return session data.');
+      }
+
       const s = data.session;
-      const unit = selectedCard;
 
       const newSession: ActiveSession = {
         id: s.id,
-        unitId: selectedUnitId,
-        unitCode: unit?.unitCode ?? '—',
-        unitName: unit?.unitName ?? '—',
+        unitId: selectedCard.unitId,
+        unitCode: selectedCard.unitCode ?? '—',
+        unitName: selectedCard.unitName ?? '—',
         sessionName: s.sessionName,
         sessionTime: s.sessionTime,
         sessionDuration: s.sessionDuration,
@@ -333,6 +354,57 @@ export default function LiveAttendancePage() {
       sessionIdRef.current = null;
       setElapsed(0);
       setStopping(false);
+    }
+  }
+
+  async function handleCancelSession() {
+    if (!activeSession) return;
+
+    const confirmed = window.confirm(
+      'Are you sure you want to cancel this session? All attendance records for this session will be marked as CANCELLED.'
+    );
+
+    if (!confirmed) return;
+
+    setCancelling(true);
+
+    try {
+      setError('');
+
+      const res = await fetch(`/api/sessions/${activeSession.id}/cancel`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason: 'Accidentally opened live attendance session',
+        }),
+      });
+
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel session');
+      }
+
+      stopTimer();
+      stopPolling();
+      stopScanner();
+      stopSessionQRRotation();
+
+      setActiveSession(null);
+      sessionIdRef.current = null;
+      setCheckIns([]);
+      setElapsed(0);
+
+      alert(
+        `Session cancelled successfully. ${data.cancelledRecordsCount ?? 0} attendance record(s) cancelled.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel session');
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -591,17 +663,42 @@ export default function LiveAttendancePage() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleEndSession}
-                disabled={stopping}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 text-sm font-semibold text-white transition hover:bg-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {stopping
-                  ? <><Loader2 size={16} className="animate-spin" /> Ending…</>
-                  : <><StopCircle size={16} /> End Session</>
-                }
-              </button>
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleCancelSession}
+                  disabled={cancelling || stopping}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3 text-sm font-semibold text-[#E4002B] transition hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {cancelling ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Cancelling…
+                    </>
+                  ) : (
+                    <>Cancel Session</>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleEndSession}
+                  disabled={stopping || cancelling}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white/15 py-3 text-sm font-semibold text-white transition hover:bg-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {stopping ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Ending…
+                    </>
+                  ) : (
+                    <>
+                      <StopCircle size={16} />
+                      End Session
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 
