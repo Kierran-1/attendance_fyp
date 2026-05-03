@@ -47,10 +47,11 @@ interface ClassSession {
 
 interface CheckedInStudent {
   id: string;
+  sessionId: string;
   studentName: string;
   studentId: string;
   checkInTime: string;
-  status: 'Present' | 'Late' | 'Absent';
+  status: 'Present' | 'Late' | 'Absent' | 'Cancelled';
   method: 'QR' | 'Manual' | 'Face' | 'BT';
 }
 
@@ -139,10 +140,12 @@ export default function AttendancePage() {
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
   const [expandedUnit, setExpandedUnit] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<{
+    id: string;
     unit: Unit;
     classSession: ClassSession;
     startTime: Date;
     qrToken: string;
+    status: 'ACTIVE' | 'CLOSED' | 'CANCELLED';
   } | null>(null);
   
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
@@ -181,24 +184,46 @@ export default function AttendancePage() {
   }, [activeSession]);
 
   // Generate QR token
-  const generateQRToken = () => {
-    return `${activeSession?.unit.code}-${activeSession?.classSession.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const generateQRToken = (
+    sessionId: string,
+    unit: Unit,
+    classSession: ClassSession
+  ) => {
+    return JSON.stringify({
+      sessionId,
+      unitId: unit.id,
+      unitCode: unit.code,
+      classSessionId: classSession.id,
+      createdAt: Date.now(),
+    });
   };
 
   const refreshQRToken = () => {
     if (activeSession) {
-      setActiveSession({ ...activeSession, qrToken: generateQRToken() });
+      setActiveSession({
+        ...activeSession,
+        qrToken: generateQRToken(
+          activeSession.id,
+          activeSession.unit,
+          activeSession.classSession
+        ),
+      });
     }
   };
 
   // Session controls
   const startSession = (unit: Unit, classSession: ClassSession) => {
+    const sessionId = crypto.randomUUID();
+
     setActiveSession({
+      id: sessionId,
       unit,
       classSession,
       startTime: new Date(),
-      qrToken: generateQRToken(),
+      qrToken: generateQRToken(sessionId, unit, classSession),
+      status: 'ACTIVE',
     });
+
     setCheckedIn([]);
     setActiveTab('dashboard');
   };
@@ -212,6 +237,43 @@ export default function AttendancePage() {
     setScanning(false);
     setActiveSession(null);
     setTimeRemaining(0);
+  };
+
+  const cancelSession = () => {
+    if (!activeSession) return;
+
+    const confirmCancel = window.confirm(
+      'Are you sure you want to cancel this attendance session? All check-ins for this session will be marked as cancelled.'
+    );
+
+    if (!confirmCancel) return;
+
+    const cancelledSessionId = activeSession.id;
+
+    setCheckedIn((prev) =>
+      prev.map((student) =>
+        student.sessionId === cancelledSessionId
+          ? { ...student, status: 'Cancelled' }
+          : student
+      )
+    );
+
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
+    }
+
+    readerRef.current = null;
+    setScanning(false);
+    setActiveSession(null);
+    setTimeRemaining(0);
+
+    setScanResult({
+      success: true,
+      message: 'Session cancelled and all related attendance records were batch cancelled.',
+    });
+
+    setTimeout(() => setScanResult(null), 3000);
   };
 
   // QR Scanner functions
@@ -246,12 +308,18 @@ export default function AttendancePage() {
   };
 
   const handleScan = async (tokenText: string) => {
+    if (!activeSession) {
+      setScanResult({ success: false, message: 'No active session found' });
+      return;
+    }
+
     try {
       // Mock API call
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const mockStudent: CheckedInStudent = {
         id: Math.random().toString(36).substr(2, 9),
+        sessionId: activeSession.id,
         studentName: `Student ${checkedIn.length + 1}`,
         studentId: `10${1000 + checkedIn.length}`,
         checkInTime: new Date().toISOString(),
@@ -269,10 +337,15 @@ export default function AttendancePage() {
   };
 
   const handleManualEntry = () => {
-    if (!manualEntry.trim()) return;
+    if (!activeSession) {
+      setScanResult({ success: false, message: 'No active session found' });
+      return;
+    }
+        if (!manualEntry.trim()) return;
     
     const mockStudent: CheckedInStudent = {
       id: Math.random().toString(36).substr(2, 9),
+      sessionId: activeSession.id,
       studentName: `Student (Manual)`,
       studentId: manualEntry,
       checkInTime: new Date().toISOString(),
@@ -437,13 +510,23 @@ export default function AttendancePage() {
                         <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
                         <h2 className="text-lg font-bold text-white">Active Session</h2>
                       </div>
-                      <button
-                        onClick={endSession}
-                        className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-                      >
-                        <Square className="w-4 h-4" />
-                        End Session
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={cancelSession}
+                          className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Cancel Session
+                        </button>
+
+                        <button
+                          onClick={endSession}
+                          className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                          <Square className="w-4 h-4" />
+                          End Session
+                        </button>
+                      </div>
                     </div>
                     
                     <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
