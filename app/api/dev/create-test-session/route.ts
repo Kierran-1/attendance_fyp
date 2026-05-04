@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole, UserStatus, SessionName } from '@prisma/client';
 
-// DEV ONLY — creates a 60-min session under the current user's lecturer account.
+// DEV ONLY — creates an active 60-min session under the current user's lecturer account.
 export async function POST() {
   if (process.env.NODE_ENV !== 'development') {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -18,6 +18,7 @@ export async function POST() {
   const userId = session.user.id;
   const year = new Date().getFullYear();
   const semester = 'DEV';
+  const now = new Date();
 
   // 1. Find or create the dev unit
   const devUnit = await prisma.unit.upsert({
@@ -26,9 +27,12 @@ export async function POST() {
     create: { code: 'DEV0001', name: 'Dev Test Unit' },
   });
 
-  // 2. Register the CURRENT USER as a lecturer for this unit
-  //    This is the key — the session must be owned by the logged-in account
-  //    so it shows up in /lecturer/reports and /lecturer/unit
+  // 2. Clean up any accidental STUDENT enrollment for the current user
+  await prisma.unitRegistration.deleteMany({
+    where: { unitId: devUnit.id, userId, userStatus: UserStatus.STUDENT },
+  });
+
+  // 3. Register the current user as a LECTURER for this unit
   let myLecturerReg = await prisma.unitRegistration.findFirst({
     where: { unitId: devUnit.id, userId, userStatus: UserStatus.LECTURER },
   });
@@ -39,14 +43,19 @@ export async function POST() {
     });
   }
 
-  // 3. Create the class session under the current user's lecturer registration
+  // 4. Create the class session — set status ACTIVE and liveStartedAt so the
+  //    sessions API recognises it as a running session
   const classSession = await prisma.classSession.create({
     data: {
       unitRegistrationId: myLecturerReg.id,
       lecturerId: userId,
       sessionName: SessionName.LECTURE,
-      sessionTime: new Date(),
+      sessionTime: now,
       sessionDuration: 60,
+      scheduledDate: now,
+      weekNumber: 1,
+      status: 'ACTIVE',
+      liveStartedAt: now,
     },
   });
 

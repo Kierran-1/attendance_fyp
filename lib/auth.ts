@@ -10,6 +10,7 @@ const LECTURER_EMAIL_OVERRIDES = new Set([
   '102789110@students.swinburne.edu.my',
   '102785480@students.swinburne.edu.my',
   '102789880@students.swinburne.edu.my',
+  '102789835@students.swinburne.edu.my',
   'dev-lecturer.swinburne@outlook.com'
 
   // add more here as needed

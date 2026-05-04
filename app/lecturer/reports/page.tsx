@@ -181,6 +181,9 @@ export default function ReportsPage() {
   const [selectedCode, setSelectedCode] = useState('all');
   const [trendView, setTrendView]   = useState<'session' | 'unit'>('session');
   const [studentSearch, setStudentSearch] = useState('');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportUnitCode, setExportUnitCode] = useState('all');
+  const [exportSessionId, setExportSessionId] = useState('');
 
   // ── Fetch real data ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -285,16 +288,31 @@ export default function ReportsPage() {
   // ── Export ──────────────────────────────────────────────────────────────────
 
   function handleExport() {
-    const selectedUnit = rawUnits.find((u) => u.unitCode === selectedCode);
-
-    if (selectedCode === 'all' || !selectedUnit) {
-      window.alert('Please select a specific unit before exporting.');
+    if (exportUnitCode === 'all') {
+      window.alert('Please select a specific unit.');
       return;
     }
 
-    const url = `/api/lecturer/export?courseId=${encodeURIComponent(selectedUnit.unitId)}`;
-    window.location.href = url;
+    const selectedUnit = rawUnits.find(u => u.unitCode === exportUnitCode);
+    if (!selectedUnit) return;
+
+    if (exportSessionId) {
+      window.location.href = `/api/lecturer/export?sessionId=${encodeURIComponent(exportSessionId)}`;
+    } else {
+      window.location.href = `/api/lecturer/export?courseId=${encodeURIComponent(selectedUnit.unitId)}`;
+    }
+
+    setShowExportModal(false);
   }
+
+  // Sessions available for the selected export unit
+  const exportUnitSessions = useMemo(() => {
+    if (exportUnitCode === 'all') return [];
+    return rawUnits
+      .filter(u => u.unitCode === exportUnitCode)
+      .flatMap(u => u.sessions.filter(s => s.status === 'Completed'))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [rawUnits, exportUnitCode]);
 
   // ── Loading / error ─────────────────────────────────────────────────────────
 
@@ -350,9 +368,12 @@ export default function ReportsPage() {
           </Link>
           <button
             type="button"
-            onClick={handleExport}
-            disabled={selectedCode === 'all'}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => {
+              setExportUnitCode(selectedCode !== 'all' ? selectedCode : 'all');
+              setExportSessionId('');
+              setShowExportModal(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#E4002B] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#C70026]"
           >
             <Download size={16} /> Export Report
           </button>
@@ -739,6 +760,85 @@ export default function ReportsPage() {
           </section>
         );
       })()}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-lg font-black text-gray-900">Export Attendance</h2>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="rounded-xl p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Unit selector */}
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-gray-500">
+                  Unit
+                </label>
+                <select
+                  value={exportUnitCode}
+                  onChange={e => { setExportUnitCode(e.target.value); setExportSessionId(''); }}
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100"
+                >
+                  <option value="all">— Select a unit —</option>
+                  {unitSummaries.map(u => (
+                    <option key={u.unitCode} value={u.unitCode}>
+                      {u.unitCode} — {u.unitName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Session selector */}
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-gray-500">
+                  Export Scope
+                </label>
+                <select
+                  value={exportSessionId}
+                  onChange={e => setExportSessionId(e.target.value)}
+                  disabled={exportUnitCode === 'all'}
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#E4002B] focus:ring-2 focus:ring-rose-100 disabled:opacity-50"
+                >
+                  <option value="">All sessions (full unit export)</option>
+                  {exportUnitSessions.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.date} — Session ({s.presentCount} present)
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-gray-400">
+                  {exportSessionId
+                    ? 'Exports attendance for this single session only.'
+                    : 'Exports all sessions for the selected unit as one Excel file.'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exportUnitCode === 'all'}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E4002B] py-3 text-sm font-semibold text-white transition hover:bg-[#C70026] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download size={16} />
+                {exportSessionId ? 'Export This Session' : 'Export Full Unit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

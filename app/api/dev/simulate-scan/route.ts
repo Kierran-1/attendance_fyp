@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
           create: { email: s.email, name: s.name, role: UserRole.STUDENT },
         });
 
-        // 2. Enroll in unit — use findFirst + create to avoid null unique key issue
+        // 2. Enroll in unit — findFirst + create to avoid null unique key issue
         const existing = await prisma.unitRegistration.findFirst({
           where: { unitId, userId: user.id, userStatus: UserStatus.STUDENT },
         });
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // 3. Mark 6 present, 2 absent
+        // 3. Mark 6 present, 2 absent (no record = absent by default)
         if (i < 6) {
           await prisma.classAttendanceRecord.upsert({
             where: { classSessionId_studentId: { classSessionId: sessionId, studentId: user.id } },
@@ -94,15 +94,6 @@ export async function POST(request: NextRequest) {
 
   // ── Single mode: mark current user as present ────────────────────────────
   try {
-    await prisma.classAttendanceData.create({
-      data: {
-        classSessionId: sessionId,
-        scanPayload: { simulatedBy: session.user.id, timestamp: now.toISOString() },
-        scanMethod: 'DEV_SIMULATE',
-        verificationStage: 'VERIFIED',
-      },
-    });
-
     const record = await prisma.classAttendanceRecord.upsert({
       where: { classSessionId_studentId: { classSessionId: sessionId, studentId: session.user.id } },
       update: { status: AttendanceStatus.PRESENT, verifiedAt: now },

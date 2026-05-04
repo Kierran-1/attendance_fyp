@@ -55,6 +55,102 @@ export async function GET(request: NextRequest) {
 
     const userId = session.user.id;
     const unitId = request.nextUrl.searchParams.get('courseId');
+    const sessionId = request.nextUrl.searchParams.get('sessionId');
+
+    // Per-session export
+    if (sessionId) {
+      const classSession = await prisma.classSession.findFirst({
+        where: { id: sessionId, lecturerId: userId },
+        include: {
+          unitRegistration: { include: { unit: true } },
+          attendanceRecords: {
+            select: { studentId: true, status: true },
+          },
+        },
+      });
+
+      if (!classSession) {
+        return NextResponse.json({ error: 'Session not found or not owned by you' }, { status: 404 });
+      }
+
+      const unit = classSession.unitRegistration?.unit;
+      const termCode = buildTermCode(
+        classSession.unitRegistration?.year,
+        classSession.unitRegistration?.semester
+      );
+
+      // Fetch student details for all studentIds in the records
+      const studentIds = classSession.attendanceRecords.map(r => r.studentId);
+      const students = await prisma.user.findMany({
+        where: { id: { in: studentIds } },
+        select: { id: true, name: true, email: true, programName: true },
+      });
+      const studentMap = new Map(students.map(s => [s.id, s]));
+
+      // If no records, fall back to all enrolled students as ABSENT
+      const enrolledStudents = classSession.attendanceRecords.length === 0
+        ? await prisma.unitRegistration.findMany({
+            where: { unitId: classSession.unitRegistration?.unitId, userStatus: UserStatus.STUDENT },
+            include: { user: { select: { id: true, name: true, email: true, programName: true } } },
+          })
+        : [];
+
+      const rows: (string | number)[][] = [
+        ['CourseCode', 'TermCode', 'Subcomponent', 'Group', 'Date', 'ProgramName', 'StudentName', 'StudentNumber', 'Status', 'Remarks'],
+      ];
+
+      if (classSession.attendanceRecords.length > 0) {
+        for (const record of classSession.attendanceRecords) {
+          const student = studentMap.get(record.studentId);
+          const studentNumber = student?.email?.split('@')[0] ?? record.studentId;
+          rows.push([
+            unit?.code ?? '',
+            termCode,
+            classSession.subcomponent ?? classSession.sessionName ?? '',
+            classSession.groupNo ?? '',
+            formatDate(classSession.sessionTime),
+            student?.programName ?? '',
+            student?.name ?? '',
+            studentNumber,
+            formatStatus(record.status),
+            '',
+          ]);
+        }
+      } else {
+        for (const reg of enrolledStudents) {
+          rows.push([
+            unit?.code ?? '',
+            termCode,
+            classSession.subcomponent ?? classSession.sessionName ?? '',
+            classSession.groupNo ?? '',
+            formatDate(classSession.sessionTime),
+            reg.user.programName ?? '',
+            reg.user.name ?? '',
+            reg.user.email?.split('@')[0] ?? '',
+            'ABSENT',
+            '',
+          ]);
+        }
+      }
+
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      worksheet['!cols'] = [
+        { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 10 },
+        { wch: 14 }, { wch: 28 }, { wch: 28 }, { wch: 18 }, { wch: 12 }, { wch: 18 },
+      ];
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      const dateStr = classSession.sessionTime.toISOString().split('T')[0];
+      const filename = `Attendance_${unit?.code}_${classSession.subcomponent ?? classSession.sessionName}_${dateStr}.xlsx`;
+
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        },
+      });
+    }
 
     if (!unitId) {
       return NextResponse.json({ error: 'courseId is required' }, { status: 400 });
