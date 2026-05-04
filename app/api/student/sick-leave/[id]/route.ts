@@ -6,9 +6,10 @@ import path from 'path';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getServerSession();
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,7 +26,7 @@ export async function DELETE(
 
     const evidence = await prisma.attendanceEvidence.findFirst({
       where: {
-        id: params.id,
+        id,
         uploadedBy: user.id,
         status: 'PENDING' // Only allow deletion if still pending
       }
@@ -47,7 +48,7 @@ export async function DELETE(
 
     // Delete database record
     await prisma.attendanceEvidence.delete({
-      where: { id: params.id }
+      where: { id }
     });
 
     return NextResponse.json({
