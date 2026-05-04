@@ -310,7 +310,7 @@ export default function ReportsPage() {
     if (exportUnitCode === 'all') return [];
     return rawUnits
       .filter(u => u.unitCode === exportUnitCode)
-      .flatMap(u => u.sessions.filter(s => s.status === 'Completed'))
+      .flatMap(u => u.sessions.filter(s => s.status === 'Completed' || s.status === 'Ongoing'))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [rawUnits, exportUnitCode]);
 
